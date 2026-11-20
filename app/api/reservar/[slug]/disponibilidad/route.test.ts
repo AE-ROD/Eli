@@ -330,7 +330,7 @@ describe("GET /api/reservar/[slug]/disponibilidad: cuándo no se ofrece la lista
  * El día de la semana y las horas salen de la zona del negocio, no de la del
  * servidor. Con `new Date("2026-10-19").getDay()` el lunes 19 era domingo en
  * una máquina en Santiago, y con `getHours()` las horas de las citas quedaban
- * corridas en Vercel (UTC). Todo esperado está escrito a mano: la suite corre
+ * corridas en el servidor (UTC). Todo esperado está escrito a mano: la suite corre
  * con TZ=UTC, TZ=America/Santiago y TZ=Asia/Tokyo.
  */
 describe("GET /api/reservar/[slug]/disponibilidad: el día y la hora del negocio", () => {

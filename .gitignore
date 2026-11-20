@@ -1,5 +1,3 @@
-.vercel/
-
 # Variables de entorno: todas, salvo la plantilla sin secretos.
 .env*
 !.env.example

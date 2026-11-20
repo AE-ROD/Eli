@@ -4,11 +4,10 @@
  * acá y envía.
  *
  * "Mañana" es el día siguiente en el reloj del negocio (`Business.timezone`),
- * no en el del servidor: en Vercel (UTC) a las 22:00 de Santiago ya es el día
+ * no en el del servidor: en el servidor (UTC) a las 22:00 de Santiago ya es el día
  * siguiente, y una cita de las 10:00 de pasado mañana caía en "mañana".
  *
- * El cron corre una vez al día (vercel.json, a las `HORA_UTC_DEL_CRON`; el
- * plan Hobby no permite más).
+ * El cron corre una vez al día (`deploy/cron-eli`, a las `HORA_UTC_DEL_CRON`).
  * Cada cita se avisa una sola vez: `Appointment.reminderSentAt` es el candado
  * (se marca antes de enviar y se libera si el envío falla). Así una corrida
  * repetida, manual o del mismo día, no duplica nada.
@@ -92,7 +91,7 @@ export function seguroQueNoSalio(resultado: { error: { name: string } | null } |
 }
 
 /**
- * La hora UTC en que corre el cron de recordatorios: la de `vercel.json`
+ * La hora UTC en que corre el cron de recordatorios: la de `deploy/cron-eli`
  * ("0 13 * * *"). Un test compara las dos para que no se separen.
  */
 export const HORA_UTC_DEL_CRON = 13

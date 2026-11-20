@@ -140,7 +140,7 @@ export async function GET(
 
   // El día, las horas y "hoy" son los del negocio (`Business.timezone`), no
   // los del servidor: `new Date("AAAA-MM-DD").getDay()` daba el día anterior
-  // al oeste de UTC, y en Vercel (UTC) las horas quedaban corridas.
+  // al oeste de UTC, y en el servidor (UTC) las horas quedaban corridas.
   const zona = zonaDelNegocio(negocio.timezone)
   const ahora = new Date()
 

@@ -55,7 +55,7 @@ describe("GET /api/cron/recordatorios", () => {
     vi.useRealTimers()
   })
 
-  it("con el header que manda Vercel Cron (`Authorization: Bearer <CRON_SECRET>`): 200 y salen los recordatorios", async () => {
+  it("con el header que manda el cron del servidor (`Authorization: Bearer <CRON_SECRET>`): 200 y salen los recordatorios", async () => {
     const { GET } = await import("./route")
 
     const res = await GET(llamada({ authorization: `Bearer ${SECRETO}` }))

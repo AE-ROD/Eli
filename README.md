@@ -970,7 +970,6 @@ deploy/                       Producción: el VPS de Hostinger en eliagenda.com.
                               scripts para actualizar y volver atrás, Caddy, respaldos
                               y los crons diarios (deploy/cron-eli: recordatorios y
                               correos del ciclo de prueba, a las 13:00 UTC, ~10:00 en Chile)
-vercel.json                   Resto de cuando Eli corría en Vercel; ya no es producción
 .github/workflows/ci.yml      CI: lint, tipos, tests y build en cada PR a main
 ```
 

@@ -10,7 +10,7 @@ import { respuestaDeCuerpoDemasiadoGrande, TOPE_DE_CUALQUIER_PEDIDO } from "@/li
  * tiene su propio control, más ajustado a su caso (login, registro,
  * recuperar contraseña, invitación por token, reserva pública), o no
  * corresponde uno por sesión porque no hay una persona logueada del otro
- * lado (el cron lo llama Vercel con un secreto).
+ * lado (el cron lo llama el servidor con un secreto).
  *
  * A propósito es una lista de EXCEPCIONES y no de endpoints cubiertos: un
  * endpoint nuevo bajo `/api/lo-que-sea/route.ts` queda limitado por sesión
@@ -21,7 +21,7 @@ import { respuestaDeCuerpoDemasiadoGrande, TOPE_DE_CUALQUIER_PEDIDO } from "@/li
  */
 const PREFIJOS_SIN_LIMITE_DE_PANEL = [
   "/api/auth", // NextAuth + registro/recuperación: su propio límite, antes de que exista sesión
-  "/api/cron", // Lo llama Vercel con un secreto, no una persona
+  "/api/cron", // Lo llama el cron del servidor con un secreto, no una persona
   "/api/reservar", // Página pública de reservas, sin sesión
   "/api/equipo/invitacion", // Aceptar invitación: por token, antes de tener sesión
   "/api/correos/baja", // Baja de los correos de prueba: por token firmado, sin sesión; su propio límite por IP

@@ -4,7 +4,7 @@ import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
 
 /**
  * "Hoy", el mes y el día de la semana del inicio son los del negocio
- * (`Business.timezone`), no los del servidor (en Vercel, UTC). A las 21:30 en
+ * (`Business.timezone`), no los del servidor (UTC). A las 21:30 en
  * Santiago, en UTC ya es mañana: "Citas de hoy" salía vacía, la próxima cita
  * era una de hoy y los clientes nuevos del mes cambiaban de mes antes de tiempo.
  */

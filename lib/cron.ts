@@ -18,11 +18,9 @@ function mismoSecreto(recibido: string, esperado: string): boolean {
 }
 
 /**
- * Vercel Cron llama con `Authorization: Bearer <CRON_SECRET>` cuando la
- * variable está configurada en el proyecto, y no puede mandar un header
- * propio: esperando sólo `x-cron-secret`, la llamada de Vercel recibía siempre
- * 401. `x-cron-secret` se sigue aceptando por si alguien lo llama a mano con
- * él.
+ * El cron del servidor (`deploy/llamar-cron.sh`) llama con
+ * `Authorization: Bearer <CRON_SECRET>`. `x-cron-secret` se sigue aceptando
+ * por si alguien lo llama a mano con él.
  *
  * Sin `CRON_SECRET`, o vacío, falla cerrado antes de comparar: si no, lo
  * esperado sería `Bearer undefined`, y un `x-cron-secret` vacío coincidiría

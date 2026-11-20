@@ -6,8 +6,8 @@
 #
 # Lo usa /etc/cron.d/eli (deploy/cron-eli). También sirve para probar a mano.
 #
-# Autorización: lib/cron.ts acepta "Authorization: Bearer <CRON_SECRET>" (lo
-# que mandaba Vercel). Se manda eso.
+# Autorización: lib/cron.ts acepta "Authorization: Bearer <CRON_SECRET>". Se
+# manda eso.
 #
 # El secreto NO aparece en la lista de procesos (ps) ni en los logs:
 #  - se lee del archivo de variables, no se pasa como argumento;

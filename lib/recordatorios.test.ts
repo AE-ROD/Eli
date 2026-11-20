@@ -95,12 +95,10 @@ describe("recibiraRecordatorio (N4): la pantalla final promete el recordatorio s
     expect(recibiraRecordatorio(inicio, corridaDelDiaAntes, SANTIAGO)).toBe(false)
   })
 
-  it("HORA_UTC_DEL_CRON es la del cron de recordatorios en vercel.json", () => {
-    const vercel = JSON.parse(readFileSync(join(process.cwd(), "vercel.json"), "utf8")) as {
-      crons: { path: string; schedule: string }[]
-    }
-    const cron = vercel.crons.find((entrada) => entrada.path === "/api/cron/recordatorios")
-    expect(cron?.schedule).toBe(`0 ${HORA_UTC_DEL_CRON} * * *`)
+  it("HORA_UTC_DEL_CRON es la del cron de recordatorios en deploy/cron-eli", () => {
+    const crontab = readFileSync(join(process.cwd(), "deploy/cron-eli"), "utf8")
+    const linea = crontab.split("\n").find((l) => /^\d/.test(l) && l.includes("/api/cron/recordatorios"))
+    expect(linea?.split(/\s+/).slice(0, 5).join(" ")).toBe(`0 ${HORA_UTC_DEL_CRON} * * *`)
   })
 })
 

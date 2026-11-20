@@ -8,7 +8,7 @@ describe("llamadaDeCronAutorizada", () => {
     vi.unstubAllEnvs()
   })
 
-  it("acepta el Bearer que manda Vercel Cron y el x-cron-secret manual", () => {
+  it("acepta el Bearer que manda el cron del servidor y el x-cron-secret manual", () => {
     vi.stubEnv("CRON_SECRET", "secreto")
     expect(llamadaDeCronAutorizada(pedido({ authorization: "Bearer secreto" }))).toBe(true)
     expect(llamadaDeCronAutorizada(pedido({ "x-cron-secret": "secreto" }))).toBe(true)

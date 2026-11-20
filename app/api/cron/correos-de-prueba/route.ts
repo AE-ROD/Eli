@@ -7,7 +7,7 @@ import { registrarError } from "@/lib/registro-de-errores"
 import { ejecutarMensajesAClientes } from "@/lib/mensajes-a-clientes"
 
 /**
- * Cron diario (`vercel.json`, 13:00 UTC: las 10:00 en Chile con horario de
+ * Cron diario (`deploy/cron-eli`, 13:00 UTC: las 10:00 en Chile con horario de
  * verano, las 9:00 sin él) que manda los correos del ciclo de prueba al dueño
  * de cada negocio: consejo, quedan pocos días y termina hoy, y reintenta la
  * bienvenida que falló al crear el negocio. Qué le toca a cada uno lo decide
@@ -21,8 +21,7 @@ import { ejecutarMensajesAClientes } from "@/lib/mensajes-a-clientes"
  *
  * Al terminar, corre los mensajes a clientes (`lib/mensajes-a-clientes.ts`:
  * lista de espera, "te toca" y reseñas) con el tiempo que queda. Van acá y no
- * en un cron propio porque el plan Hobby de Vercel ya tiene dos crons, y éste
- * es el liviano (sólo negocios en prueba): los recordatorios, que son
+ * en un cron propio porque éste es el liviano (sólo negocios en prueba): los recordatorios, que son
  * servicio, no comparten su tiempo con nadie. Los correos de prueba tienen
  * hasta `PRESUPUESTO_PRUEBA_MS`, y los mensajes, hasta `PRESUPUESTO_MS`. Un
  * fallo de unos no corta a los otros.

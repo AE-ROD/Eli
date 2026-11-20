@@ -4,8 +4,8 @@ import { ejecutarMensajesAClientes } from "@/lib/mensajes-a-clientes"
 
 /**
  * La corrida de los mensajes a clientes (`lib/mensajes-a-clientes.ts`), para
- * llamarla a mano con el secreto del cron. No está en `vercel.json` (el plan
- * Hobby ya tiene dos crons): todos los días la corre
+ * llamarla a mano con el secreto del cron. No tiene línea propia en
+ * `deploy/cron-eli`: todos los días la corre
  * `/api/cron/correos-de-prueba` al terminar lo suyo. Correrla dos veces el
  * mismo día no duplica nada: cada envío tiene su candado.
  */

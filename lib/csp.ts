@@ -9,10 +9,8 @@
  *
  * Por qué cada directiva:
  * - `script-src 'nonce-…' 'strict-dynamic'`: sólo corre lo que Next marcó con
- *   el nonce de esta petición, y lo que esos scripts carguen a su vez. Así
- *   entra Vercel Analytics: su componente inserta `/_vercel/insights/script.js`
- *   con `document.createElement("script")` desde el bundle (que lleva nonce),
- *   y `'strict-dynamic'` lo habilita sin listar dominios. `'self'` queda para
+ *   el nonce de esta petición, y lo que esos scripts carguen a su vez, sin
+ *   listar dominios. `'self'` queda para
  *   navegadores viejos sin CSP3 (los modernos lo ignoran ante `strict-dynamic`).
  * - `style-src 'unsafe-inline'`: React renderiza `style={…}` como atributos
  *   `style="…"` en el HTML del servidor (framer-motion pone ahí su estado
@@ -20,8 +18,7 @@
  *   Sin esto la página llega sin esos estilos hasta que hidrata. Ojo: si se
  *   agrega un nonce a `style-src`, el navegador IGNORA `'unsafe-inline'` y se
  *   rompen esos atributos. El riesgo es menor que en scripts: CSS no ejecuta JS.
- * - `connect-src 'self'`: el panel sólo habla con su propia API; Analytics
- *   manda sus eventos a `/_vercel/insights/*`, mismo origen.
+ * - `connect-src 'self'`: el panel sólo habla con su propia API.
  * - `form-action 'self'`: los formularios se envían por `fetch`. El login con
  *   Google NO es un POST de formulario: `signIn("google")` de next-auth pide la
  *   URL por `fetch` y navega con `window.location.href`, que `form-action` no

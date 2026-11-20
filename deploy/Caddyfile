@@ -42,8 +42,8 @@ eliagenda.com {
 	}
 
 	header {
-		# El HTTPS lo termina Caddy. Vercel agregaba esta cabecera solo; aquí la
-		# ponemos nosotros (la app no la manda). Un año, sin includeSubDomains.
+		# El HTTPS lo termina Caddy, así que esta cabecera la ponemos aquí (la
+		# app no la manda). Un año, sin includeSubDomains.
 		Strict-Transport-Security "max-age=31536000"
 		# No anunciar "Server: Caddy".
 		-Server
@@ -61,17 +61,18 @@ eliagenda.com {
 		#
 		# lib/rate-limit.ts (obtenerIp) lee la IP en este orden y se queda con
 		# la primera que encuentra:
-		#     1) x-vercel-forwarded-for   2) x-real-ip   3) x-forwarded-for
-		# Eso era seguro en Vercel, que fija esas cabeceras él mismo. Aquí el
-		# único que las fija es ESTE archivo. Si un atacante manda
-		# "X-Vercel-Forwarded-For: 1.2.3.4" y Caddy lo deja pasar, la app lo
-		# cree, y el atacante cambia de IP en cada pedido: el límite de intentos
-		# de login (10 por minuto) deja de existir.
+		#     1) x-real-ip   2) x-forwarded-for
+		# El cliente puede mandar las que quiera; el único que las fija es ESTE
+		# archivo. Si un atacante manda "X-Real-IP: 1.2.3.4" y Caddy lo deja
+		# pasar, la app lo cree, y el atacante cambia de IP en cada pedido: el
+		# límite de intentos de login (10 por minuto) deja de existir.
 		#
-		# Por eso, de las tres cabeceras:
-		#   - x-vercel-forwarded-for: se BORRA (acá nadie legítimo la manda).
+		# Por eso:
 		#   - x-real-ip y x-forwarded-for: se FIJAN con la IP de la conexión
 		#     TCP real ({remote_host}), pisando lo que haya mandado el cliente.
+		#   - x-vercel-forwarded-for: se BORRA por defensa. La app ya no la lee,
+		#     pero un cliente la podría mandar inventada; nadie legítimo la manda
+		#     y así no le llega a la app aunque algún día se volviera a leer.
 		#
 		# Si este bloque se quita o se cambia, hay que revisar obtenerIp.
 		# Hay una prueba (deploy/deploy.test.ts) que falla si desaparece.

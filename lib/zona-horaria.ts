@@ -5,7 +5,7 @@
  *
  * Por qué existe: `new Date("2026-10-19")` es la medianoche UTC, y
  * `getDay()`/`setHours()`/`getHours()` usan la zona del servidor. En una
- * máquina en Santiago (UTC-3) el lunes 19 daba domingo; en Vercel (UTC) el
+ * máquina en Santiago (UTC-3) el lunes 19 daba domingo; en el servidor (UTC) el
  * día salía bien pero las horas quedaban corridas tres o cuatro horas
  * respecto de las del negocio. Acá nada depende de la zona del proceso.
  *

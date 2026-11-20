@@ -159,7 +159,7 @@ describe("deploy/Caddyfile — la IP del cliente no la elige el cliente", () => 
     }
   })
 
-  it("la última instrucción sobre x-vercel-forwarded-for es BORRARLA: obtenerIp la lee primero y el cliente la podría inventar", () => {
+  it("la última instrucción sobre x-vercel-forwarded-for es BORRARLA (defensa: obtenerIp ya no la lee, pero el cliente la podría inventar)", () => {
     expect(ultimas.get("x-vercel-forwarded-for")).toBe("-")
   })
 
@@ -237,7 +237,7 @@ describe("deploy/Caddyfile — la IP del cliente no la elige el cliente", () => 
     expect(directivasDe(bloque!)).toEqual(["max_size 6MB"])
   })
 
-  it("manda Strict-Transport-Security y quita Server dentro de header { ... } del sitio principal (Vercel ponía HSTS solo; la app no)", () => {
+  it("manda Strict-Transport-Security y quita Server dentro de header { ... } del sitio principal (la app no lo pone)", () => {
     const bloque = bloqueLlamado(sitio!, "header")
     expect(bloque, "falta header { ... } dentro de eliagenda.com").toBeDefined()
     const dentro = directivasDe(bloque!)
@@ -258,8 +258,13 @@ describe("deploy/Caddyfile — la IP del cliente no la elige el cliente", () => 
   })
 })
 
-describe("deploy/cron-eli — mismos crons que vercel.json", () => {
-  const vercel = JSON.parse(leer("vercel.json")) as { crons: { path: string; schedule: string }[] }
+describe("deploy/cron-eli — los crons de Eli (este archivo es la fuente)", () => {
+  // Lo que debe programar deploy/cron-eli con llamar-cron.sh, y nada más.
+  // /api/cron/mensajes-a-clientes NO va: lo corre /api/cron/correos-de-prueba al terminar.
+  const CRONS = [
+    { path: "/api/cron/recordatorios", schedule: "0 13 * * *" },
+    { path: "/api/cron/correos-de-prueba", schedule: "0 13 * * *" },
+  ]
   const lineasDelArchivo = sinComentarios(leer("deploy/cron-eli"))
     .split("\n")
     .map((linea) => linea.trim())
@@ -277,10 +282,6 @@ describe("deploy/cron-eli — mismos crons que vercel.json", () => {
       }
     })
   const llamadas = lineas.filter((linea) => linea.comando.includes("llamar-cron.sh"))
-
-  it("vercel.json sigue teniendo crons (si no, esta prueba no compara nada)", () => {
-    expect(vercel.crons.length).toBeGreaterThan(0)
-  })
 
   it("toda línea que no es una variable es un horario de 5 campos numéricos + usuario + comando (nada de @daily, @reboot ni alias)", () => {
     expect(lineas.length).toBeGreaterThan(0)
@@ -304,18 +305,16 @@ describe("deploy/cron-eli — mismos crons que vercel.json", () => {
     }
   })
 
-  it.each(vercel.crons)("$path corre con el mismo horario que en vercel.json ($schedule)", ({ path: ruta, schedule }) => {
+  it.each(CRONS)("$path corre a las 13:00 UTC ($schedule)", ({ path: ruta, schedule }) => {
     const encontrada = llamadas.find((linea) => linea.comando.endsWith(` ${ruta}`))
     expect(encontrada, `falta ${ruta} en deploy/cron-eli`).toBeDefined()
     expect(encontrada!.schedule).toBe(schedule)
   })
 
-  it("no programa ningún cron que vercel.json no tenga (evita correos de más)", () => {
-    const rutasDeVercel = vercel.crons.map((cron) => cron.path)
-    for (const llamada of llamadas) {
-      const ruta = llamada.comando.split(" ").pop()!
-      expect(rutasDeVercel, `${ruta} está en deploy/cron-eli pero no en vercel.json`).toContain(ruta)
-    }
+  it("no programa ningún otro cron, en particular /api/cron/mensajes-a-clientes (evita correos de más)", () => {
+    const rutas = llamadas.map((llamada) => llamada.comando.split(" ").pop()!)
+    expect([...rutas].sort()).toEqual(CRONS.map((cron) => cron.path).sort())
+    expect(sinComentarios(leer("deploy/cron-eli"))).not.toContain("/api/cron/mensajes-a-clientes")
   })
 
   it("los crons corren como el usuario eli, no como root", () => {
@@ -333,7 +332,7 @@ describe("deploy/cron-eli — mismos crons que vercel.json", () => {
     const script = leer("deploy/llamar-cron.sh")
     const permitidas = [...script.matchAll(/\/api\/cron\/([a-z-]+)/g)].map((m) => m[1])
     for (const nombre of new Set(permitidas)) expect(carpetas).toContain(nombre)
-    for (const cron of vercel.crons) expect(script).toContain(cron.path)
+    for (const cron of CRONS) expect(script).toContain(cron.path)
   })
 
   it("llamar-cron.sh manda el secreto como Authorization: Bearer, lo que valida lib/cron.ts, y no por argumentos", () => {
@@ -655,7 +654,7 @@ describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzami
   const guia = leer("deploy/README.md")
   const s103 = tramo(guia, "### 10.3", "### 10.4")
   const s143 = tramo(guia, "### 14.3", "## Paso 15")
-  const s135 = tramo(guia, "### 13.5", "### 13.6")
+  const s132 = tramo(guia, "### 13.2", "### 13.3")
   const reCopia = /deploy\/cron-eli \/etc\/cron\.d\/eli/
   const comandoSed = /sed -i -E '(s\|\^\(0 13 \.\*llamar-cron\)\|#DESACTIVADO# \\1\|)'/
 
@@ -683,7 +682,7 @@ describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzami
     }
   })
 
-  it("el sed de la guía apaga EXACTAMENTE las dos líneas de correo de cron-eli, deja un archivo de cron válido, y el de 13.5 lo deja idéntico al original", () => {
+  it("el sed de la guía apaga EXACTAMENTE las dos líneas de correo de cron-eli, deja un archivo de cron válido, y el de 13.2 lo deja idéntico al original", () => {
     const expresion = s103.match(comandoSed)![1]
     expect(s143.match(comandoSed)![1], "10.3 y 14.3 deben usar el mismo sed").toBe(expresion)
     const original = leer("deploy/cron-eli")
@@ -697,14 +696,14 @@ describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzami
     expect(activas).toHaveLength(1)
     expect(activas[0]).toMatch(/^30 6 \* \* \*\s+eli\s+\S+\/respaldo\.sh$/)
     expect(sinComentarios(apagado)).not.toContain("llamar-cron")
-    const encender = s135.match(/sed -i '(s\|\^#DESACTIVADO# \|\|)'/)
-    expect(encender, "13.5 debe traer el comando para encenderlas").not.toBeNull()
+    const encender = s132.match(/sed -i '(s\|\^#DESACTIVADO# \|\|)'/)
+    expect(encender, "13.2 debe traer el comando para encenderlas").not.toBeNull()
     expect(spawnSync("sed", [encender![1]], { input: apagado, encoding: "utf8" }).stdout).toBe(original)
   })
 
-  it("TODO 'llamar-cron.sh' de la guía va con el prefijo ELI_URL_LOCAL=http://127.0.0.1:1, salvo el único de 13.5 (el real)", () => {
-    const inicio13 = guia.indexOf(s135)
-    const fin13 = inicio13 + s135.length
+  it("TODO 'llamar-cron.sh' de la guía va con el prefijo ELI_URL_LOCAL=http://127.0.0.1:1, salvo el único de 13.2 (el real)", () => {
+    const inicio13 = guia.indexOf(s132)
+    const fin13 = inicio13 + s132.length
     let dentroDeBloque = false
     let posicion = 0
     let conPrefijo = 0
@@ -732,10 +731,9 @@ describe("deploy/README.md — crons del VPS: nunca encendidos antes del lanzami
     expect(s105).toContain("manda los\n> recordatorios reales a los clientes")
   })
 
-  it("13.2 avisa que el interruptor de Vercel puede pedir un nuevo despliegue, y 13.5 no promete algo confuso", () => {
-    expect(tramo(guia, "### 13.2", "### 13.3")).toContain("**nuevo despliegue**")
-    expect(s135).not.toContain("sólo adelanta los de mañana")
-    expect(s135).toContain("SÍ ejecuta el cron de verdad")
+  it("13.2 no promete algo confuso: avisa que la llamada SÍ ejecuta el cron de verdad", () => {
+    expect(s132).not.toContain("sólo adelanta los de mañana")
+    expect(s132).toContain("SÍ ejecuta el cron de verdad")
   })
 })
 
@@ -749,9 +747,9 @@ describe("deploy/README.md — correcciones de la iteración 3", () => {
     expect(s).toMatch(/edita ese registro/)
   })
 
-  it("B3: 11.5 avisa que Vercel de respaldo apunta a la base vieja y que --exit-on-error puede abortar por errores inocuos", () => {
+  it("B3: 11.5 avisa que otro servidor encendido apunta a la base vieja y que --exit-on-error puede abortar por errores inocuos", () => {
     const s = tramo(guia, "### 11.5", "### 11.6")
-    expect(s).toMatch(/Si Vercel quedó de respaldo/)
+    expect(s).toMatch(/Si quedó otro servidor de Eli encendido/)
     expect(s).toMatch(/`DATABASE_URL` también apunta a la base vieja/)
     expect(s).toMatch(/COMMENT ON EXTENSION/)
     expect(s).toMatch(/A COMPROBAR en la prueba mensual/)

@@ -8,15 +8,16 @@
 # abajo NO serían los 13:00 UTC que espera el código (HORA_UTC_DEL_CRON en
 # lib/recordatorios.ts).
 #
-# Los dos primeros crons son los de vercel.json, con la MISMA ruta y el MISMO
-# horario ("0 13 * * *" = todos los días 13:00 UTC, ~10:00 en Chile). Hay una
-# prueba (deploy/deploy.test.ts) que falla si se separan.
+# Este archivo es la fuente de los crons de Eli. Los dos primeros corren
+# "0 13 * * *" (todos los días 13:00 UTC, ~10:00 en Chile). Hay una prueba
+# (deploy/deploy.test.ts) que falla si cambian sus rutas u horarios o si se
+# agrega otro.
 #
-# /api/cron/mensajes-a-clientes NO se programa acá: igual que en Vercel, lo corre
-# solo /api/cron/correos-de-prueba al terminar lo suyo.
+# /api/cron/mensajes-a-clientes NO se programa acá: lo corre solo
+# /api/cron/correos-de-prueba al terminar lo suyo.
 #
-# IMPORTANTE: regla conservadora, no tener estos crons activos acá y en Vercel a
-# la vez. Verificado en el código: cada envío se "reclama" en la base antes de
+# IMPORTANTE: regla conservadora, no tener estos crons activos en dos servidores
+# de Eli a la vez (por ejemplo, al rehacer el servidor). Verificado en el código: cada envío se "reclama" en la base antes de
 # mandarse (Appointment.reminderSentAt se marca ANTES de enviar y sólo si estaba
 # vacío), así que repetir una corrida o correr dos a la vez NO duplica un
 # recordatorio; pero un fallo ambiguo a mitad de envío puede dejar uno perdido o,
@@ -24,8 +25,8 @@
 # llevaría el NEXTAUTH_URL de quien lo mandó). Ver deploy/README.md, paso 13.
 #
 # Horarios siempre con los 5 campos numéricos. NO uses alias como @daily o
-# @reboot: no se pueden comparar con vercel.json (la prueba automática los
-# rechaza) y @reboot correría cada vez que se reinicia el servidor.
+# @reboot: la prueba automática los rechaza (compara los 5 campos) y @reboot
+# correría cada vez que se reinicia el servidor.
 #
 # Resultado de cada corrida:  journalctl -t eli-cron      (y -t eli-respaldo)
 

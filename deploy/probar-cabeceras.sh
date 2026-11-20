@@ -16,9 +16,10 @@
 #   2. Arma con él un Caddy de prueba en el puerto 38080 (sólo local, sin HTTPS)
 #      que reenvía a un servidor "eco" de juguete en el puerto 38081, que
 #      responde con las cabeceras que le llegaron.
-#   3. Hace un pedido mintiendo en X-Vercel-Forwarded-For, X-Real-IP y
-#      X-Forwarded-For, y comprueba que lo que le llega a la app es la IP real
-#      de la conexión (127.0.0.1 en esta prueba) y no lo inventado. Y que
+#   3. Hace un pedido mintiendo en X-Real-IP y X-Forwarded-For (y mandando una
+#      X-Vercel-Forwarded-For inventada, que Caddy borra por defensa), y
+#      comprueba que lo que le llega a la app es la IP real de la conexión
+#      (127.0.0.1 en esta prueba) y no lo inventado. Y que
 #      /api/cron/recordatorios da 404 sin llegar a la app.
 #   4. Apaga todo lo que levantó.
 #

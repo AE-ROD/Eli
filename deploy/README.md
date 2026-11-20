@@ -1,7 +1,7 @@
 # Eli en un VPS de Hostinger: guía paso a paso
 
 **Eli vive en este VPS de Hostinger**, en `https://eliagenda.com` (el DNS apunta
-a `187.41.114.36`). **Vercel ya no es producción.** Para publicar lo que entra a
+a `187.41.114.36`). Es el único lugar donde corre. Para publicar lo que entra a
 `main` se usa el paso 14 (`./deploy/actualizar.sh`): el VPS no se actualiza solo.
 Los pasos 0 a 13 cuentan cómo se armó el servidor y sirven para rehacerlo desde
 cero; el paso 13 (el lanzamiento) ya se hizo.
@@ -133,10 +133,10 @@ sea un chat**):
 | **Contraseña de root** | La que pusiste al crear el VPS (hPanel → VPS → *Configuración* si la quieres cambiar). |
 | **Versión de Ubuntu** | `24.04.5` (hPanel → VPS → Resumen). Esta guía vale para **22.04 y 24.04**. |
 | **Dominio** | `eliagenda.com`, comprado en Hostinger, con el DNS en hPanel. Apunta al VPS: es la dirección de Eli. |
-| **Variables de Eli** | Vercel → tu proyecto → *Settings* → *Environment Variables*. Son las mismas del paso 6. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo que usa Vercel** (si no, los enlaces de baja y de cancelar/cambiar cita de los correos ya enviados dejan de servir). |
+| **Variables de Eli** | Están en el servidor, en `/etc/eli/eli.env` (paso 6), y deberían estar también en tu gestor de contraseñas. Para rehacer el servidor se copian de ahí. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo de siempre** (si no, se cierran todas las sesiones y los enlaces de baja y de cancelar/cambiar cita de los correos ya enviados dejan de servir). |
 | **Acceso a GitHub** | Que seas administrador del repositorio `AE-ROD/Eli` (para crear la deploy key). |
 | **Acceso a Neon** | Para saber la versión de Postgres (paso 3) y crear una base de pruebas (paso 11). |
-| **Acceso a Google Cloud, Resend y Vercel** | Para el lanzamiento (paso 13) y para verificar el dominio en Resend (paso 7.4). |
+| **Acceso a Google Cloud y Resend** | Para el login con Google (paso 13.0) y para verificar el dominio en Resend (paso 7.4). |
 | **Dónde está el DNS de tu dominio** | Ver el aviso al principio del paso 7. Si el dominio no está en Hostinger, los registros DNS se cambian en otro panel. |
 
 **Este kit tiene que estar en la rama `main` de GitHub** (haber pasado por el
@@ -147,8 +147,8 @@ Dos decisiones que ya vienen tomadas:
 
 - **Dominio sin `www`** (`eliagenda.com`). El `www` redirige a ese. Así hay una
   sola dirección, una sola cookie de sesión y un solo login con Google.
-- **Hora del servidor en UTC**, igual que Vercel: así los crons a las 13:00 UTC
-  son los de siempre.
+- **Hora del servidor en UTC**: así los crons corren a las 13:00 UTC, como
+  espera el código.
 
 ---
 
@@ -844,10 +844,10 @@ Salen de buscar `process.env` en `app/`, `lib/`, `proxy.ts` y
 | `DATABASE_URL` | **Sí** | Neon, conexión **con pooler** (el host trae `-pooler`). Es la que usa la app. También la necesita la compilación. |
 | `DIRECT_URL` | **Sí** | Neon, conexión **directa** (sin `-pooler`). La usan los respaldos y Prisma (el esquema la exige para compilar). |
 | `NEXTAUTH_URL` | **Sí** (en producción, sin ella los correos no salen) | La dirección pública: `https://eliagenda.com` (sin barra final). |
-| `NEXTAUTH_SECRET` | **Sí** | Firma las sesiones y los enlaces de baja. **Copiar el mismo de Vercel.** |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **Sí** (para entrar con Google) | Google Cloud → Credenciales. Los mismos de Vercel. |
+| `NEXTAUTH_SECRET` | **Sí** | Firma las sesiones y los enlaces de baja. **Copiar el mismo de siempre** (el del `eli.env` actual o el del gestor de contraseñas). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **Sí** (para entrar con Google) | Google Cloud → Credenciales. Los mismos de siempre. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | **Sí en producción** | Límite de intentos. **Sin ellas, todo endpoint responde 429** (falla cerrado a propósito). |
-| `CRON_SECRET` | **Sí** (si falta, los crons responden siempre 401) | Contraseña que protege `/api/cron/*`. **Crea una NUEVA para el servidor** (`openssl rand -hex 32`, y guárdala en tu gestor de contraseñas); no reutilices la de Vercel: así, si una se filtra, la otra sigue sirviendo. Mientras dure la mudanza, Vercel conserva la suya y el VPS la nueva; nadie más las usa. |
+| `CRON_SECRET` | **Sí** (si falta, los crons responden siempre 401) | Contraseña que protege `/api/cron/*`. Se crea con `openssl rand -hex 32` y se guarda en tu gestor de contraseñas. Sólo la usan los crons de este servidor (`llamar-cron.sh`); nadie más. |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Recomendadas (las cuatro juntas; no van en la plantilla de 6.2) | Fotos del negocio y del equipo (logo, portada y foto de cada integrante), guardadas en Cloudflare R2: el ID de la cuenta, la llave y el secreto de un token de API **S3** con permiso de lectura y escritura **sólo sobre ese bucket**, y el nombre del bucket. El bucket queda **privado** (sin acceso público ni dominio propio): Eli sube y sirve las fotos él mismo, desde `/fotos/` en su propio dominio. **Sin las cuatro, las fotos no están disponibles:** subir una responde un aviso, las páginas muestran las iniciales y nada más se rompe. Se agregan a `eli.env` cuando se cree el bucket, y después `sudo systemctl restart eli`. |
 | `RESEND_API_KEY` | Recomendada | Correos. Sin ella no sale ningún correo (ni recordatorios), pero nada se rompe. |
 | `RESEND_FROM_EMAIL` | Recomendada | Remitente, p. ej. `Eli <no-reply@tu-dominio-verificado.cl>`. Si falta usa un valor por defecto que no es tuyo. |
@@ -882,9 +882,8 @@ sudo install -d -m 750 -o root -g eli /etc/eli
 sudo nano /etc/eli/eli.env
 ```
 
-Pega esto y **reemplaza cada `CAMBIAR`** con el valor real (cópialos desde
-Vercel → *Settings* → *Environment Variables* → ojo para mostrar el valor; el
-`CRON_SECRET` es la excepción: ese es NUEVO, ver la tabla; y
+Pega esto y **reemplaza cada `CAMBIAR`** con el valor real (cópialos del
+`/etc/eli/eli.env` del servidor actual o de tu gestor de contraseñas;
 `RESEND_FROM_EMAIL` lleva el remitente de tu dominio, ver abajo).
 Reglas: sin comillas, sin espacios alrededor del `=`, una variable por línea,
 sin la palabra `export`:
@@ -963,10 +962,8 @@ test -r /etc/eli/eli.env && echo "eli puede leerlo"
 ## Paso 7. DNS en Hostinger (el dominio `eliagenda.com`)
 
 El DNS es la libreta que dice "el dominio `eliagenda.com` está en tal IP". El
-dominio es nuevo y todavía no lo usa nadie (**caso A**): el DNS se apunta al VPS
-desde ya y todas las pruebas se hacen directamente con `eliagenda.com`. Eli
-sigue funcionando en su dirección de Vercel mientras tanto; el lanzamiento
-(avisar a los clientes, encender los crons del VPS) es el paso 13.
+dominio apunta al VPS (**caso A**) y todas las pruebas se hacen directamente
+con `eliagenda.com`. Encender los crons de correo va al final (paso 13.2).
 
 El DNS de `eliagenda.com` está en Hostinger, así que se edita en **hPanel →
 *Dominios* → `eliagenda.com` → *DNS / Servidores de nombres* → *Registros DNS***.
@@ -1181,8 +1178,8 @@ sudo systemctl restart systemd-journald
 
 ### 8.4 Primera compilación y arranque
 
-> **Antes de seguir:** la base de datos de Neon es la misma que ya usa Vercel, así
-> que ya tiene aplicadas todas las migraciones de esta versión. El script te lo
+> **Antes de seguir:** la base de datos de Neon es la de producción, que ya
+> tiene aplicadas todas las migraciones de esta versión. El script te lo
 > va a preguntar y consultará la base (sólo lectura) para confirmarlo. **Nunca
 > aplica migraciones él mismo.**
 
@@ -1284,10 +1281,10 @@ IP "ve" Eli**.
 
 El límite de intentos de login (10 por minuto por IP, etc.) cuenta por IP. El
 código (`lib/rate-limit.ts`, `obtenerIp`) confía primero en la cabecera
-`x-vercel-forwarded-for`, luego en `x-real-ip` y luego en `x-forwarded-for`.
-En Vercel eso era seguro porque Vercel las pisaba. **Aquí las pisa Caddy**: borra
-`X-Vercel-Forwarded-For` y fija `X-Real-IP` y `X-Forwarded-For` con la IP real
-de la conexión. Sin eso, un atacante cambiaría de "IP" en cada pedido y se
+`x-real-ip` y luego en `x-forwarded-for`, y el cliente puede mandar las que
+quiera. **Por eso las pisa Caddy**: fija `X-Real-IP` y `X-Forwarded-For` con la
+IP real de la conexión. Además borra `X-Vercel-Forwarded-For` por defensa: la
+app ya no la lee, pero un cliente la podría mandar inventada y así no llega. Sin eso, un atacante cambiaría de "IP" en cada pedido y se
 saltaría el límite de intentos. Hay una prueba automática
 (`deploy/deploy.test.ts`) que falla si alguien quita esas líneas, y una
 comprobación en vivo en el paso 12 (`deploy/probar-cabeceras.sh`).
@@ -1436,14 +1433,14 @@ servidor en UTC da lo mismo.
 
 ### 10.2 Qué hay en `deploy/cron-eli`
 
-| Hora (UTC) | Qué | Equivale a |
-|---|---|---|
-| 13:00 todos los días | `/api/cron/recordatorios` | `vercel.json` |
-| 13:00 todos los días | `/api/cron/correos-de-prueba` (al terminar corre solo `mensajes-a-clientes`) | `vercel.json` |
-| 06:30 todos los días | Respaldo de la base | nuevo |
+| Hora (UTC) | Qué |
+|---|---|
+| 13:00 todos los días | `/api/cron/recordatorios` |
+| 13:00 todos los días | `/api/cron/correos-de-prueba` (al terminar corre solo `mensajes-a-clientes`) |
+| 06:30 todos los días | Respaldo de la base |
 
-Una prueba automática falla si estas dos rutas/horas se separan de las de
-`vercel.json`.
+`deploy/cron-eli` es la única fuente de los horarios. Una prueba automática
+falla si cambian estas dos rutas/horas o si aparece otro cron de correo.
 
 Cada llamada usa `deploy/llamar-cron.sh`: lee `CRON_SECRET` del archivo de
 variables, se lo manda a Eli por la entrada estándar de `curl` (no aparece en
@@ -1462,8 +1459,9 @@ hay servicios nuevos.
 
 ### 10.3 Instalar (con los de correo APAGADOS hasta el lanzamiento)
 
-> **NO enciendas los crons de correo mientras Vercel siga con los suyos
-> encendidos, ni antes del lanzamiento.** Lo que se
+> **NO enciendas los crons de correo antes del lanzamiento (paso 13.2), ni
+> mientras otro servidor de Eli (por ejemplo, el viejo, si estás rehaciéndolo)
+> siga con los suyos encendidos.** Lo que se
 > verificó en el código (`app/api/cron/recordatorios/route.ts`): cada recordatorio
 > se "reclama" en la base **antes** de enviarse (se marca `reminderSentAt` sólo si
 > estaba vacío), por eso repetir una corrida, o correr dos a la vez, **no duplica**
@@ -1472,8 +1470,8 @@ hay servicios nuevos.
 > un recordatorio perdido que dos"), así que una corrida de más puede gastar el
 > único intento, antes de que todo esté listo (Resend sin verificar, por
 > ejemplo); y (2) los enlaces del correo llevan el `NEXTAUTH_URL` del servidor que
-> los manda (el VPS usa `eliagenda.com`, Vercel usa su propia dirección), y la marca
-> ya quedaría puesta (no se puede deshacer). Se encienden en el paso 13. El
+> los manda (si ese servidor no está listo, el enlace queda mal), y la marca
+> ya quedaría puesta (no se puede deshacer). Se encienden en el paso 13.2. El
 > respaldo sí puede quedar encendido desde ya.
 
 ```bash
@@ -1483,7 +1481,7 @@ sudo install -d -m 700 -o eli -g eli /var/backups/eli
 **ANTES del lanzamiento** (el caso de este paso): instala el archivo **y deja
 apagadas las dos líneas de correo en un solo comando**. No lo partas en dos:
 `install` solo deja las dos líneas `0 13` ENCENDIDAS, y si te olvidas del segundo
-paso correrán a la vez que los crons de Vercel (justo lo prohibido arriba).
+paso correrán antes de tiempo (justo lo prohibido arriba).
 
 ```bash
 sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/eli && sudo sed -i -E 's|^(0 13 .*llamar-cron)|#DESACTIVADO# \1|' /etc/cron.d/eli
@@ -1500,8 +1498,8 @@ grep -n -E "llamar-cron|respaldo" /etc/cron.d/eli
 Las dos de `llamar-cron` deben empezar con `#DESACTIVADO#`; la de `respaldo.sh`,
 no. (cron relee el archivo solo, no hay que reiniciar nada.)
 
-**DESPUÉS del lanzamiento** (13.5 ya hecho, los crons del VPS encendidos y los de
-Vercel apagados) el archivo se instala sin `sed`, para dejar las dos líneas
+**DESPUÉS del lanzamiento** (13.2 ya hecho, los crons del VPS encendidos y
+ningún otro servidor con los suyos) el archivo se instala sin `sed`, para dejar las dos líneas
 encendidas. Es la variante para reinstalarlo más adelante (paso 14.3); no la uses
 antes del lanzamiento:
 
@@ -1518,7 +1516,7 @@ sudo systemctl restart eli && sleep 5 && sudo nsenter -t $(systemctl show eli -p
 
 No debe listar archivos `.dump` (error de permiso o carpeta vacía).
 
-**Encenderlos (paso 13)**, cuando toque:
+**Encenderlos (paso 13.2)**, cuando toque:
 
 ```bash
 sudo sed -i 's|^#DESACTIVADO# ||' /etc/cron.d/eli
@@ -1556,9 +1554,8 @@ falte o no se pueda escribir— es de los que hay que avisar).
 > `ELI_URL_LOCAL=http://127.0.0.1:1`.** Ese prefijo apunta la llamada a un
 > puerto donde no hay nadie, y por eso la prueba no ejecuta nada real. Sin el
 > prefijo, `llamar-cron.sh` llama de verdad al Eli del servidor y **manda los
-> recordatorios reales a los clientes** (y, antes del lanzamiento, repite lo que
-> hacen los crons de Vercel). Esto vale para todas las pruebas de este paso: sólo
-> el 13.5 llama a `llamar-cron.sh` sin prefijo, a propósito.
+> recordatorios reales a los clientes**. Esto vale para todas las pruebas de
+> este paso: sólo el 13.2 llama a `llamar-cron.sh` sin prefijo, a propósito.
 
 **Pruébalo una vez** (**A COMPROBAR EN EL VPS**: el remitente de `RESEND_FROM_EMAIL`
 tiene que estar verificado en Resend, o Resend lo rechaza). Esta prueba provoca un
@@ -1822,11 +1819,10 @@ no sirve, sigue:
    agenda y una ficha. Las sesiones abiertas siguen valiendo (no dependen de la
    base).
 
-   **Si Vercel quedó de respaldo** (plan de vuelta atrás, paso 13), su
-   `DATABASE_URL` también apunta a la base vieja, y el paso 6 sólo cambió la del
-   VPS. Cámbiala también en Vercel (*Settings* → *Environment Variables*, y
-   redespliega) o deja Vercel apagado: una web de respaldo conectada a la base
-   mala escribiría datos en ella.
+   **Si quedó otro servidor de Eli encendido** (por ejemplo, el viejo tras
+   rehacerlo), su `DATABASE_URL` también apunta a la base vieja, y el paso 6
+   sólo cambió la de este VPS. Cámbiala también allí o apágalo: una web
+   conectada a la base mala escribiría datos en ella.
 
 9. **Confirma que los respaldos siguen funcionando contra la base nueva:**
 
@@ -1996,8 +1992,8 @@ Debe imprimir `401`.
 > diaria contra la base **real**: manda los recordatorios pendientes de mañana
 > con enlaces a `eliagenda.com`, y deja marcado `reminderSentAt` en esas citas
 > (no se puede deshacer: no se reenvían) cuando todavía no se avisó a los
-> negocios ni Resend está verificado, y mientras Vercel sigue mandando los suyos.
-> La prueba con secreto va **después del lanzamiento**, en 13.5. Que el secreto del servidor coincide con el de la
+> negocios ni Resend está verificado.
+> La prueba con secreto va **después del lanzamiento**, en 13.2. Que el secreto del servidor coincide con el de la
 > app ya lo prueba el arranque: si estuviera mal, el primer cron real daría `401`
 > y te llegaría el correo de aviso (10.5).
 
@@ -2077,119 +2073,62 @@ se detecte y se revierta sola.
 
 ---
 
-## Paso 13. EL LANZAMIENTO en `eliagenda.com` (y el plan para volver atrás)
+## Paso 13. El lanzamiento en `eliagenda.com` (hecho)
 
-`eliagenda.com` es un dominio nuevo: hoy Eli sólo vive en su dirección de
-Vercel. Al terminar el paso 12 el VPS ya atiende `https://eliagenda.com` (DNS en
-el paso 7, Caddy en el 9) **con la misma base de datos real** que Vercel, pero
-nadie lo conoce todavía y sus crons están apagados. "Lanzar" es: apagar los crons
-de Vercel, encender los del VPS, y empezar a usar `eliagenda.com` como la
-dirección oficial. Como no hay un dominio viejo que redirigir, **no hay un
-cambio de DNS en el día del lanzamiento** (eso se hizo, sin riesgo, en el paso 7).
+**Este paso ya se hizo.** Resumen de lo que fue: con el paso 12 en verde, se
+agregaron en Google las direcciones de `eliagenda.com`, se encendieron los crons
+de correo del VPS y `eliagenda.com` pasó a ser la dirección oficial de Eli. Hoy
+Eli vive sólo en este servidor.
 
+Lo que queda de este paso sirve **sólo si rehaces el servidor** (o te mudas a
+otro): es lo mínimo para dejar el nuevo atendiendo y con los crons encendidos.
 Hazlo **fuera del horario de atención** y **lejos de las 13:00 UTC** (entre las
-12:30 y las 13:30 UTC no lo hagas: ahí corren los crons). Reserva 1-2 horas.
+12:30 y las 13:30 UTC no lo hagas: ahí corren los crons).
 
-> **Regla que nunca se rompe:** Vercel y el VPS **no pueden tener los crons
-> encendidos a la vez**. Por eso: primero se apagan los de Vercel, *después*
-> se encienden los del VPS.
+> **Regla que nunca se rompe:** dos servidores de Eli **no pueden tener los
+> crons encendidos a la vez**. Si el viejo sigue vivo, primero se apagan los
+> suyos (con el `sed` de 10.3 sobre su `/etc/cron.d/eli`), *después* se
+> encienden los del nuevo.
 
-### 13.0 Antes (días antes)
+### 13.0 Antes
 
 - [ ] El paso 12 completo está en verde con `eliagenda.com`.
 - [ ] **Resend verificado** (paso 7.4: `eliagenda.com` en *Verified*, con SPF,
       DKIM y DMARC) y la prueba de aviso del paso 10.5 llegó a tu correo. Sin esto,
       los correos de Eli (recordatorios, bienvenida, recuperar contraseña) no salen.
 - [ ] **Google:** Google Cloud → *APIs y servicios* → *Credenciales* → tu cliente
-      OAuth. En *Orígenes autorizados de JavaScript* agrega
+      OAuth. En *Orígenes autorizados de JavaScript* tiene que estar
       `https://eliagenda.com` y en *URIs de redireccionamiento autorizados*
-      `https://eliagenda.com/api/auth/callback/google`. **Deja también las de
-      Vercel** (las necesitas mientras Vercel siga sirviendo y si vuelves atrás).
-      Los cambios de Google pueden tardar unos minutos en aplicarse.
-- [ ] **Vercel sigue como está** (con su propio `NEXTAUTH_URL`, la de `*.vercel.app`):
-      es tu plan de vuelta atrás. No lo cambies.
-- [ ] Piensa qué pasa con los enlaces que ya se compartieron con la dirección de
-      Vercel (páginas de reservas, correos viejos): **seguirán funcionando mientras
-      Vercel siga encendido** (los enlaces de cancelar/cambiar cita sirven en
-      cualquiera de los dos porque comparten base y `NEXTAUTH_SECRET`). El día que
-      apagues Vercel dejarán de servir: decide antes cómo avisar a los negocios
-      (o configurar una redirección en Vercel hacia `eliagenda.com`).
-- [ ] **Las sesiones abiertas en la dirección de Vercel no pasan a `eliagenda.com`**
-      (una cookie sólo vale para su propio dominio): cada persona tendrá que iniciar
-      sesión de nuevo la primera vez. Avísales.
+      `https://eliagenda.com/api/auth/callback/google` (ya se agregaron en el
+      lanzamiento; sólo hay que agregarlas si el cliente OAuth es nuevo). Los
+      cambios de Google pueden tardar unos minutos en aplicarse.
 - [ ] Haz un respaldo fresco: `/opt/eli/current/deploy/respaldo.sh`.
-- [ ] Avisa a los negocios la dirección nueva y el horario del lanzamiento.
 
-### 13.1 Dejar el VPS listo
+### 13.1 Comprobar de punta a punta
 
-En el VPS, confirma que `eli.env` tiene la dirección oficial (6.3 lo comprueba):
+En el VPS, confirma que `eli.env` tiene la dirección oficial (6.3 lo comprueba)
+y que el Caddyfile instalado es el del repositorio (14.3):
 
 ```bash
 grep "^NEXTAUTH_URL=" /etc/eli/eli.env
 ```
 
-Debe imprimir exactamente `NEXTAUTH_URL=https://eliagenda.com`. Y que el
-Caddyfile instalado es el del repositorio (14.3):
-
 ```bash
 diff -q /opt/eli/repo/deploy/Caddyfile /etc/caddy/Caddyfile && echo "Caddyfile al día"
 ```
 
-### 13.2 Apagar los crons de VERCEL (antes de encender los del VPS)
-
-Elige UNA forma (todas reversibles). **A COMPROBAR:** los nombres exactos de
-los menús de Vercel cambian; si no los encuentras, usa la forma 2.
-
-1. Vercel → tu proyecto → *Settings* → *Cron Jobs* → **Disable Cron Jobs**
-   (el interruptor/botón para desactivarlos). Para reactivarlos: *Enable*.
-   **A COMPROBAR:** según la versión de Vercel, el interruptor puede surtir efecto
-   sólo con un **nuevo despliegue** del proyecto; si al apagarlo te ofrece
-   *Redeploy*, hazlo, y no des los crons por apagados hasta ver el estado
-   *Disabled* y, mañana, ninguna ejecución en *Logs*.
-2. En el repositorio, quitar la sección `"crons"` de `vercel.json` y desplegar
-   (mediante un PR; **no** lo hagas desde el VPS). Para volver, se revierte ese
-   cambio. *(Ojo: la prueba automática de `deploy/` compara `deploy/cron-eli`
-   con `vercel.json`; si haces esto, quien mantiene el código debe ajustar la
-   prueba en el mismo PR.)*
-3. Pausar el proyecto entero en Vercel (*Settings* → *General*, si ofrece
-   pausar). Esto también deja de servir la web de Vercel: úsalo sólo si ya no
-   la necesitas de respaldo inmediato.
-
-**Comprueba que quedaron apagados, AHORA:** en la pantalla de Vercel debe verse
-que los cron jobs están **desactivados** (*Disabled*; si eliminaste la sección de
-`vercel.json`, que el último despliegue ya no los lista). No hace falta esperar
-a mañana para seguir: la confirmación definitiva llega después (13.5, "Al día
-siguiente"). Por qué no es peligroso seguir con esa confirmación pendiente: aun si
-un cron de Vercel se disparara una vez más, cada recordatorio se reclama en la
-base antes de enviarse, así que no sale duplicado (ver 10.3).
-
-### 13.3 Empezar a usar `eliagenda.com`
-
-No hay nada que cambiar en el DNS ni en Caddy (ya están). Lo que cambia es que
-desde ahora **esta es la dirección oficial**: compártela, ponla en tus materiales
-y en el monitoreo (apéndice).
-
-> **Ojo con HSTS:** desde que los navegadores visitan `eliagenda.com`, recuerdan
-> durante un año ("Strict-Transport-Security") que sólo se entra por HTTPS
-> válido, y **no dejan "continuar de todos modos"** si el certificado falla. Si
-> algo va mal con el certificado, la salida no es pedirle a la gente que ignore la
-> advertencia, sino arreglarlo: `sudo journalctl -u caddy -n 100 --no-pager`
-> (casi siempre el DNS dejó de apuntar al VPS o el 80/443 se cerró). Caddy
-> renueva el certificado solo, unos 30 días antes de que venza.
-
-### 13.4 Comprobar de punta a punta
-
-Repite en la Mac los puntos **12.1, 12.2, 12.3, 12.4b, 12.6 y 12.12**, y en el
-VPS `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
+Debe imprimir exactamente `NEXTAUTH_URL=https://eliagenda.com` y
+`Caddyfile al día`. Después repite en la Mac los puntos **12.1, 12.2, 12.3,
+12.4b, 12.6 y 12.12**, y en el VPS
+`/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddyfile` (12.5) y
 `sudo ss -tlnp | grep -E ':(80|443) '` (9.4: sólo `0.0.0.0`). Y entra al sitio en
 el navegador: inicia sesión con correo y **con Google**, mira la agenda, y una
-página pública de reservas. Pide a una clínica amiga que pruebe también.
+página pública de reservas.
 
-### 13.5 Encender los crons del VPS (y sólo ahora)
+### 13.2 Encender los crons del VPS (y sólo ahora)
 
-Confirma una vez más, **en la pantalla de Vercel**, que los cron jobs siguen
-desactivados (13.2). Y que hoy **no** estás entre las 12:50 y las 13:20 UTC.
-Entonces:
+Confirma que ningún otro servidor de Eli tiene los crons encendidos (la regla de
+arriba) y que **no** estás entre las 12:50 y las 13:20 UTC. Entonces:
 
 ```bash
 sudo sed -i 's|^#DESACTIVADO# ||' /etc/cron.d/eli
@@ -2201,10 +2140,9 @@ grep -n llamar-cron /etc/cron.d/eli
 
 Ninguna debe empezar con `#`.
 
-**Prueba única del cron con secreto (ahora sí es seguro):** el dominio es el
-oficial, así que los enlaces de los correos serán los definitivos. Hazla **después
-de las 13:05 UTC**, cuando la corrida del día ya pasó (o mañana, sin hacer nada:
-el cron lo hará solo):
+**Prueba única del cron con secreto (ahora sí es seguro):** hazla **después de
+las 13:05 UTC**, cuando la corrida del día ya pasó (o mañana, sin hacer nada: el
+cron lo hará solo):
 
 ```bash
 /opt/eli/current/deploy/llamar-cron.sh /api/cron/recordatorios
@@ -2222,41 +2160,13 @@ lo único que cambia es que esos correos salen ahora y no a las 13:00 UTC.
 journalctl -t eli-cron --since today --no-pager
 ```
 
-Deben aparecer las dos corridas con `-> 200`. Y en Vercel (*Logs* / *Cron Jobs*)
-**no** debe aparecer ninguna ejecución de esa hora. Si apareció una, apágalos de
-verdad (13.2) y avisa: los envíos no se duplicaron, pero revisa que ningún
-recordatorio quedara marcado sin enviarse (`journalctl -u eli | grep -i recordatorio`).
+Deben aparecer las dos corridas con `-> 200`.
 
-### 13.6 Después
+### 13.3 Después
 
-- Deja Vercel **como respaldo** (sin crons) por una o dos semanas.
-- Sube el TTL del DNS a algo normal (p. ej. 3600) cuando estés tranquilo.
-- Pon el monitoreo (apéndice).
-
-### PLAN DE VUELTA ATRÁS a Vercel
-
-Si algo sale mal **después** del lanzamiento y no se arregla rápido, este es el
-orden. Como Vercel sigue sirviendo en su propia dirección y el DNS de
-`eliagenda.com` no es lo que sostiene a Vercel, **no hay que tocar el DNS**:
-
-1. **Apaga los crons del VPS primero** (así no se duplican al volver a encender
-   los de Vercel):
-
-   ```bash
-   sudo sed -i -E 's|^(0 13 .*llamar-cron)|#DESACTIVADO# \1|' /etc/cron.d/eli
-   ```
-
-2. **Enciende los crons de Vercel** (la forma que usaste en 13.2, al revés).
-3. **Avisa a los negocios** que vuelvan a usar la dirección de Vercel (y, si ya
-   habías compartido enlaces de `eliagenda.com`, que esos quedan sin servicio
-   hasta arreglar el VPS). Las URIs de Google de Vercel siguen en su sitio
-   (por eso en 13.0 se **agregaron** las nuevas sin quitar las viejas).
-4. Si hace falta que `eliagenda.com` deje de recibir visitas del todo, apaga
-   Caddy (`sudo systemctl stop caddy`). El VPS puede quedarse encendido sin hacer
-   daño (con los crons apagados).
-
-Un problema *sólo de código* (no de servidor) se arregla sin tocar nada de esto
-con `volver-atras.sh` (paso 14).
+- Pon (o actualiza) el monitoreo (apéndice).
+- Si algo sale mal con una versión del código, la vuelta atrás es la del paso 14
+  (`volver-atras.sh`).
 
 ---
 
@@ -2386,7 +2296,7 @@ y vuelve a probar: `/opt/eli/current/deploy/probar-cabeceras.sh /etc/caddy/Caddy
 y `sudo ss -tlnp | grep -E ':(80|443) '`.
 
 **`cron-eli`:** ojo, copiarlo **vuelve a encender** las líneas de correo. Antes
-del lanzamiento (13.5) usa SIEMPRE este comando, que instala y las vuelve a
+del lanzamiento (13.2) usa SIEMPRE este comando, que instala y las vuelve a
 apagar en un solo paso:
 
 ```bash
@@ -2396,7 +2306,7 @@ sudo install -m 644 -o root -g root /opt/eli/repo/deploy/cron-eli /etc/cron.d/el
 Y comprueba que quedaron apagadas: `grep -n llamar-cron /etc/cron.d/eli` (las dos
 deben empezar con `#DESACTIVADO#`).
 
-DESPUÉS del lanzamiento (13.5 ya hecho) las líneas deben quedar encendidas, así
+DESPUÉS del lanzamiento (13.2 ya hecho) las líneas deben quedar encendidas, así
 que se instala sin `sed`:
 
 ```bash

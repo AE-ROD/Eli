@@ -294,17 +294,13 @@ describe("verificarLimite sin Upstash configurado, fuera de producción", () => 
 })
 
 describe("obtenerIp", () => {
-  it("prefiere x-vercel-forwarded-for, que fija Vercel y el cliente no puede inyectar", async () => {
+  it("ignora x-vercel-forwarded-for: ya no hay Vercel delante y el cliente la podría inventar", async () => {
     const { obtenerIp } = await import("./rate-limit")
-    const headers = new Headers({
-      "x-vercel-forwarded-for": "8.8.4.4",
-      "x-real-ip": "9.9.9.9",
-      "x-forwarded-for": "1.2.3.4, 5.6.7.8",
-    })
-    expect(obtenerIp({ headers })).toBe("8.8.4.4")
+    const headers = new Headers({ "x-vercel-forwarded-for": "8.8.4.4", "x-real-ip": "9.9.9.9" })
+    expect(obtenerIp({ headers })).toBe("9.9.9.9")
   })
 
-  it("sin x-vercel-forwarded-for usa x-real-ip antes que un x-forwarded-for que pudo venir del cliente", async () => {
+  it("usa x-real-ip antes que x-forwarded-for", async () => {
     const { obtenerIp } = await import("./rate-limit")
     const headers = new Headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.2.3.4, 5.6.7.8" })
     expect(obtenerIp({ headers })).toBe("9.9.9.9")

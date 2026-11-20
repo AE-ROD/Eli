@@ -22,7 +22,7 @@ import {
 } from "@/lib/recordatorios"
 
 /**
- * Cron diario (`vercel.json`, 13:00 UTC: las 10:00 en Chile con horario de
+ * Cron diario (`deploy/cron-eli`, 13:00 UTC: las 10:00 en Chile con horario de
  * verano, las 9:00 sin él) que avisa por correo a cada cliente con cita
  * "mañana" en la zona del negocio. Qué cita toca y con qué hora lo decide
  * `lib/recordatorios.ts`.

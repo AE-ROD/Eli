@@ -277,17 +277,14 @@ function primerValor(cabecera: string | null): string | null {
 /**
  * IP del cliente para el rate limit.
  *
- * SUPONE QUE EL DESPLIEGUE ESTÁ DETRÁS DE VERCEL. Vercel fija
- * `x-vercel-forwarded-for` y `x-real-ip` con la IP real y sobrescribe lo que
- * mande el cliente; `x-forwarded-for`, en cambio, puede traer valores que el
- * cliente inventó, así que sólo se usa como último recurso. Si algún día se
- * despliega en otro lado (o detrás de otro proxy), esta función debe revisarse:
- * sin un proxy de confianza que fije estas cabeceras, cualquiera elige su IP
- * y se salta el límite.
+ * SUPONE QUE EL DESPLIEGUE ESTÁ DETRÁS DE CADDY (`deploy/Caddyfile`). Caddy
+ * fija `x-real-ip` y `x-forwarded-for` con la IP real y pisa lo que mande el
+ * cliente. Si algún día se despliega en otro lado (o detrás de otro proxy),
+ * esta función debe revisarse: sin un proxy de confianza que fije estas
+ * cabeceras, cualquiera elige su IP y se salta el límite.
  */
 export function obtenerIp(request: NextRequest | { headers: Headers }): string {
   return (
-    primerValor(request.headers.get("x-vercel-forwarded-for")) ??
     primerValor(request.headers.get("x-real-ip")) ??
     primerValor(request.headers.get("x-forwarded-for")) ??
     "127.0.0.1"
@@ -304,7 +301,7 @@ export interface ResultadoLimite {
  *
  * Sin credenciales configuradas el comportamiento depende del entorno:
  * - En producción, falla CERRADO: no se puede dejar login/registro/restablecer
- *   contraseña sin ningún tope porque una variable desapareció de Vercel.
+ *   contraseña sin ningún tope porque una variable desapareció del servidor.
  * - Fuera de producción, falla abierto: no tiene sentido bloquear el desarrollo
  *   local ni los tests por no tener Upstash configurado.
  *

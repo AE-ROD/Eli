@@ -12,10 +12,9 @@ import { registrarError } from "@/lib/registro-de-errores"
 /**
  * (servidor) La corrida diaria de los mensajes a clientes: expira la lista de
  * espera, manda "te toca" y pide reseñas, en ese orden. La llaman el cron
- * diario de correos de prueba (`/api/cron/correos-de-prueba`, que está en
- * `vercel.json`) al terminar lo suyo, y `/api/cron/mensajes-a-clientes` para
- * correrla a mano. No tiene entrada propia en `vercel.json`: el plan Hobby de
- * Vercel ya tiene dos crons.
+ * diario de correos de prueba (`/api/cron/correos-de-prueba`, en
+ * `deploy/cron-eli`) al terminar lo suyo, y `/api/cron/mensajes-a-clientes` para
+ * correrla a mano. No tiene línea propia en `deploy/cron-eli`.
  *
  * Los trabajos comparten un cupo de envíos (`TOPE_ENVIOS_POR_CORRIDA`) y un
  * plazo (`hasta`). Uno que lanza no corta a los demás: se registra y su

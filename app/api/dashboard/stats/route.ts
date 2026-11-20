@@ -74,7 +74,7 @@ export async function GET() {
   const businessId = actor.businessId
 
   // "Hoy", el mes y el día de la semana son los del NEGOCIO (`Business.timezone`),
-  // como en /api/dashboard/clinica: ni los del servidor (en Vercel, UTC: a las
+  // como en /api/dashboard/clinica: ni los del servidor (UTC: a las
   // 21:30 en Santiago ya era mañana y "Citas de hoy" salía vacía) ni los del
   // navegador de quien mira (una dueña de viaje vería otro día). El parámetro
   // `zona` que mandaba el panel ya no se lee. La zona viaja en la respuesta para
