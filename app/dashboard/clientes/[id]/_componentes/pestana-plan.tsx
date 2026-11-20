@@ -691,7 +691,7 @@ const CELDA = "bg-tarjeta px-3 py-3 align-top max-lg:block max-lg:bg-transparent
  * (la cabecera de la tabla no se ve), y el borrar al lado del estado.
  */
 const FILA_COMO_TARJETA =
-  "max-lg:grid max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:items-start max-lg:gap-x-3 max-lg:gap-y-2.5 max-lg:rounded-[16px] max-lg:bg-tarjeta max-lg:p-3 max-lg:squircle"
+  "max-lg:grid max-lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] max-lg:items-start max-lg:gap-x-3 max-lg:gap-y-2.5 max-lg:rounded-[16px] max-lg:bg-tarjeta max-lg:p-3 max-lg:squircle"
 
 /** El nombre de la columna sobre su valor, sólo en el celular. */
 const NOMBRE_EN_EL_CELULAR = "mb-1 block text-[13px] text-texto-2 lg:hidden"
@@ -749,7 +749,7 @@ function FilaDePrestacion({
           )}
         </span>
       </td>
-      <td className={cn(CELDA, "whitespace-nowrap max-lg:col-span-3 max-lg:row-start-2")}>
+      <td className={cn(CELDA, "whitespace-nowrap max-lg:col-span-4 max-lg:row-start-2")}>
         <span className={NOMBRE_EN_EL_CELULAR} aria-hidden="true">
           {quienAtiende}
         </span>
@@ -772,7 +772,7 @@ function FilaDePrestacion({
           prestacion.profesionalNombre ?? <span className="text-texto-2">Sin asignar</span>
         )}
       </td>
-      <td className={cn(CELDA, "whitespace-nowrap max-lg:row-start-3", conColumnaDeBorrar ? "max-lg:col-span-2" : "max-lg:col-span-3")}>
+      <td className={cn(CELDA, "whitespace-nowrap max-lg:row-start-3", conColumnaDeBorrar ? "max-lg:col-span-3" : "max-lg:col-span-4")}>
         <span className={NOMBRE_EN_EL_CELULAR} aria-hidden="true">
           Estado
         </span>
@@ -800,7 +800,7 @@ function FilaDePrestacion({
       <td
         className={cn(
           CELDA,
-          "text-right font-medium whitespace-nowrap tabular-nums max-lg:col-start-3 max-lg:row-start-1",
+          "text-right font-medium whitespace-nowrap tabular-nums max-lg:col-span-2 max-lg:col-start-3 max-lg:row-start-1",
           !conColumnaDeBorrar && "rounded-r-[14px]"
         )}
       >
@@ -835,7 +835,7 @@ function FilaDePrestacion({
         )}
       </td>
       {conColumnaDeBorrar && (
-        <td className={cn(CELDA, "rounded-r-[14px] px-1 py-1.5 text-right max-lg:col-start-3 max-lg:row-start-3 max-lg:self-end max-lg:p-0")}>
+        <td className={cn(CELDA, "rounded-r-[14px] px-1 py-1.5 text-right max-lg:col-start-4 max-lg:row-start-3 max-lg:self-end max-lg:p-0")}>
           {prestacion.estado === "por-agendar" && (
             <button
               type="button"

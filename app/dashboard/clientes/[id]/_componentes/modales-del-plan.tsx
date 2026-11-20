@@ -37,8 +37,9 @@ import { citasParaAgendar, cuandoEsLaCita, leerValor } from "../_formato"
 import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
 
 /**
- * Los dos botones del pie de cada modal: en el teléfono, el que confirma arriba,
- * fijos al pie de la hoja.
+ * Los dos botones del pie de cada modal, uno al lado del otro (también en el
+ * celular, donde quedan fijos al pie de la hoja: apilados le quitaban al
+ * formulario el alto que el teclado deja libre).
  * `esperando`: todavía falta algo para poder confirmar (lo que se elige está cargando).
  *
  * Los modales que crean algo (versión, etapa, prestación) y el del valor
@@ -63,7 +64,7 @@ function PieDelModal({
   alCerrar: () => void
 }) {
   return (
-    <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+    <div className="flex gap-3 lg:pt-1">
       <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
         Cancelar
       </Boton>
@@ -845,7 +846,7 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
       alCerrar={alCerrar}
       pie={
         citas !== null && citas.length === 0 ? (
-          <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <div className="flex gap-3 lg:pt-1">
             <Boton type="button" variante="secundario" className="w-full" onClick={alCerrar}>
               Cerrar
             </Boton>
