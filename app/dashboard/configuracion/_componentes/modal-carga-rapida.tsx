@@ -55,8 +55,9 @@ export function ModalCargaRapida({ servicios, alAgregar, alCerrar }: PropsDeModa
 
   const pestanas: Pestana<IdDePestana>[] = [
     { id: "sugeridos", texto: frases.carga.pestanas.sugeridos },
-    { id: "pegar", texto: frases.carga.pestanas.pegar },
     { id: "varios", texto: frases.carga.pestanas.varios },
+    // La planilla al final: la más difícil de las tres.
+    { id: "pegar", texto: frases.carga.pestanas.pegar },
   ]
 
   // El resumen aparece arriba, y el botón que lo causó está abajo: si el modal es más alto que la pantalla, se trae a la vista.

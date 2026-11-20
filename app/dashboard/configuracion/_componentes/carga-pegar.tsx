@@ -20,6 +20,7 @@ import { mensajeDeTopeDeServicios, type ServicioParaCargar } from "@/lib/servici
 import { cn } from "@/lib/utils"
 import type { PalabrasDelRubro } from "@/lib/vocabulario"
 import type { frasesDeConfiguracion } from "../_frases"
+import { columnaQueFalta } from "../_frases-de-servicios"
 
 type FrasesDeServicios = ReturnType<typeof frasesDeConfiguracion>["servicios"]
 
@@ -36,7 +37,7 @@ interface PropsDeCargaPegar {
 }
 
 /**
- * "Pegar o importar": se pega la planilla (Excel, Google Sheets) o se elige un
+ * "Desde una planilla": se pega la planilla (Excel, Google Sheets) o se elige un
  * CSV, y una vista previa dice fila por fila qué se va a agregar y qué no, con
  * el motivo. Sólo se agrega lo que está listo. La revisión de acá es del
  * navegador; el servidor vuelve a revisar todo al agregar, y la pantalla lo dice.
@@ -61,6 +62,9 @@ export function CargaPegar({ frases, palabras, rubro, nombresExistentes, categor
   const caben = cuantosCaben(cantidadExistente)
   const sePasaDelTope = lectura.listas > caben
   const mostradas = lectura.filas.slice(0, FILAS_MAXIMAS_EN_LA_VISTA_PREVIA)
+  // Si a toda la planilla le falta una columna obligatoria, se dice cuál, en vez de un error por fila.
+  const falta = columnaQueFalta(lectura)
+  const ejemplo = ejemplos.servicios[0]
 
   const elegirArchivo = async (evento: React.ChangeEvent<HTMLInputElement>) => {
     const elegido = evento.target.files?.[0]
@@ -94,6 +98,16 @@ export function CargaPegar({ frases, palabras, rubro, nombresExistentes, categor
           <li key={instruccion}>{instruccion}</li>
         ))}
       </ol>
+
+      {/* Un .xlsx no se puede leer: los pasos para tenerlo en CSV, a la vista, junto al botón. */}
+      <div className="text-sm text-texto-2">
+        <p>{f.comoGuardarloComoCsv.titulo}</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+          {f.comoGuardarloComoCsv.pasos.map((paso) => (
+            <li key={paso}>{paso}</li>
+          ))}
+        </ul>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Boton variante="secundario" tamano="sm" icono={<FileUp />} onClick={() => entradaDeArchivo.current?.click()}>
@@ -139,10 +153,16 @@ export function CargaPegar({ frases, palabras, rubro, nombresExistentes, categor
             {f.cuenta(lectura.listas, lectura.conProblemas)}
           </p>
 
-          {!lectura.titulosReconocidos && (
-            <Aviso tono="info" rol="status">
-              {f.sinTitulos}
+          {falta ? (
+            <Aviso tono="atencion" rol="status">
+              {f.faltaColumna(falta, ejemplo)}
             </Aviso>
+          ) : (
+            !lectura.titulosReconocidos && (
+              <Aviso tono="info" rol="status">
+                {f.sinTitulos(ejemplo)}
+              </Aviso>
+            )
           )}
 
           {/* La tabla se desplaza dentro de su marco; con tabindex se puede recorrer con el teclado. */}

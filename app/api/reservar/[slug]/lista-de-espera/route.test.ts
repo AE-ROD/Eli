@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest"
+import { MENSAJE_DEMASIADAS_SOLICITUDES } from "@/app/api/reservar/_mensajes"
 import type { NextRequest } from "next/server"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
@@ -183,7 +184,7 @@ describe("inscribirse", () => {
   })
 
   it("sin cupo en cualquiera de los límites: 429 y nada", async () => {
-    const demasiadas = { status: 429, cuerpo: { error: "Demasiadas solicitudes, intenta más tarde" } }
+    const demasiadas = { status: 429, cuerpo: { error: MENSAJE_DEMASIADAS_SOLICITUDES } }
     mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "listaDeEspera", restantes: 0 }))
     expect(await inscribirse()).toEqual(demasiadas)
     mockVerificarLimite.mockImplementation(async (tipo: string) => ({ permitido: tipo !== "reserva", restantes: 0 }))

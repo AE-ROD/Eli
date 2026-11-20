@@ -151,7 +151,8 @@ describe("GET: ver la cita", () => {
     const { status, cuerpo } = await ver()
     expect(status).toBe(200)
     expect(cuerpo).toEqual({
-      negocio: { nombre: "Salón Uno" },
+      // Sin WhatsApp ni dirección cargados: los campos de contacto vienen en null.
+      negocio: { nombre: "Salón Uno", enlaceWhatsapp: null, whatsapp: null, direccion: null, comuna: null, mapas: null },
       servicio: { nombre: "Corte", duracion: 60 },
       // El precio de la cita (#89c); ésta no tiene.
       precio: null,
@@ -171,6 +172,24 @@ describe("GET: ver la cita", () => {
         { id: "m-pedro", nombre: "Pedro Profesional", especialidad: null, fotoUrl: null, diasConAtencion: [0, 1, 2, 3, 4, 5, 6] },
       ],
     })
+  })
+
+  it("dice el contacto PÚBLICO del negocio (WhatsApp, dirección y cómo llegar), nunca el correo de la dueña", async () => {
+    escenario({ negocio: { whatsapp: "+56912345678", address: " Av. Italia 1500 ", comuna: "Ñuñoa" } })
+    const { status, cuerpo } = await ver()
+    expect(status).toBe(200)
+    expect(cuerpo.negocio).toEqual({
+      nombre: "Salón Uno",
+      enlaceWhatsapp: "https://wa.me/56912345678",
+      whatsapp: "+56 9 1234 5678",
+      direccion: "Av. Italia 1500",
+      comuna: "Ñuñoa",
+      mapas: {
+        googleMaps: "https://www.google.com/maps/search/?api=1&query=Av.%20Italia%201500%2C%20%C3%91u%C3%B1oa",
+        waze: "https://waze.com/ul?q=Av.%20Italia%201500%2C%20%C3%91u%C3%B1oa",
+      },
+    })
+    expect(JSON.stringify(cuerpo)).not.toMatch(/@/)
   })
 
   it("QA#19: dice qué días se pueden elegir al reagendar: no los cerrados del negocio ni los que su profesional no atiende", async () => {
@@ -305,6 +324,14 @@ describe("cancelar", () => {
     const { status, cuerpo } = await cancelar()
     expect(status).toBe(409)
     expect(cuerpo.error).toContain(contacto)
+  })
+
+  it("fuera del plazo, si el negocio tiene WhatsApp el motivo dice cómo contactarlo", async () => {
+    escenario({ negocio: { cancelacionHorasAntes: 48, whatsapp: "+56912345678" } })
+    relojEn("2030-01-05T14:00:00.000Z")
+    const { status, cuerpo } = await cancelar()
+    expect(status).toBe(409)
+    expect(cuerpo.error).toMatch(/Contacta al salón por WhatsApp al \+56 9 1234 5678\.$/)
   })
 })
 

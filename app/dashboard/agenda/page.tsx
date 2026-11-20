@@ -25,6 +25,7 @@ import {
   leerBloqueos,
   crearCita,
   cambiarEstadoDeCita,
+  borradorParaAgendarOtra,
   citaEnBlanco,
   conEstadoNuevo,
   hayProfesionales,
@@ -246,6 +247,29 @@ export default function PaginaAgenda() {
     setModalAbierto(true)
   }
 
+  /**
+   * "Agendar otra hora" desde el detalle: la cita nueva con el mismo cliente,
+   * los mismos servicios, el mismo profesional (si quien agenda asigna) y la
+   * misma sede, y la fecha vacía para elegirla. En el teléfono el detalle es
+   * un diálogo y se cierra, para no apilar dos; en la computadora queda, y al
+   * cerrar la cita nueva el foco vuelve al botón.
+   */
+  const agendarOtra = (cita: Cita) => {
+    setAvisoDelModal("")
+    setSillonOcupadoEnElModal(false)
+    setAdvertenciasDeNuevaCita([])
+    const borrador = borradorParaAgendarOtra(cita)
+    const sede = sedeDelBorrador(modoDeSedes)
+    setNuevaCita({
+      ...borrador,
+      memberId: puedeAsignarProfesional ? borrador.memberId : "",
+      ...(conSillones && { sillonId: "" }),
+      ...(sede.sedeId !== undefined && { sedeId: cita.sede?.id && sedes.some((otra) => otra.id === cita.sede?.id) ? cita.sede.id : "" }),
+    })
+    if (!escritorio) setCitaAbierta(null)
+    setModalAbierto(true)
+  }
+
   // Desde el inicio ("Nueva cita") se llega con `?nueva=1`, y desde un
   // cliente ("Agendar cita") además con `&cliente=<id>`: se abre el modal,
   // con ese cliente elegido si el servidor lo devuelve (es del negocio; si no,
@@ -412,6 +436,7 @@ export default function PaginaAgenda() {
                 onCambiarEstado={cambiarEstado}
                 onMover={(cita) => abrirMover(cita, false)}
                 onAsignar={(cita) => abrirMover(cita, true)}
+                onAgendarOtra={agendarOtra}
                 destacarSinProfesional={conProfesionales}
                 onReactivada={mostrarEstado}
                 aviso={avisoDelDetalle}

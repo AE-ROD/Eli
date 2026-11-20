@@ -16,6 +16,7 @@ import { cantidadDe, concordar, el, numeroDe, ningun, pronombreDe, todos, un, un
 import { conMayuscula, type PalabrasDelRubro } from "@/lib/vocabulario"
 import type { ResumenDeCarga, ServicioOmitido } from "@/lib/carga-de-servicios"
 import { MOTIVO_REPETIDO_EN_EL_ARCHIVO, MOTIVO_REPETIDO_EN_EL_LOTE, MOTIVO_YA_EXISTE } from "@/lib/servicios-en-lote"
+import { SESION_CERRADA, SIN_PERMISO } from "./_frases-de-sedes"
 
 /** Qué se intentaba hacer cuando el servidor respondió con un error. */
 export type AccionDeLote = "agregar" | "cambiar" | "renombrar" | "sugeridos" | "leer"
@@ -30,6 +31,28 @@ export interface ResumenParaMostrar {
   titulo: string
   /** Una línea por servicio omitido, con su motivo. */
   detalles: string[]
+}
+
+/** Una columna obligatoria de la planilla. */
+export type ColumnaObligatoria = "nombre" | "duracion"
+
+/**
+ * La columna obligatoria que le falta a toda la planilla, o `null`. Se ve en
+ * lo leído: si TODAS las filas fallan por lo mismo (sin nombre, o sin
+ * duración), no es una fila mal escrita sino la columna que no está. El
+ * nombre sólo se puede echar en falta con títulos: sin ellos, la primera
+ * columna siempre se lee como nombre.
+ */
+export function columnaQueFalta(lectura: {
+  filas: readonly { error?: string }[]
+  titulosReconocidos: boolean
+}): ColumnaObligatoria | null {
+  const { filas, titulosReconocidos } = lectura
+  if (filas.length === 0) return null
+  const todasPor = (motivo: RegExp) => filas.every((fila) => fila.error !== undefined && motivo.test(fila.error))
+  if (titulosReconocidos && todasPor(/^Fila \d+: el nombre tiene que tener/)) return "nombre"
+  if (todasPor(/^Fila \d+: falta la duración/)) return "duracion"
+  return null
 }
 
 export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
@@ -57,10 +80,11 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
    */
   const errorDeLote = (codigo: number | null, delServidor: string, accion: AccionDeLote): string => {
     const mensaje = delServidor.trim()
+    // El 401 y el 403 siempre con lo nuestro: el "No autorizado" del servidor no dice qué hacer.
+    if (codigo === 401) return SESION_CERRADA
+    if (codigo === 403) return SIN_PERMISO
     if (mensaje && codigo !== 500) return mensaje
     switch (codigo) {
-      case 401:
-        return "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo."
       case 400:
       case 422:
         return `Algo de lo que enviaste no se pudo leer. Revisa ${el(servicio, "plural")} e inténtalo de nuevo.`
@@ -224,8 +248,8 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
       pestanas: {
         etiqueta: "Cómo cargarlos",
         sugeridos: "Sugeridos de tu rubro",
-        pegar: "Pegar o importar",
         varios: "Agregar varios",
+        pegar: "Desde una planilla",
       },
       /** La acción final de las tres pestañas. */
       agregar: (n: number): string => `Agregar ${cuantos(n)}`,
@@ -237,7 +261,7 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
         buscarAyuda: "Nombre o categoría",
         cargando: "Buscando los sugeridos de tu rubro…",
         reintentar: "Reintentar",
-        vacio: { titulo: "Sin sugeridos", ayuda: "Todavía no tenemos sugeridos para tu rubro. Usa “Pegar o importar” o “Agregar varios”." },
+        vacio: { titulo: "Sin sugeridos", ayuda: "Todavía no tenemos sugeridos para tu rubro. Usa “Agregar varios” o “Desde una planilla”." },
         todosAgregados: "Ya tienes todos los sugeridos de tu rubro.",
         sinResultados: "Ningún sugerido coincide con tu búsqueda.",
         yaLoTienes: `Ya ${pronombreDe(servicio)} tienes`,
@@ -253,10 +277,15 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
       pegar: {
         etiqueta: "Pega aquí tu planilla",
         instrucciones: [
-          "Copia las filas desde Excel o Google Sheets y pégalas aquí, o elige un archivo CSV.",
+          "Abre tu planilla, selecciona las filas y cópialas. Después pégalas en el recuadro de abajo.",
           `Una fila por ${servicio.singular}, con estas columnas en este orden: nombre, duración (en minutos o como 1h30), precio, categoría y descripción. Sólo el nombre y la duración son obligatorios.`,
           "Si la primera fila tiene los títulos (Nombre, Duración, Precio, Categoría y Descripción), las columnas pueden ir en cualquier orden.",
         ],
+        /** Para subir un archivo: cómo se guarda como CSV, que es lo que se puede leer (un .xlsx no). */
+        comoGuardarloComoCsv: {
+          titulo: "¿Prefieres subir el archivo? Guárdalo antes como CSV:",
+          pasos: ["En Excel: Archivo › Guardar como › CSV.", "En Google Sheets: Archivo › Descargar › CSV."],
+        },
         archivo: "Elegir archivo CSV",
         plantilla: "Descargar plantilla",
         nombreDeLaPlantilla: `plantilla-de-${plural.replace(/\s+/g, "-")}.csv`,
@@ -264,10 +293,17 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
         errorDelArchivo: {
           grande: "El archivo pesa más de 2 MB. Divídelo en partes más chicas.",
           vacio: "El archivo está vacío.",
-          excel: "Ese es un libro de Excel. Guárdalo como CSV (Archivo, Guardar como, CSV) o copia las filas y pégalas aquí.",
+          excel: "Ese archivo es de Excel y no se puede leer tal cual. En Excel: Archivo › Guardar como › CSV, y elige ese archivo. O copia las filas y pégalas aquí.",
           ilegible: "No se pudo leer el archivo. Prueba guardándolo como CSV.",
         },
-        sinTitulos: "No se encontraron los títulos de las columnas: cada fila se leyó como nombre, duración, precio, categoría y descripción, en ese orden.",
+        /** Sin títulos: en qué orden se leyó, con una fila de ejemplo ("Corte; 45; 15000"). */
+        sinTitulos: (ejemplo: string): string =>
+          `No se encontraron los títulos de las columnas, así que cada fila se leyó en este orden: nombre, duración, precio, categoría y descripción. Por ejemplo: ${ejemplo}; 45; 15000.`,
+        /** La columna obligatoria que falta en toda la planilla (`columnaQueFalta`), con un ejemplo de cómo llenarla. */
+        faltaColumna: (columna: ColumnaObligatoria, ejemplo: string): string =>
+          columna === "duracion"
+            ? `A tu planilla le falta la columna «Duración», que es obligatoria. Agrégala con los minutos de cada ${servicio.singular}: por ejemplo, ${ejemplo} con 45 en «Duración».`
+            : `A tu planilla le falta la columna «Nombre», que es obligatoria. Agrégala con el nombre de cada ${servicio.singular}: por ejemplo, «${ejemplo}» en «Nombre».`,
         vistaPrevia: "Vista previa",
         columnas: { fila: "Fila", nombre: "Nombre", duracion: "Duración", precio: "Precio", categoria: "Categoría", estado: "Estado" },
         listaParaAgregar: "Lista",
@@ -290,7 +326,7 @@ export function frasesDeLosServicios(palabras: PalabrasDelRubro) {
         quitarFila: (n: number): string => `Quitar la fila ${n}`,
         de: (campo: string, n: number): string => `${campo}, fila ${n}`,
         sinFilas: "No hay filas. Agrega una para empezar.",
-        filasLlenas: (maximo: number): string => `La tabla admite hasta ${maximo} filas. Agrega estas y sigue con otras, o usa “Pegar o importar”.`,
+        filasLlenas: (maximo: number): string => `La tabla admite hasta ${maximo} filas. Agrega estas y sigue con otras, o usa “Desde una planilla”.`,
         sinNada: `Escribe al menos ${un(servicio)}.`,
         revisa: (n: number): string => (n === 1 ? "Revisa la fila marcada antes de agregar." : `Revisa las ${n} filas marcadas antes de agregar.`),
         pegado: (repartidas: number, sinLeer: number, recortadas: number): string => {

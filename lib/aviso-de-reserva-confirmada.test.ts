@@ -72,7 +72,23 @@ describe("enviarAvisoDeReservaConfirmada (#84)", () => {
       profesional: "Carla Profesional",
       precio: null,
       rubro: "salon",
+      // Sin WhatsApp ni dirección en el negocio: ni "Escribir por WhatsApp" ni "Dónde".
+      whatsapp: null,
     })
+  })
+
+  it("sin sede, el correo dice la dirección del negocio y lleva su WhatsApp público", async () => {
+    await base.prisma.business.updateMany({
+      where: { id: NEGOCIO },
+      data: { address: "Av. Italia 1500", comuna: "Ñuñoa", whatsapp: "+56912345678" },
+    })
+    const { enviarAvisoDeReservaConfirmada } = await import("./aviso-de-reserva-confirmada")
+
+    await enviarAvisoDeReservaConfirmada({ businessId: NEGOCIO, citaId: "confirmada" })
+
+    expect(mockEnviar).toHaveBeenCalledWith(
+      expect.objectContaining({ lugar: { direccion: "Av. Italia 1500", comuna: "Ñuñoa" }, whatsapp: "+56912345678" })
+    )
   })
 
   it("el correo lleva el rubro del negocio de la cita, leído de la base", async () => {
