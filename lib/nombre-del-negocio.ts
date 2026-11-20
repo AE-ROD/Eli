@@ -16,13 +16,28 @@ export const MENSAJES_DEL_NOMBRE_DEL_NEGOCIO = {
   noEsTexto: "El nombre del negocio no es válido",
   muyCorto: `El nombre del negocio tiene que tener al menos ${LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO} caracteres`,
   muyLargo: `El nombre del negocio puede tener hasta ${LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO} caracteres`,
+  caracteres: "Usa sólo letras, números, espacios y los signos & . , ' - ( ). Sin @ ni otros símbolos.",
 } as const
+
+/**
+ * Lo que puede llevar el nombre de un negocio (decisión del dueño): letras
+ * (con tildes y ñ, de cualquier idioma), números, espacios y los signos que
+ * usan los nombres reales (& . , ' ’ - ( )). Nada más: ni @ (un negocio
+ * llamado "soporte@banco.cl" haría parecer que el correo viene de otro lado:
+ * el remitente es "<Negocio> vía Eli"), ni # $ % * / \ < > : ; " = + ni emojis.
+ */
+export const CARACTERES_DEL_NOMBRE_DEL_NEGOCIO = /^[\p{L}\p{M}\p{N} &.,'’()\-]+$/u
+
+/** Si el nombre (ya recortado) usa sólo los caracteres permitidos. */
+export function nombreConCaracteresValidos(nombre: string): boolean {
+  return CARACTERES_DEL_NOMBRE_DEL_NEGOCIO.test(nombre)
+}
 
 export type NombreDelNegocioLeido = { ok: true; nombre: string } | { ok: false; error: string }
 
 /**
  * El nombre tal como se guarda: sin los espacios de las puntas, de 2 a 80
- * caracteres. Lo que no cumple vuelve con el mensaje que ve quien lo escribió.
+ * caracteres y sólo con los caracteres permitidos. Lo que no cumple vuelve con el mensaje que ve quien lo escribió.
  */
 export function leerNombreDelNegocio(texto: unknown): NombreDelNegocioLeido {
   if (texto === undefined || texto === null) return { ok: false, error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.falta }
@@ -30,6 +45,7 @@ export function leerNombreDelNegocio(texto: unknown): NombreDelNegocioLeido {
   const nombre = texto.trim()
   if (nombre.length < LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO) return { ok: false, error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyCorto }
   if (nombre.length > LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO) return { ok: false, error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyLargo }
+  if (!nombreConCaracteresValidos(nombre)) return { ok: false, error: MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.caracteres }
   return { ok: true, nombre }
 }
 

@@ -60,3 +60,33 @@ describe("nombreCambio", () => {
     expect(nombreCambio("a".repeat(81), "Salón Ana")).toBe(false)
   })
 })
+
+describe("caracteres del nombre del negocio (sin @ ni símbolos)", () => {
+  it.each([
+    "Salón Ana",
+    "Peluquería Ñuñoa",
+    "Barbería D'Ángelo",
+    "Ana & Co.",
+    "Estudio 54",
+    "Clínica Dental Rojas-Soto (Providencia)",
+    "Uñas, Pestañas y Más",
+  ])("%s se acepta", (nombre) => {
+    expect(leerNombreDelNegocio(nombre)).toEqual({ ok: true, nombre })
+  })
+
+  it.each([
+    "soporte@banco.cl",
+    "Nails@Home",
+    "Salón #1",
+    "Ana <3",
+    "Promo 50%",
+    "Barbería/Spa",
+    "Salón 💅",
+    'Salón "Ana"',
+    "www:salon",
+  ])("%s se rechaza con un mensaje que dice qué se puede usar", (nombre) => {
+    const leido = leerNombreDelNegocio(nombre)
+    expect(leido.ok).toBe(false)
+    if (!leido.ok) expect(leido.error).toBe(MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.caracteres)
+  })
+})

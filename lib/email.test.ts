@@ -1333,7 +1333,7 @@ describe("lib/email — los correos a clientes llevan el nombre del negocio", ()
 
   it("el nombre en el remitente no puede romper el encabezado ni abrir otra dirección", async () => {
     const { remitenteDelNegocio } = await import("./email")
-    expect(remitenteDelNegocio('Sol"\r\nBcc: x@y.z <otro@evil.com>')).toBe('"SolBcc: x@y.z otro@evil.com vía Eli" <no-reply@eli.app>')
+    expect(remitenteDelNegocio('Sol"\r\nBcc: x@y.z <otro@evil.com>')).toBe('"SolBcc xy.z otroevil.com vía Eli" <no-reply@eli.app>')
     expect(remitenteDelNegocio("  \r\n ")).toBe("Eli <no-reply@eli.app>")
     expect(remitenteDelNegocio("x".repeat(200))).toBe(`"${"x".repeat(60)} vía Eli" <no-reply@eli.app>`)
   })
@@ -1341,15 +1341,16 @@ describe("lib/email — los correos a clientes llevan el nombre del negocio", ()
   it("el nombre en el remitente pierde los controles C1 y los que invierten el texto", async () => {
     const { remitenteDelNegocio } = await import("./email")
     // \u0085 (NEL) es un salto de línea para algunos lectores; ‮ da vuelta lo que sigue.
-    expect(remitenteDelNegocio("Sol\u0085Bcc: x@y.z")).toBe('"SolBcc: x@y.z vía Eli" <no-reply@eli.app>')
+    expect(remitenteDelNegocio("Sol\u0085Bcc: x@y.z")).toBe('"SolBcc xy.z vía Eli" <no-reply@eli.app>')
     expect(remitenteDelNegocio("Sol ‮ilE‬")).toBe('"Sol ilE vía Eli" <no-reply@eli.app>')
   })
 
-  it("el corte del remitente no parte un emoji en una mitad suelta", async () => {
+  it("el remitente no lleva @, símbolos ni emojis (los quita aunque el negocio sea de antes de la regla), sin dejar mitades sueltas", async () => {
     const { remitenteDelNegocio } = await import("./email")
-    // 59 letras y un emoji (2 unidades UTF-16): con `slice` quedaba la primera mitad del par.
+    expect(remitenteDelNegocio("soporte@banco.cl")).toBe('"soportebanco.cl vía Eli" <no-reply@eli.app>')
+    // 59 letras y un emoji compuesto: no queda ni el emoji ni un pedazo de él.
     const remitente = remitenteDelNegocio(`${"x".repeat(59)}💇‍♀️ y más`)
-    expect(remitente).toBe(`"${"x".repeat(59)}💇 vía Eli" <no-reply@eli.app>`)
+    expect(remitente).toBe(`"${"x".repeat(59)} vía Eli" <no-reply@eli.app>`)
     expect(remitente).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/)
   })
 

@@ -266,7 +266,16 @@ describe("POST /api/auth/completar-perfil", () => {
     expect(prismaMock.business.create.mock.calls[0][0].data.slug).toBe("salon-maria")
   })
 
-  it.each(["!!!", "🙂🙂", "---", "日本の店"])(
+  it.each(["!!!", "🙂🙂", "soporte@banco.cl"])("un nombre con símbolos o emojis (%j) se rechaza: 400 y no se crea nada", async (nombreNegocio) => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ nombreNegocio, tipoNegocio: "salon", plan: "equipo" }))
+
+    expect(res.status).toBe(400)
+    expect(prismaMock.business.create).not.toHaveBeenCalled()
+  })
+
+  it.each(["---", "日本の店"])(
     "un nombre sin caracteres válidos para la URL (%j) recibe un slug de respaldo, no uno vacío",
     async (nombreNegocio) => {
       const { POST } = await import("./route")

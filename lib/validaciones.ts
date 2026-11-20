@@ -7,6 +7,7 @@ import {
   LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO,
   LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO,
   MENSAJES_DEL_NOMBRE_DEL_NEGOCIO,
+  CARACTERES_DEL_NOMBRE_DEL_NEGOCIO,
 } from "@/lib/nombre-del-negocio"
 import { MAX_SERVICIOS_POR_RESERVA } from "@/lib/servicios-de-la-reserva"
 
@@ -121,6 +122,7 @@ export const nombreDelNegocioSchema = z
   .trim()
   .min(LARGO_MINIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyCorto)
   .max(LARGO_MAXIMO_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.muyLargo)
+  .regex(CARACTERES_DEL_NOMBRE_DEL_NEGOCIO, MENSAJES_DEL_NOMBRE_DEL_NEGOCIO.caracteres)
 
 /**
  * Cuántas personas trabajan en el negocio al crearlo (`Business.teamSize`),

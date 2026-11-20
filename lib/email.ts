@@ -40,7 +40,11 @@ const LARGO_MAXIMO_DEL_REMITENTE = 60
 export function remitenteDelNegocio(nombreNegocio: string | null | undefined): string {
   const limpio = limpiarAsunto(nombreNegocio ?? "")
     .replace(/[\x80-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
-    .replace(/["\\<>]/g, "")
+    // Lo mismo que admite el nombre de un negocio (lib/nombre-del-negocio.ts):
+    // un negocio creado antes de esa regla con @ u otros símbolos no los muestra
+    // en el remitente, así nunca parece un correo de otra dirección.
+    .replace(/[\u200d\ufe00-\ufe0f]/g, "")
+    .replace(/[^\p{L}\p{M}\p{N} &.,'’()\-]/gu, "")
     .replace(/\s+/g, " ")
     .trim()
   const nombre = Array.from(limpio).slice(0, LARGO_MAXIMO_DEL_REMITENTE).join("").trim()

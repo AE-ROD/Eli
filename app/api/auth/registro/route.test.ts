@@ -361,12 +361,22 @@ describe("POST /api/auth/registro: bordes (lote 01 M2 y B4, lote 05 B3)", () => 
     expect(mockPrisma.user.create).not.toHaveBeenCalled()
   })
 
-  it("un nombre de negocio sólo con emojis no deja la página pública en /reservar/: slug de respaldo", async () => {
+  it("un nombre de negocio sin letras útiles para la URL no deja la página pública en /reservar/: slug de respaldo", async () => {
     const { POST } = await import("./route")
 
-    await POST(pedidoFalso({ ...registroValido, nombreNegocio: "💇‍♀️✨💅" }))
+    await POST(pedidoFalso({ ...registroValido, nombreNegocio: "---" }))
 
     expect(mockPrisma.user.create.mock.calls[0][0].data.business.create.slug).toMatch(/^negocio-[0-9a-f]{6}$/)
+  })
+
+  it.each(["💇‍♀️✨💅", "soporte@banco.cl", "Nails@Home"])("un nombre de negocio con @, símbolos o emojis (%j) se rechaza en su campo", async (nombreNegocio) => {
+    const { POST } = await import("./route")
+
+    const respuesta = await POST(pedidoFalso({ ...registroValido, nombreNegocio }))
+
+    expect(respuesta.status).toBe(400)
+    expect(await respuesta.json()).toMatchObject({ campo: "nombreNegocio" })
+    expect(mockPrisma.user.create).not.toHaveBeenCalled()
   })
 
   it("el correo ya registrado vuelve con el campo, para que la pantalla vuelva al paso 1", async () => {
