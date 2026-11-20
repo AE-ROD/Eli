@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { connection } from 'next/server'
 import { Fraunces, Geist } from 'next/font/google'
 import { Analitica } from '@/components/analitica'
@@ -22,6 +22,13 @@ const fraunces = Fraunces({
   display: 'swap',
   axes: ['opsz'],
 })
+
+/**
+ * `viewport-fit=cover`: en el iPhone la página llega bajo la barra de gestos y
+ * `env(safe-area-inset-bottom)` deja de valer 0, para que la barra inferior y el
+ * botón flotante del panel en el celular respeten esa zona.
+ */
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' }
 
 export const metadata: Metadata = {
   title: 'Eli — Reservas para salones, barberías, salones de uñas y clínicas dentales',

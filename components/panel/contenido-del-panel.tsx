@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
+import { ESPACIO_DE_LA_BARRA_INFERIOR } from "@/components/panel/barra-inferior"
 import { useBarraLateral } from "@/components/panel/contexto-barra-lateral"
 import { seccionDeLaRuta } from "@/components/panel/secciones-del-panel"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,10 @@ import { cn } from "@/lib/utils"
  * lo hereda sin hacer nada, también sus modales. Inicio, chats y
  * configuración no son un módulo y quedan con el halo de siempre.
  *
+ * En el celular deja espacio al final para la barra inferior y el botón
+ * flotante (`ESPACIO_DE_LA_BARRA_INFERIOR`): lo último de la página se puede
+ * subir por encima de ellos.
+ *
  * Con el cajón abierto el contenido queda `inert`: no se enfoca ni se lee
  * detrás de la superposición, aunque el lector de pantalla no respete
  * `aria-modal`.
@@ -28,7 +33,11 @@ export function ContenidoDelPanel({ children }: { children: ReactNode }) {
   const modulo = seccionDeLaRuta(usePathname())?.modulo
 
   return (
-    <main inert={cajonAbierto} className={cn(colapsada ? "lg:ml-[100px]" : "lg:ml-[264px]", modulo && HALO_DE_MODULO[modulo])}>
+    <main inert={cajonAbierto} className={cn(
+        colapsada ? "lg:ml-[100px]" : "lg:ml-[264px]",
+        ESPACIO_DE_LA_BARRA_INFERIOR,
+        modulo && HALO_DE_MODULO[modulo]
+      )}>
       {children}
     </main>
   )

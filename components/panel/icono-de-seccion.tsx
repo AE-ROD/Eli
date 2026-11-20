@@ -19,6 +19,12 @@ const ICONOS_SIN_MODULO: Record<Exclude<IdDeSeccion, ModuloId>, LucideIcon> = {
 /** El ícono de cada sección, de un módulo o no. TypeScript avisa si una sección nueva no tiene el suyo. */
 const ICONOS_DE_SECCION: Record<IdDeSeccion, LucideIcon> = { ...ICONOS_DE_MODULO, ...ICONOS_SIN_MODULO }
 
+/** El ícono suelto de una sección, sin cuadro: para la barra inferior del celular, que pone su propia píldora. Decorativo. */
+export function IconoDeSeccion({ id, className }: { id: IdDeSeccion; className?: string }) {
+  const Icono = ICONOS_DE_SECCION[id]
+  return <Icono aria-hidden="true" strokeWidth={1.75} className={className} />
+}
+
 interface PropsDeCuadroDeSeccion {
   seccion: SeccionDelPanel
   /** `xs` (20px) para el antetítulo; `sm` (32px) para la barra lateral. Por defecto, `sm`. */

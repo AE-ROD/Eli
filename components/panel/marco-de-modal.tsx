@@ -1,10 +1,20 @@
 "use client"
 
-import { useEffect, useEffectEvent, useId, useRef, useState, type FocusEvent, type ReactNode } from "react"
-import { motion, useIsPresent } from "framer-motion"
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react"
+import { motion, useDragControls, useIsPresent, useReducedMotion, type PanInfo } from "framer-motion"
 import { X } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
+import { useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { crearBloqueoDeScroll } from "@/components/panel/bloqueo-de-scroll"
 import { crearPilaDeDialogos, destinoAlCerrar, type DialogoEnLaPila } from "@/components/panel/pila-de-dialogos"
@@ -17,8 +27,11 @@ const ANCHOS = {
   xl: "max-w-4xl",
 } as const
 
-/** Un fundido corto, también al cerrar: nada se agranda ni se desliza. */
+/** Un fundido corto, también al cerrar: en el computador nada se agranda ni se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
+
+/** En el celular la hoja sube y baja, sobria: lo que tarda una píldora, con la curva de lo que responde a la mano. */
+const DESLIZAR = { duration: DURACION.pildora, ease: CURVA.suave }
 
 /**
  * Lo que se puede enfocar con Tab dentro del diálogo: también el `<summary>`
@@ -98,12 +111,21 @@ interface PropsDeMarcoDeModal {
   antetitulo?: string
   alCerrar: () => void
   children: ReactNode
+  /**
+   * Los botones de abajo (cancelar, guardar). En el celular quedan fijos al
+   * pie de la hoja, a la altura del pulgar, y el cuerpo se desplaza encima; en
+   * el computador van al final, como si fueran parte del cuerpo. Un botón de
+   * envío que queda acá, fuera del `<form>`, lo nombra con `form={id}`.
+   */
+  pie?: ReactNode
 }
 
 /**
  * El marco de los modales del panel: un velo navy y una tarjeta blanca de
  * radio 32, con el título en la serif de los titulares y el botón de cerrar
- * arriba a la derecha. Además, lo que un diálogo necesita para usarse con
+ * arriba a la derecha. En el celular (por debajo de `lg`) es una hoja que sube
+ * desde abajo, con asa, hasta el 90 % del alto, el cuerpo que se desplaza y
+ * los botones de `pie` fijos abajo (ver `barra-inferior.tsx`). Además, lo que un diálogo necesita para usarse con
  * teclado y lector de pantalla:
  *
  * - se anuncia como diálogo, con su título;
@@ -141,7 +163,10 @@ export function MarcoDeModal({
   antetitulo,
   alCerrar,
   children,
+  pie,
 }: PropsDeMarcoDeModal) {
+  const esEscritorio = useEsEscritorio()
+  const reducirMovimiento = useReducedMotion()
   const idDelTitulo = useId()
   const idDeLaDescripcion = useId()
   const panel = useRef<HTMLDivElement>(null)
@@ -293,16 +318,35 @@ export function MarcoDeModal({
     if (evento.target !== panel.current) ultimoEnfocado.current = evento.target
   }
 
+  // En el celular la hoja se puede bajar con el dedo desde el asa o la
+  // cabecera; soltándola más de 120 px abajo (o con un tirón) se cierra, salvo
+  // mientras guarda. Sólo desde ahí: el resto de la hoja desplaza su contenido.
+  const arrastre = useDragControls()
+  const empezarArrastre = (evento: PointerEvent<HTMLDivElement>) => {
+    // La X se toca, no se arrastra.
+    const enUnControl = evento.target instanceof Element && evento.target.closest("button, a, input, select, textarea")
+    if (!esEscritorio && !bloqueado && !enUnControl && evento.pointerType !== "mouse") arrastre.start(evento)
+  }
+  const alSoltar = (_: unknown, info: PanInfo) => {
+    if (info.offset.y > 120 || info.velocity.y > 600) cerrar()
+  }
+
+  // Sube desde abajo en el celular; en el computador, sólo el fundido de siempre.
+  const deslizar = !esEscritorio && !reducirMovimiento
+  const movimientoDeLaHoja = deslizar
+    ? { initial: { y: "100%" }, animate: { y: 0 }, exit: { y: "100%" }, transition: DESLIZAR }
+    : { initial: false as const }
+
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={FUNDIDO}
     >
       <div className="absolute inset-0 bg-navy/40" onClick={cerrar} aria-hidden="true" />
-      <div
+      <motion.div
         ref={panel}
         role="dialog"
         aria-modal="true"
@@ -312,45 +356,80 @@ export function MarcoDeModal({
         onFocus={recordarFoco}
         // Mientras sale no se puede tocar ni enfocar nada de adentro (ver arriba).
         inert={!presente}
+        {...movimientoDeLaHoja}
+        drag={esEscritorio ? false : "y"}
+        dragControls={arrastre}
+        dragListener={false}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.7 }}
+        onDragEnd={alSoltar}
         className={cn(
-          // Lo que no entra en el alto se desplaza adentro, y lo que se sale
-          // de la tarjeta se corta: el relleno deja lugar al anillo del foco
-          // de lo que va pegado al borde, como un campo de ancho completo.
-          "relative max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-panel bg-tarjeta text-navy shadow-md squircle focus:outline-none sm:max-h-[calc(100dvh-3rem)]",
-          "px-5 pt-5 pb-6 sm:px-8 sm:pt-7 sm:pb-8",
+          "relative flex w-full flex-col overflow-hidden bg-tarjeta text-navy shadow-md focus:outline-none",
+          // En el celular, una hoja pegada abajo: bordes de arriba redondeados,
+          // hasta el 90 % del alto, y lo de adentro se desplaza entre la
+          // cabecera y el pie, que quedan fijos.
+          "max-h-[90dvh] rounded-t-[24px]",
+          // En el computador, la tarjeta de siempre: lo que no entra en el
+          // alto se desplaza entero adentro, y lo que se sale de la tarjeta se
+          // corta; el relleno deja lugar al anillo del foco de lo que va pegado
+          // al borde, como un campo de ancho completo.
+          "lg:block lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto lg:rounded-panel lg:px-8 lg:pt-7 lg:pb-8 lg:squircle",
           ANCHOS[ancho],
           // Por si el navegador no conoce `inert`: los clics pasan al velo.
           !presente && "pointer-events-none"
         )}
       >
-        <div className="mb-6 flex items-start justify-between gap-3">
-          <div className="min-w-0 pt-1">
-            {antetitulo && <Antetitulo className="mb-2">{antetitulo}</Antetitulo>}
-            <h2 id={idDelTitulo} className="titulo-3 font-serif text-balance break-words">
-              {titulo}
-            </h2>
-            {descripcion && (
-              <div id={idDeLaDescripcion} className="mt-2 text-sm text-pretty text-texto-2">
-                {descripcion}
-              </div>
-            )}
+        <div onPointerDown={empezarArrastre} className="shrink-0 touch-none px-4 pt-2 lg:touch-auto lg:p-0">
+          {/* El asa: dice que la hoja se puede bajar. Decorativa; para cerrar está la X. */}
+          <div aria-hidden="true" className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-borde lg:hidden" />
+          <div className="mb-4 flex items-start justify-between gap-3 lg:mb-6">
+            <div className="min-w-0 pt-1">
+              {antetitulo && <Antetitulo className="mb-2">{antetitulo}</Antetitulo>}
+              <h2 id={idDelTitulo} className="titulo-3 font-serif text-balance break-words max-lg:text-xl max-lg:leading-tight">
+                {titulo}
+              </h2>
+              {descripcion && (
+                <div id={idDeLaDescripcion} className="mt-2 text-sm text-pretty text-texto-2">
+                  {descripcion}
+                </div>
+              )}
+            </div>
+            {/* 44 × 44: el área de un dedo. Se corre hacia el borde para alinear la X con el contenido. */}
+            <button
+              type="button"
+              onClick={cerrar}
+              disabled={bloqueado}
+              aria-label="Cerrar"
+              className={cn(
+                "-mr-2 -mt-1 grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle transition-colors duration-150 ease-suave hover:bg-superficie disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent lg:-mr-3",
+                ANILLO_DE_FOCO
+              )}
+            >
+              <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
+            </button>
           </div>
-          {/* 44 × 44: el área de un dedo. Se corre hacia el borde para alinear la X con el contenido. */}
-          <button
-            type="button"
-            onClick={cerrar}
-            disabled={bloqueado}
-            aria-label="Cerrar"
-            className={cn(
-              "-mr-2 -mt-1 grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle transition-colors duration-150 ease-suave hover:bg-superficie disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent sm:-mr-3",
-              ANILLO_DE_FOCO
-            )}
-          >
-            <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
-          </button>
         </div>
-        {children}
-      </div>
+        {/*
+          El cuerpo. En el celular se desplaza solo, con el área segura de abajo
+          si no hay pie. Vacío (sin hijos) no ocupa lugar: `ModalConfirmar` sin
+          detalle queda con el título y los botones, como antes.
+        */}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 empty:hidden lg:overflow-visible lg:p-0",
+            pie ? "pb-4" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+            pie && "lg:mb-5"
+          )}
+        >
+          {children}
+        </div>
+        {/* Los botones: en el celular, fijos abajo a la altura del pulgar; en el computador, al final, como siempre. */}
+        {pie && (
+          <div className="shrink-0 border-t border-borde px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:border-0 lg:p-0">
+            {pie}
+          </div>
+        )}
+      </motion.div>
     </motion.div>
   )
 }

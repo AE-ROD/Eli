@@ -37,6 +37,7 @@ interface PropsDeModalAnular {
  */
 export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onCerrar }: PropsDeModalAnular) {
   const idDelMotivo = useId()
+  const idDelFormulario = useId()
   const [motivo, setMotivo] = useState("")
   const cobrada = atencion.estado === "finalizada"
   // Las palabras del rubro: "a otro cliente" o "a otro paciente" en el ejemplo, y "los ingresos de la
@@ -55,8 +56,29 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
       descripcion={consecuenciasDeAnular(atencion, palabras)}
       bloqueado={guardando}
       alCerrar={onCerrar}
+      pie={
+        // En el teléfono, uno debajo del otro y el que anula arriba: el que no se deshace no queda al alcance del
+        // pulgar por error. En el pie del marco, fuera del <form>: el de anular lo nombra con `form`.
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
+            {rechazo ? "Entendido" : "No anular"}
+          </BotonPrimario>
+          {!rechazo && (
+            <BotonPrimario
+              type="submit"
+              form={idDelFormulario}
+              variante="peligro"
+              anchoCompleto
+              cargando={guardando}
+              aria-label={guardando ? "Anulando" : undefined}
+            >
+              {cobrada ? "Anular cobro" : "Anular atención"}
+            </BotonPrimario>
+          )}
+        </div>
+      }
     >
-      <form onSubmit={anular} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={anular} className="space-y-5">
         <div>
           <label htmlFor={idDelMotivo} className={ETIQUETA}>
             Motivo (opcional)
@@ -80,24 +102,6 @@ export function ModalAnular({ atencion, aviso, rechazo, guardando, onAnular, onC
         ) : (
           aviso && <Aviso>{aviso}</Aviso>
         )}
-
-        {/* En el teléfono, uno debajo del otro y el que anula arriba: el que no se deshace no queda al alcance del pulgar por error. */}
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
-            {rechazo ? "Entendido" : "No anular"}
-          </BotonPrimario>
-          {!rechazo && (
-            <BotonPrimario
-              type="submit"
-              variante="peligro"
-              anchoCompleto
-              cargando={guardando}
-              aria-label={guardando ? "Anulando" : undefined}
-            >
-              {cobrada ? "Anular cobro" : "Anular atención"}
-            </BotonPrimario>
-          )}
-        </div>
       </form>
     </MarcoDeModal>
   )

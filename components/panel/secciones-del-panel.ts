@@ -117,6 +117,61 @@ export const SECCIONES_DEL_PANEL: readonly SeccionDelPanel[] = [
   SECCION_DE_AYUDA,
 ]
 
+/** Las de abajo de la barra lateral, aparte: no son del día de trabajo. */
+export const SECCIONES_SECUNDARIAS: readonly SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
+
+/**
+ * Lo que decide qué secciones ve quien está en sesión. Lo resuelve el layout
+ * del panel en el servidor con `lib/permisos.ts` y lo reciben, igual, la barra
+ * lateral y la barra inferior del celular.
+ */
+export interface AccesoAlPanel {
+  /** Dueño y encargado gestionan el equipo; el profesional no ve la sección. */
+  puedeVerEquipo?: boolean
+  /** Qué secciones de la plata del equipo ve (`seccionesDeLaPlata`). Sin dato, ninguna. */
+  accesoALaPlata?: AccesoALaPlata | null
+  /** El rubro elige el nombre de cada sección (`seccionConNombreDelRubro`). */
+  rubro?: string | null
+}
+
+/**
+ * Las secciones principales que ve quien está en sesión, en el orden de la
+ * barra lateral: el inicio, los módulos en el orden del día de trabajo
+ * (`lib/modulos.ts`) y las de la plata que le tocan. Tablero y reportes son
+ * para todos los roles (cada endpoint recorta lo que ve cada uno); Equipo,
+ * sólo para quien lo gestiona. Cada una con el nombre que le da el rubro.
+ * Falla cerrado: sin `puedeVerEquipo` ni `accesoALaPlata`, no aparecen.
+ */
+export function seccionesPrincipales({ puedeVerEquipo, accesoALaPlata, rubro }: AccesoAlPanel): SeccionDelPanel[] {
+  return seccionesConNombreDelRubro(
+    [
+      SECCION_DE_INICIO,
+      ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo === true),
+      ...seccionesDeLaPlata(accesoALaPlata),
+    ],
+    rubro
+  )
+}
+
+/** Las que la barra inferior del celular prefiere, en su orden: lo que más se usa desde el teléfono. */
+export const PREFERIDAS_DE_LA_BARRA_INFERIOR: readonly IdDeSeccion[] = ["inicio", "agenda", "tablero", "clientes"]
+
+/** Cuántas secciones caben en la barra inferior, además de "Más". */
+export const MAXIMO_DE_LA_BARRA_INFERIOR = 4
+
+/**
+ * Las secciones de la barra inferior del celular, de entre las que ya ve quien
+ * está en sesión (`seccionesPrincipales`, la misma lista de la barra lateral:
+ * no repite ninguna regla de permisos). Primero las preferidas que ve; si le
+ * falta alguna, la completa la siguiente que sí ve, en el orden de la barra
+ * lateral. Como máximo `MAXIMO_DE_LA_BARRA_INFERIOR`; lo demás queda en "Más".
+ */
+export function seccionesDeLaBarraInferior(principales: readonly SeccionDelPanel[]): SeccionDelPanel[] {
+  const preferidas = PREFERIDAS_DE_LA_BARRA_INFERIOR.flatMap((id) => principales.filter((seccion) => seccion.id === id))
+  const resto = principales.filter((seccion) => !PREFERIDAS_DE_LA_BARRA_INFERIOR.includes(seccion.id))
+  return [...preferidas, ...resto].slice(0, MAXIMO_DE_LA_BARRA_INFERIOR)
+}
+
 /**
  * La sección con el nombre que le da el rubro (`lib/vocabulario.ts`): en una
  * clínica dental, Clientes se llama "Pacientes" y Tablero, "Sala de espera".

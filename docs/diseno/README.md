@@ -484,6 +484,34 @@ parte, se respeta. Lo mismo en la sala de espera del inicio: después de
 aparece en su lugar. Todo lo que hace desaparecer el botón que se apretó
 dice adónde va el foco.
 
+### En el celular
+
+Por debajo de `lg` (1024 px, el mismo corte en que la barra lateral pasa a
+cajón) el panel se acomoda para el pulgar; desde `lg` se ve igual que siempre.
+La referencia completa está en el comentario de cabecera de
+`components/panel/barra-inferior.tsx`. En corto:
+
+- **Título en la barra de arriba.** Una fila fija de 56 px: menú, título de
+  la página (serif, 20 px) y avatar. Sin antetítulo ni título gigante; el
+  subtítulo, una línea de 13 px en `texto-2`. La página sólo le pasa
+  `titulo` y `subtitulo` a `BarraSuperior`.
+- **Una acción flotante.** El `accionPrincipal` de `BarraSuperior` es un
+  botón de 56 px abajo a la derecha, encima de la barra inferior. Una por
+  pantalla; las demás acciones van en la página o en el menú.
+- **Barra inferior.** Inicio, Agenda, Tablero/Sala de espera,
+  Clientes/Pacientes y "Más" (abre el cajón). Sólo lo que el rol ya ve en la
+  barra lateral, con la misma lista (`seccionesPrincipales` y
+  `seccionesDeLaBarraInferior` en `secciones-del-panel.ts`). 64 px más el
+  área segura; el contenido deja ese espacio al final.
+- **Ventanas como hojas.** `MarcoDeModal` sube desde abajo, con asa, hasta el
+  90 % del alto y el cuerpo con scroll propio. Los botones van en la prop
+  `pie`, que en el celular queda fija abajo (un submit fuera del `<form>` lo
+  nombra con `form={id}`). Título de 20 px.
+- **Tamaños.** Letra de 14 a 16 px, filas de 44 a 56 px (`FILA_DE_LISTA`) y
+  tarjetas con 16 px de relleno (`RELLENO_DE_TARJETA`, en vez de
+  `p-5 sm:p-6`). Lo que cambia en el celular se escribe con `max-lg:` o con el
+  valor base y su `lg:`, nunca tocando lo de `lg` y más.
+
 ## Patrones de movimiento
 
 Viven en `components/movimiento/` y arman la landing. Todos respetan el

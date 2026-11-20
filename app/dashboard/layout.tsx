@@ -1,5 +1,6 @@
 import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
+import { BarraInferior } from "@/components/panel/barra-inferior"
 import { BarraLateral } from "@/components/panel/barra-lateral"
 import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
 import { ModalBienvenida } from "@/components/panel/modal-bienvenida"
@@ -107,6 +108,8 @@ export default async function LayoutDelPanel({
                   contexto={session?.user?.contexto ?? null}
                 />
                 <ContenidoDelPanel>{children}</ContenidoDelPanel>
+                {/* En el celular: lo que más se usa, con los mismos permisos que la barra lateral. */}
+                <BarraInferior puedeVerEquipo={puedeVerEquipo} accesoALaPlata={accesoALaPlata} rubro={rubro} />
                 {businessName && businessSlug && (
                   <ModalBienvenida
                     nombreNegocio={businessName}

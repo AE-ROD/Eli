@@ -3,6 +3,7 @@ import { MODULOS } from "@/lib/modulos"
 import {
   actorDeSesion,
   puedeEditarComisiones,
+  puedeGestionarEquipo,
   puedeVerCierresDeCaja,
   puedeVerLiquidacionesDelEquipo,
   veMiPlata,
@@ -17,8 +18,11 @@ import {
   seccionDeLaRuta,
   seccionMarcadaEnLaBarra,
   seccionesConNombreDelRubro,
+  seccionesDeLaBarraInferior,
   seccionesDeLaPlata,
+  seccionesPrincipales,
   type AccesoALaPlata,
+  type SeccionDelPanel,
 } from "./secciones-del-panel"
 
 describe("seccionDeLaRuta", () => {
@@ -205,5 +209,73 @@ describe("las secciones con el nombre del rubro", () => {
     const seccion = seccionDeLaRuta("/dashboard/clientes/abc")
     expect(seccion && seccionConNombreDelRubro(seccion, "odontologia").nombre).toBe("Pacientes")
     expect(seccion && seccionConNombreDelRubro(seccion, "salon").nombre).toBe("Clientes")
+  })
+})
+
+describe("las secciones principales (barra lateral y barra inferior)", () => {
+  const ids = (secciones: readonly SeccionDelPanel[]) => secciones.map((seccion) => seccion.id)
+  const TODA_LA_PLATA: AccesoALaPlata = { miPlata: true, caja: true, liquidaciones: true, comisiones: true }
+
+  it("sin datos falla cerrado: el inicio y los módulos, sin equipo ni plata", () => {
+    expect(ids(seccionesPrincipales({}))).toEqual(["inicio", "agenda", "tablero", "clientes", "reportes"])
+  })
+
+  it("quien gestiona el equipo y ve la plata tiene todo, en el orden de la barra", () => {
+    expect(ids(seccionesPrincipales({ puedeVerEquipo: true, accesoALaPlata: TODA_LA_PLATA }))).toEqual([
+      "inicio",
+      "agenda",
+      "tablero",
+      "clientes",
+      "reportes",
+      "equipo",
+      "mi-plata",
+      "caja",
+      "liquidaciones",
+      "comisiones",
+    ])
+  })
+
+  it("lleva el nombre del rubro", () => {
+    const nombres = seccionesPrincipales({ rubro: "odontologia" }).map((seccion) => seccion.nombre)
+    expect(nombres).toContain("Pacientes")
+    expect(nombres).toContain("Sala de espera")
+  })
+})
+
+describe("seccionesDeLaBarraInferior", () => {
+  const ids = (secciones: readonly SeccionDelPanel[]) => secciones.map((seccion) => seccion.id)
+  const seccion = (id: SeccionDelPanel["id"]): SeccionDelPanel => ({ id, nombre: id, ruta: `/dashboard/${id}` })
+
+  it("con todo a la vista: inicio, agenda, tablero y clientes (lo demás queda en Más)", () => {
+    const principales = seccionesPrincipales({ puedeVerEquipo: true, accesoALaPlata: { ...SIN_ACCESO_A_LA_PLATA, caja: true } })
+    expect(ids(seccionesDeLaBarraInferior(principales))).toEqual(["inicio", "agenda", "tablero", "clientes"])
+  })
+
+  it("nunca muestra algo que no está entre las que ve: si falta una preferida, entra la siguiente que sí ve", () => {
+    const principales = ["inicio", "agenda", "clientes", "reportes", "mi-plata"].map((id) => seccion(id as SeccionDelPanel["id"]))
+    expect(ids(seccionesDeLaBarraInferior(principales))).toEqual(["inicio", "agenda", "clientes", "reportes"])
+  })
+
+  it("como máximo cuatro, y con menos, las que haya", () => {
+    expect(seccionesDeLaBarraInferior(seccionesPrincipales({ puedeVerEquipo: true }))).toHaveLength(4)
+    expect(ids(seccionesDeLaBarraInferior([seccion("inicio"), seccion("mi-plata")]))).toEqual(["inicio", "mi-plata"])
+    expect(seccionesDeLaBarraInferior([])).toEqual([])
+  })
+
+  it("con los permisos reales del profesional: sólo lo que ve en su barra lateral, sin equipo", () => {
+    const profesional = actorDeSesion({ user: { role: "worker", businessId: "n1", memberId: "m2" } } as never)
+    const principales = seccionesPrincipales({
+      puedeVerEquipo: puedeGestionarEquipo(profesional),
+      accesoALaPlata: {
+        miPlata: veMiPlata(profesional),
+        caja: puedeVerCierresDeCaja(profesional),
+        liquidaciones: puedeVerLiquidacionesDelEquipo(profesional),
+        comisiones: puedeEditarComisiones(profesional),
+      },
+    })
+    const abajo = seccionesDeLaBarraInferior(principales)
+    expect(ids(principales)).not.toContain("equipo")
+    expect(abajo.every((enLaBarra) => principales.some((visible) => visible.id === enLaBarra.id))).toBe(true)
+    expect(ids(abajo)).toEqual(["inicio", "agenda", "tablero", "clientes"])
   })
 })

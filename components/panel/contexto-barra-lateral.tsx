@@ -7,45 +7,24 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react"
 import { usePathname } from "next/navigation"
+import { useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
 
 /** El `id` del cajón. El botón de menú lo nombra en `aria-controls` para decir qué abre. */
 export const ID_DEL_CAJON = "menu-del-panel"
 
-/**
- * El `lg` de Tailwind, escrito igual que Tailwind (64rem) para que el cambio
- * caiga en el mismo píxel que las clases `lg:`. Desde ahí la barra está fija a
- * la izquierda; por debajo es un cajón que se abre encima del contenido.
- */
-const CONSULTA_DE_ESCRITORIO = "(min-width: 64rem)"
-
-function suscribirseAlAncho(avisar: () => void) {
-  const consulta = window.matchMedia(CONSULTA_DE_ESCRITORIO)
-  consulta.addEventListener("change", avisar)
-  return () => consulta.removeEventListener("change", avisar)
-}
-
-function esAnchoDeEscritorio() {
-  return window.matchMedia(CONSULTA_DE_ESCRITORIO).matches
-}
-
-/**
- * En el servidor no hay ventana. Responder "teléfono" no cambia lo que se
- * dibuja: el cajón arranca cerrado, la barra sin colapsar, y el CSS ya ubica
- * cada cosa según el ancho antes de que llegue el JS.
- */
-function anchoEnElServidor() {
-  return false
-}
-
 interface ValorDeLaBarraLateral {
   /** El cajón del teléfono está abierto. En escritorio es siempre `false`: ahí la barra no se abre ni se cierra. */
   cajonAbierto: boolean
-  abrirCajon: () => void
+  /**
+   * Abre el cajón. `origen` es lo que lo abrió, si no es el botón de menú de
+   * la barra superior (el "Más" de la barra inferior): al cerrarse, el foco
+   * vuelve ahí.
+   */
+  abrirCajon: (origen?: HTMLElement | null) => void
   cerrarCajon: () => void
   /**
    * Para el `onNavigate` de los enlaces de la barra, no para su `onClick`:
@@ -96,7 +75,7 @@ export function useBarraLateral() {
  * el contenido, que se corre según el ancho que ella ocupa.
  */
 export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
-  const esEscritorio = useSyncExternalStore(suscribirseAlAncho, esAnchoDeEscritorio, anchoEnElServidor)
+  const esEscritorio = useEsEscritorio()
   const ruta = usePathname()
   const [cajonAbierto, setCajonAbierto] = useState(false)
   const [colapsadaEnEscritorio, setColapsadaEnEscritorio] = useState(false)
@@ -124,7 +103,11 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
    */
   const focoParaLaPaginaNueva = useRef(false)
 
-  const abrirCajon = useCallback(() => {
+  /** Lo que abrió el cajón, si no fue el botón de menú: adonde vuelve el foco al cerrarse. */
+  const origenDelCajon = useRef<HTMLElement | null>(null)
+
+  const abrirCajon = useCallback((origen?: HTMLElement | null) => {
+    origenDelCajon.current = origen ?? null
     // Por si una navegación pedida desde el cajón terminó sin cambiar la ruta
     // (una redirección de vuelta a la misma página): lo pendiente no se
     // arrastra a la próxima vez que se cierre.
@@ -145,7 +128,11 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
   const alternarColapso = useCallback(() => setColapsadaEnEscritorio((previa) => !previa), [])
   const enfocarBotonMenu = useCallback(() => {
     if (focoParaLaPaginaNueva.current) return
-    refBotonMenu.current?.focus()
+    const origen = origenDelCajon.current
+    origenDelCajon.current = null
+    // El "Más" de la barra inferior, si sigue en la página y se ve; si no, el botón de menú.
+    if (origen?.isConnected && origen.getClientRects().length > 0) origen.focus()
+    else refBotonMenu.current?.focus()
   }, [])
 
   // Llegó la página elegida en el cajón: el foco, a su botón de menú. En un
@@ -154,6 +141,7 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!focoParaLaPaginaNueva.current) return
     focoParaLaPaginaNueva.current = false
+    origenDelCajon.current = null
     refBotonMenu.current?.focus()
   }, [ruta])
 

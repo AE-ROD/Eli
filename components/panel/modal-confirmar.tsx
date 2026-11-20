@@ -31,7 +31,7 @@ interface PropsDeModalConfirmar {
  *
  * Como `ModalAnular`, en el teléfono los botones van uno debajo del otro y el
  * que confirma arriba: el que no se deshace no queda al alcance del pulgar
- * por error.
+ * por error. Van en el `pie` del marco: en el celular, fijos abajo de la hoja.
  */
 export function ModalConfirmar({
   titulo,
@@ -45,13 +45,21 @@ export function ModalConfirmar({
   onConfirmar,
   onCerrar,
 }: PropsDeModalConfirmar) {
+  // Sin detalle ni aviso no hay cuerpo: el título, la descripción y los botones.
+  const cuerpo = (children || aviso) && (
+    <div className="space-y-5">
+      {children}
+      {aviso && <Aviso>{aviso}</Aviso>}
+    </div>
+  )
+
   return (
-    <MarcoDeModal titulo={titulo} descripcion={descripcion} bloqueado={trabajando} alCerrar={onCerrar}>
-      <div className="space-y-5">
-        {children}
-
-        {aviso && <Aviso>{aviso}</Aviso>}
-
+    <MarcoDeModal
+      titulo={titulo}
+      descripcion={descripcion}
+      bloqueado={trabajando}
+      alCerrar={onCerrar}
+      pie={
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={trabajando}>
             {textoCancelar}
@@ -66,7 +74,9 @@ export function ModalConfirmar({
             {textoConfirmar}
           </BotonPrimario>
         </div>
-      </div>
+      }
+    >
+      {cuerpo}
     </MarcoDeModal>
   )
 }

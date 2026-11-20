@@ -15,13 +15,9 @@ import { useCuentaDelPanel } from "@/components/panel/contexto-de-la-cuenta"
 import { usePrecios } from "@/components/panel/contexto-precios"
 import { CuadroDeSeccion } from "@/components/panel/icono-de-seccion"
 import {
-  SECCION_DE_AYUDA,
-  SECCION_DE_CONFIGURACION,
-  SECCION_DE_INICIO,
-  SECCIONES_DE_MODULOS,
+  SECCIONES_SECUNDARIAS,
   seccionMarcadaEnLaBarra,
-  seccionesConNombreDelRubro,
-  seccionesDeLaPlata,
+  seccionesPrincipales,
   type AccesoALaPlata,
   type SeccionDelPanel,
 } from "@/components/panel/secciones-del-panel"
@@ -159,22 +155,13 @@ export function BarraLateral({
 
   /**
    * El orden es el de la referencia aprobada: el inicio, los módulos en el
-   * orden del día de trabajo (`lib/modulos.ts`); abajo, aparte,
-   * configuración y ayuda. Chats está escondido hasta que exista WhatsApp
-   * (`secciones-del-panel.ts`). Tablero y reportes son para todos los roles: cada
-   * endpoint ya recorta lo que ve cada uno. Equipo, sólo para quien lo gestiona.
-   * Después, las de la plata del equipo que le tocan a cada rol. Cada una,
-   * con el nombre que le da el rubro (en una clínica dental, "Pacientes").
+   * orden del día de trabajo (`lib/modulos.ts`) y las de la plata que le tocan
+   * a cada rol (`seccionesPrincipales`, la misma lista que usa la barra
+   * inferior del celular); abajo, aparte, configuración y ayuda. Chats está
+   * escondido hasta que exista WhatsApp (`secciones-del-panel.ts`).
    */
-  const principales: SeccionDelPanel[] = seccionesConNombreDelRubro(
-    [
-      SECCION_DE_INICIO,
-      ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
-      ...seccionesDeLaPlata(accesoALaPlata),
-    ],
-    rubro
-  )
-  const secundarias: SeccionDelPanel[] = [SECCION_DE_CONFIGURACION, SECCION_DE_AYUDA]
+  const principales: SeccionDelPanel[] = seccionesPrincipales({ puedeVerEquipo, accesoALaPlata, rubro })
+  const secundarias = SECCIONES_SECUNDARIAS
   const seccionActiva = seccionMarcadaEnLaBarra(pathname, [...principales, ...secundarias])
 
   // Mientras el cajón está abierto el foco vive adentro: entra al abrirse,
