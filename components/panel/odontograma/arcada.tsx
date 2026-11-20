@@ -29,6 +29,7 @@ import {
 import {
   ALTO_DE_LA_ARCADA,
   ANCHO_DE_LA_ARCADA,
+  ESCALA_MINIMA,
   LINEA_ENTRE_ARCADAS,
   LINEA_MEDIA,
   TECLAS_DE_LA_ARCADA,
@@ -268,6 +269,9 @@ export function Arcada({
           <span className="h-px flex-1 bg-[#c9c3b6]" />
           <span className="bg-crema pl-0.5 whitespace-nowrap">Izquierda del paciente →</span>
         </div>
+        {/* Muy achicada (la boca entera en el celular), los cuadrantes se montan sobre los números de los terceros molares: no van. */}
+        {escala >= ESCALA_MINIMA && (
+        <>
         <span aria-hidden="true" className={cn(ROTULO, "left-0 tracking-normal normal-case")} style={{ top: e(LINEA_ENTRE_ARCADAS) - 33 }}>
           {temporal ? "Q5" : "Q1"}
         </span>
@@ -280,6 +284,8 @@ export function Arcada({
         <span aria-hidden="true" className={cn(ROTULO, "right-0 tracking-normal normal-case")} style={{ top: e(LINEA_ENTRE_ARCADAS) + 17 }}>
           {temporal ? "Q7" : "Q3"}
         </span>
+        </>
+        )}
 
         {piezas.map((geometria) => (
           <PiezaEnLaArcada

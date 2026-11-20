@@ -32,7 +32,7 @@ interface PropsDeControlesDeAgenda {
   onSiguiente: () => void
   onHoy: () => void
   onVista: (v: UnidadDeTiempo) => void
-  /** Lo que va al final de la fila de las flechas (el menú ⋯ del celular). */
+  /** Lo que va al final de la fila de las flechas, sólo en el celular (el menú ⋯). */
   extra?: ReactNode
 }
 
@@ -80,7 +80,7 @@ export function ControlesDeAgenda({
             tamano="sm"
             onClick={onSiguiente}
           />
-          {extra && <div className="ml-auto">{extra}</div>}
+          {extra && <div className="ml-auto lg:hidden">{extra}</div>}
         </div>
         {/*
           Se anuncia al cambiar: quien no ve el calendario sabe a qué día,

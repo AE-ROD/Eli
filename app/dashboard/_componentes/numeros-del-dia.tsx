@@ -29,9 +29,17 @@ export function NumerosDelDia({ estadisticas, className }: { estadisticas: Estad
   return (
     <dl aria-busy={!estadisticas || undefined} className={cn("grid grid-cols-3 gap-2", className)}>
       {numeros.map((numero) => (
-        <div key={numero.texto} className="flex min-w-0 flex-col-reverse rounded-[16px] bg-tarjeta px-2.5 py-2.5 shadow-sm squircle">
+        <div key={numero.texto} className="flex min-w-0 flex-col rounded-[16px] bg-tarjeta px-2.5 py-2.5 shadow-sm squircle">
           <dt className="text-xs leading-snug text-texto-2">{numero.texto}</dt>
-          <dd className="text-lg leading-tight font-semibold wrap-anywhere tabular-nums">{numero.valor}</dd>
+          {/* Un monto largo ("$1.250.000"), un punto más chico para que entre en una línea. */}
+          <dd
+            className={cn(
+              "-order-1 text-lg leading-tight font-semibold wrap-anywhere tabular-nums",
+              String(numero.valor).length > 8 && "text-base"
+            )}
+          >
+            {numero.valor}
+          </dd>
         </div>
       ))}
     </dl>

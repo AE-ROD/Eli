@@ -187,6 +187,7 @@ export function SeccionZonaHoraria({ zonaGuardada }: PropsDeSeccionZonaHoraria) 
 
       <div className="mt-5">
         <BotonPrimario
+          className="max-lg:w-full"
           type="button"
           tamaño="sm"
           icono={<Save className="h-4 w-4" />}

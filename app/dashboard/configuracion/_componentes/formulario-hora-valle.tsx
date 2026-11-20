@@ -174,7 +174,7 @@ export function FormularioHoraValle({
                         id={`${id}-dia`}
                         value={franja.dayOfWeek}
                         onChange={(evento) => cambiarFranja(indice, { dayOfWeek: Number(evento.target.value) })}
-                        className={cn(CAMPO, "w-36")}
+                        className={cn(CAMPO, "w-32 lg:w-36")}
                       >
                         {DIAS.map((dia, numero) => (
                           <option key={dia} value={numero}>
@@ -192,7 +192,8 @@ export function FormularioHoraValle({
                         etiqueta="Desde"
                         value={franja.desde}
                         onChange={(valor) => cambiarFranja(indice, { desde: valor })}
-                        className="w-40"
+                        // En el celular, un poco más angostas: así cada franja ocupa dos filas y no cuatro.
+                        className="w-[8.5rem] lg:w-40"
                       />
                     </div>
                     <div className="min-w-0 space-y-1">
@@ -204,7 +205,7 @@ export function FormularioHoraValle({
                         etiqueta="Hasta"
                         value={franja.hasta}
                         onChange={(valor) => cambiarFranja(indice, { hasta: valor })}
-                        className="w-40"
+                        className="w-[8.5rem] lg:w-40"
                       />
                     </div>
                     <div className="min-w-0 space-y-1">
@@ -242,6 +243,7 @@ export function FormularioHoraValle({
             </ul>
             <div className="flex flex-wrap items-center gap-3">
               <BotonPrimario
+                className="max-lg:w-full"
                 type="button"
                 tamaño="sm"
                 variante="secundario"
@@ -252,6 +254,7 @@ export function FormularioHoraValle({
                 Agregar horario
               </BotonPrimario>
               <BotonPrimario
+                className="max-lg:w-full"
                 type="submit"
                 tamaño="sm"
                 icono={<Save className="h-4 w-4" />}
