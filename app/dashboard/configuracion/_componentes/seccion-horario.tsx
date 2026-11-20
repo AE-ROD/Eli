@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
-import { Clock, Save } from "lucide-react"
+import { CalendarCheck, Clock, Copy, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
 import { frasesDeConfiguracion } from "../_frases"
-import { DIAS, horarioParaMostrar } from "../_horario"
+import { DIAS, HORARIO_INICIAL, horarioParaMostrar } from "../_horario"
 
 interface PropsDeSeccionHorario {
   horariosIniciales: HorarioDelDia[]
@@ -56,6 +56,8 @@ export function SeccionHorario({
   const [guardando, setGuardando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [aviso, setAviso] = useState("")
+  // Lo que se anuncia al copiar un día a los demás (el botón no cambia de texto).
+  const [anuncio, setAnuncio] = useState("")
 
   const pendiente = JSON.stringify(horarios) !== JSON.stringify(enLaBase)
   useEffect(() => {
@@ -68,6 +70,8 @@ export function SeccionHorario({
     avisarAlIrse.current = alCambiarPendiente
   }, [alCambiarPendiente])
   useEffect(() => () => avisarAlIrse.current?.(false), [])
+
+  const diasMarcados = horarios.filter((horario) => horario.active).length
 
   const alternarDia = (dia: number) => {
     setHorarios((previos) =>
@@ -83,10 +87,24 @@ export function SeccionHorario({
     setGuardado(false)
   }
 
-  const guardar = async () => {
+  /** El horario de un día, en todos los días marcados. No guarda: queda pendiente, como cualquier cambio. */
+  const copiarATodos = (dia: number) => {
+    const origen = horarios.find((horario) => horario.dayOfWeek === dia)
+    if (!origen) return
+    setHorarios((previos) =>
+      previos.map((horario) =>
+        horario.active ? { ...horario, startTime: origen.startTime, endTime: origen.endTime } : horario
+      )
+    )
+    setGuardado(false)
+    setAnuncio(frases.copiado(DIAS[dia], origen.startTime, origen.endTime))
+  }
+
+  const guardar = async (semana: HorarioDelDia[] = horarios) => {
     setAviso("")
+    setAnuncio("")
     setGuardando(true)
-    const resultado = await guardarHorario(memberId ?? null, horarios)
+    const resultado = await guardarHorario(memberId ?? null, semana)
     setGuardando(false)
 
     // Un horario rechazado (por ejemplo, con la hora de fin antes que la de
@@ -96,8 +114,14 @@ export function SeccionHorario({
     setGuardado(true)
     setNuncaGuardado(false)
     setUsaElDelNegocio(false)
-    setEnLaBase(horarios)
-    alGuardar?.(horarios)
+    setEnLaBase(semana)
+    alGuardar?.(semana)
+  }
+
+  /** El atajo del horario nunca guardado: lunes a viernes de 9 a 18, guardado de una vez. */
+  const usarSugerido = () => {
+    setHorarios(HORARIO_INICIAL)
+    guardar(HORARIO_INICIAL)
   }
 
   return (
@@ -113,7 +137,7 @@ export function SeccionHorario({
             tamaño="sm"
             icono={<Save className="h-4 w-4" />}
             cargando={guardando}
-            onClick={guardar}
+            onClick={() => guardar()}
             variante={guardado && !pendiente ? "secundario" : "primario"}
             // Sin nada guardado, el botón se destaca: es lo único que falta para que se reserve.
             className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2")}
@@ -124,12 +148,25 @@ export function SeccionHorario({
       />
       {/* El botón cambia a "Guardado", pero el lector de pantalla no siempre lo dice: esto sí. */}
       <p role="status" className="sr-only">
-        {guardado ? "Horario guardado" : ""}
+        {guardado ? "Horario guardado" : anuncio}
       </p>
 
       {nuncaGuardado && (
         <Aviso tono="atencion" titulo="Este horario todavía no está guardado" className="mt-5">
           {frases.sinGuardar}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <BotonPrimario
+              type="button"
+              tamaño="sm"
+              variante="secundario"
+              icono={<CalendarCheck className="h-4 w-4" />}
+              cargando={guardando}
+              onClick={usarSugerido}
+            >
+              {frases.usarSugerido}
+            </BotonPrimario>
+            <span className="text-[13px]">{frases.usarSugeridoAyuda}</span>
+          </div>
         </Aviso>
       )}
       {usaElDelNegocio && (
@@ -152,13 +189,27 @@ export function SeccionHorario({
           const dia = DIAS[horario.dayOfWeek]
           return (
             <FilaDeDia key={horario.dayOfWeek} etiqueta={dia} activo={horario.active} alAlternar={() => alternarDia(horario.dayOfWeek)}>
-              <RangoDeHoras
-                etiqueta={dia}
-                desde={horario.startTime}
-                hasta={horario.endTime}
-                alCambiarDesde={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
-                alCambiarHasta={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
-              />
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                <RangoDeHoras
+                  etiqueta={dia}
+                  desde={horario.startTime}
+                  hasta={horario.endTime}
+                  alCambiarDesde={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
+                  alCambiarHasta={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
+                />
+                {/* Sólo sirve con otro día marcado al que copiarlo. */}
+                {diasMarcados > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => copiarATodos(horario.dayOfWeek)}
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-boton text-left text-[13px] font-medium text-navy underline-offset-4 hover:underline anillo-foco"
+                  >
+                    <Copy aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
+                    {frases.copiarATodos}
+                    <span className="sr-only">: {dia}</span>
+                  </button>
+                )}
+              </div>
             </FilaDeDia>
           )
         })}

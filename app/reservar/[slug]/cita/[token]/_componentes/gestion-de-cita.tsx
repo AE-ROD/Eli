@@ -11,6 +11,8 @@ import { formatearMonto } from "@/lib/dinero"
 import { deTexto, formatearDuracionDeServicio } from "@/lib/fechas"
 import { rebajaDeLaHora, type PrecioDeLaHora } from "@/lib/hora-valle"
 import { cn } from "@/lib/utils"
+import type { ContactoDelNegocio } from "../../../_contacto"
+import { ContactarAlNegocio, DireccionYComoLlegar } from "../../../_componentes/contactar-al-negocio"
 import { EncabezadoDeReserva } from "../../../_componentes/encabezado-de-reserva"
 import { direccionConComuna } from "../../../_componentes/reglas-de-la-sede"
 import { SelectorFechaHora, fechaParaLeer } from "../../../_componentes/selector-fecha-hora"
@@ -60,8 +62,25 @@ function diaParaLeer(fecha: string): string {
  * `rubro` (`Business.type`, que la página lee de la base por `slug`) pone las
  * palabras de la reserva: "Tu hora" y "al salón" en un salón, "Tu cita" y "al
  * local" si el rubro es desconocido o la página no lo conoce (`null`).
+ *
+ * `contacto` y `ubicacion` son lo público del negocio (su WhatsApp y su
+ * dirección, lo que ya publica su página), leído por `slug` en el servidor:
+ * donde se dice "contacta al negocio" van los botones para hacerlo, y sin sede
+ * la dirección con "Cómo llegar". Sin ellos, la pantalla es la de siempre.
  */
-export function GestionDeCita({ slug, token, rubro = null }: { slug: string; token: string; rubro?: string | null }) {
+export function GestionDeCita({
+  slug,
+  token,
+  rubro = null,
+  contacto = null,
+  ubicacion = null,
+}: {
+  slug: string
+  token: string
+  rubro?: string | null
+  contacto?: ContactoDelNegocio | null
+  ubicacion?: { direccion: string | null; comuna: string | null } | null
+}) {
   const frases = frasesDeLaGestion(rubro)
   const [vista, setVista] = useState<Vista>({ tipo: "cargando" })
   const [modo, setModo] = useState<Modo>("ver")
@@ -126,6 +145,7 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
           <p className="cuerpo-xl text-pretty text-texto-2">
             {frases.noSirve}
           </p>
+          <ContactarAlNegocio contacto={contacto} nombreDelNegocio={frases.elLocal} className="w-full sm:justify-center" />
         </Tarjeta>
       </>
     )
@@ -251,7 +271,12 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
           <p className="titulo-3 min-w-0 break-words text-navy">{cita.servicio.nombre}</p>
         </div>
         <ResumenDeLaCita className="mt-6 border-t border-borde pt-3" cita={cita} sinServicio terminoDelServicio={frases.terminoDelServicio} />
-        {cita.sede?.mapas && <ComoLlegar sede={cita.sede.nombre} mapas={cita.sede.mapas} />}
+        {/* Siempre cómo llegar: con sede, a la sede (su dirección va en el resumen); sin sede, al negocio. */}
+        {cita.sede ? (
+          cita.sede.mapas && <ComoLlegar sede={cita.sede.nombre} mapas={cita.sede.mapas} />
+        ) : (
+          <DireccionYComoLlegar className="mt-5" direccion={ubicacion?.direccion} comuna={ubicacion?.comuna} />
+        )}
 
         {aviso && (
           <p role="status" className="mt-6 rounded-campo bg-azul-suave px-4 py-3 text-sm text-navy">
@@ -260,9 +285,12 @@ export function GestionDeCita({ slug, token, rubro = null }: { slug: string; tok
         )}
 
         {!cita.sePuedeCambiar ? (
-          <p className="mt-6 rounded-campo bg-superficie px-4 py-3 text-sm text-texto-2">
-            {frases.fueraDePlazo(cita.plazoHoras, cita.negocio.nombre)}
-          </p>
+          <div className="mt-6">
+            <p className="rounded-campo bg-superficie px-4 py-3 text-sm text-texto-2">
+              {frases.fueraDePlazo(cita.plazoHoras, cita.negocio.nombre)}
+            </p>
+            <ContactarAlNegocio className="mt-4" contacto={contacto} nombreDelNegocio={cita.negocio.nombre} />
+          </div>
         ) : modo === "ver" ? (
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
             <Boton variante="secundario" icono={<X />} onClick={() => elegirModo("confirmar-cancelacion")} className="w-full sm:w-auto">

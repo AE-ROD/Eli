@@ -54,24 +54,52 @@ describe("agruparSecciones", () => {
       DE_SIEMPRE
     )
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario", "sedes", "zona-horaria", "mi-foto"]],
+      ["horario-y-equipo", ["horario", "sedes", "mi-foto"]],
       ["tu-negocio", ["pagina", "productos", "plan"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
-      ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"]],
       ["mensajes", ["mensajes"]],
+      ["mas-adelante", ["hora-valle", "por-confirmar", "fila-virtual", "zona-horaria", "plazo-de-cambios"]],
     ])
   })
 
-  it("una clínica dental no tiene hora valle ni fila virtual: su grupo de reservas sigue con las otras dos, en los cinco grupos", () => {
+  it("lo opcional va al final, en «Más adelante»: descuentos, faltas, fila, zona horaria y plazo para cancelar", () => {
+    const grupos = agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)
+    const ultimo = grupos[grupos.length - 1]
+    expect(ultimo.id).toBe("mas-adelante")
+    expect(ultimo.titulo).toBe("Más adelante (opcional)")
+    expect(ultimo.recomendado).toBe(false)
+    expect(ultimo.resumen).toBe(
+      "Descuento en horas tranquilas · Reservas por confirmar · Fila virtual · Zona horaria · Cancelar o reagendar"
+    )
+  })
+
+  it("«Recomendado» marca los grupos con lo esencial: horario o sedes, servicios y página pública", () => {
+    const grupos = agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)
+    expect(Object.fromEntries(grupos.map((grupo) => [grupo.id, grupo.recomendado]))).toEqual({
+      "horario-y-equipo": true,
+      "tu-negocio": true,
+      "catalogo-y-clinica": true,
+      mensajes: false,
+      "mas-adelante": false,
+    })
+    // Con sedes, el grupo del horario sigue recomendado por «Sedes y horarios».
+    expect(agruparSecciones(DUEÑA_INDEPENDIENTE_CON_SEDES, DE_SIEMPRE)[0].recomendado).toBe(true)
+    // Sólo «Mi foto» no lo hace recomendado.
+    expect(agruparSecciones([seccion("mi-foto")], DE_SIEMPRE)[0].recomendado).toBe(false)
+  })
+
+  it("una clínica dental no tiene hora valle ni fila virtual: «Más adelante» sigue con lo demás", () => {
     const grupos = agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
-      ["horario-y-equipo", ["horario", "zona-horaria"]],
+      ["horario-y-equipo", ["horario"]],
       ["tu-negocio", ["pagina", "productos"]],
       ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
-      ["reservas-y-clientes", ["plazo-de-cambios", "por-confirmar"]],
       ["mensajes", ["mensajes"]],
+      ["mas-adelante", ["por-confirmar", "zona-horaria", "plazo-de-cambios"]],
     ])
-    expect(grupos.find((grupo) => grupo.id === "reservas-y-clientes")?.resumen).toBe("Cancelar o reagendar · Reservas por confirmar")
+    expect(grupos.find((grupo) => grupo.id === "mas-adelante")?.resumen).toBe(
+      "Reservas por confirmar · Zona horaria · Cancelar o reagendar"
+    )
   })
 
   it("si un grupo quedara sin secciones visibles, no existe (la clínica del encargado sin «Cancelar o reagendar» ni las de la dueña)", () => {
@@ -103,33 +131,33 @@ describe("agruparSecciones", () => {
     const grupos = agruparSecciones(PROFESIONAL, DE_SIEMPRE)
     expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario", "mi-foto"])
     expect(grupos[0].resumen).toBe("Horario · Mi foto")
-    expect(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)[0].resumen).toBe("Horario · Zona horaria")
+    expect(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)[0].resumen).toBe("Horario")
   })
 
-  it("la zona horaria va con el horario y sólo la tiene la dueña: el encargado y el profesional ven el grupo sin ella", () => {
+  it("la zona horaria va en «Más adelante» y sólo la tiene la dueña: el encargado y el profesional no la ven", () => {
     const delEncargado = (["horario", "pagina", "servicios"] as const).map(seccion)
-    expect(agruparSecciones(delEncargado, DE_SIEMPRE)[0].resumen).toBe("Horario")
-    expect(agruparSecciones(PROFESIONAL, DE_SIEMPRE)[0].secciones.map((s) => s.id)).not.toContain("zona-horaria")
+    expect(agruparSecciones(delEncargado, DE_SIEMPRE).map((grupo) => grupo.id)).not.toContain("mas-adelante")
+    expect(agruparSecciones(PROFESIONAL, DE_SIEMPRE).flatMap((grupo) => grupo.secciones.map((s) => s.id))).not.toContain("zona-horaria")
     // Una clínica dental también la tiene: no depende del rubro.
-    expect(agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA)[0].resumen).toBe("Horario · Zona horaria")
+    expect(agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA).at(-1)?.secciones.map((s) => s.id)).toContain("zona-horaria")
   })
 
   it("«Sedes y horarios» va con el horario y «Plan» con tu negocio", () => {
     const sinSedes = agruparSecciones(DUEÑA_INDEPENDIENTE_SIN_SEDES, DE_SIEMPRE)
-    expect(sinSedes[0].resumen).toBe("Horario · Sedes y horarios · Zona horaria")
+    expect(sinSedes[0].resumen).toBe("Horario · Sedes y horarios")
     expect(sinSedes.find((grupo) => grupo.id === "tu-negocio")?.resumen).toBe("Página pública · Productos · Plan")
   })
 
   it("con alguna sede activa, «Sedes y horarios» reemplaza a «Horario»: el grupo no repite el horario", () => {
     const conSedes = agruparSecciones(DUEÑA_INDEPENDIENTE_CON_SEDES, DE_LA_CLINICA)
-    expect(conSedes[0].secciones.map((s) => s.id)).toEqual(["sedes", "zona-horaria"])
-    expect(conSedes[0].resumen).toBe("Sedes y horarios · Zona horaria")
+    expect(conSedes[0].secciones.map((s) => s.id)).toEqual(["sedes"])
+    expect(conSedes[0].resumen).toBe("Sedes y horarios")
     expect(conSedes[0].titulo).toBe("Horario y equipo")
   })
 
   it("la dueña de un negocio con equipo ve «Plan» pero no «Sedes y horarios»", () => {
     const grupos = agruparSecciones(DUEÑA_CON_EQUIPO, DE_SIEMPRE)
-    expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario", "zona-horaria"])
+    expect(grupos[0].secciones.map((s) => s.id)).toEqual(["horario"])
     expect(grupos.find((grupo) => grupo.id === "tu-negocio")?.secciones.map((s) => s.id)).toEqual(["pagina", "plan"])
   })
 
@@ -144,15 +172,17 @@ describe("agruparSecciones", () => {
     const porId = Object.fromEntries(grupos.map((grupo) => [grupo.id, grupo.resumen]))
     expect(porId["tu-negocio"]).toBe("Página pública · Productos")
     expect(porId["catalogo-y-clinica"]).toBe("Servicios")
-    expect(porId["reservas-y-clientes"]).toBe("Cancelar o reagendar · Reservas por confirmar · Precios de hora valle · Fila virtual")
+    expect(porId["mas-adelante"]).toBe(
+      "Descuento en horas tranquilas · Reservas por confirmar · Fila virtual · Zona horaria · Cancelar o reagendar"
+    )
   })
 
   it("el encargado de una clínica (sin laboratorios ni las secciones de la dueña) ve su grupo reducido", () => {
     const encargado = (["horario", "pagina", "servicios", "sillones", "productos", "plazo-de-cambios", "mensajes"] as const).map(seccion)
     const grupos = agruparSecciones(encargado, DE_LA_CLINICA)
-    expect(grupos.map((grupo) => grupo.id)).toEqual(["horario-y-equipo", "tu-negocio", "catalogo-y-clinica", "reservas-y-clientes", "mensajes"])
+    expect(grupos.map((grupo) => grupo.id)).toEqual(["horario-y-equipo", "tu-negocio", "catalogo-y-clinica", "mensajes", "mas-adelante"])
     expect(grupos.find((grupo) => grupo.id === "catalogo-y-clinica")?.resumen).toBe("Prestaciones · Sillones")
-    expect(grupos.find((grupo) => grupo.id === "reservas-y-clientes")?.resumen).toBe("Cancelar o reagendar")
+    expect(grupos.find((grupo) => grupo.id === "mas-adelante")?.resumen).toBe("Cancelar o reagendar")
   })
 
   it("«Servicios» y «Mensajes a clientes» se llaman como el rubro: Prestaciones y Mensajes a pacientes en una clínica dental", () => {
@@ -176,10 +206,9 @@ describe("agruparSecciones", () => {
         "Horario y equipo",
         "Tu clínica",
         "Catálogo y clínica",
-        "Reservas y pacientes",
         "Mensajes",
+        "Más adelante (opcional)",
       ])
-      expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE))[3]).toBe("Reservas y clientes")
       expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE))[1]).toBe("Tu negocio")
       expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, vocabularioDe("salon").palabras))[1]).toBe("Tu salón")
       expect(titulos(agruparSecciones(DUEÑA_DE_UN_SALON, vocabularioDe("barberia").palabras))[1]).toBe("Tu barbería")
@@ -230,14 +259,14 @@ describe("grupoDeAncla", () => {
   it.each([
     ["#mi-foto", "horario-y-equipo"],
     ["#horario", "horario-y-equipo"],
-    ["#zona-horaria", "horario-y-equipo"],
+    ["#zona-horaria", "mas-adelante"],
     ["#pagina", "tu-negocio"],
     ["#productos", "tu-negocio"],
     ["#servicios", "catalogo-y-clinica"],
     ["#sillones", "catalogo-y-clinica"],
     ["#laboratorios", "catalogo-y-clinica"],
-    ["#plazo-de-cambios", "reservas-y-clientes"],
-    ["#por-confirmar", "reservas-y-clientes"],
+    ["#plazo-de-cambios", "mas-adelante"],
+    ["#por-confirmar", "mas-adelante"],
     ["#mensajes", "mensajes"],
   ])("%s abre %s", (hash, esperado) => {
     expect(grupoDeAncla(hash, grupos)).toBe(esperado)
@@ -256,8 +285,8 @@ describe("grupoDeAncla", () => {
 
   it("#hora-valle y #fila-virtual abren su grupo en un salón, y nada en una clínica dental", () => {
     const delSalon = agruparSecciones(DUEÑA_DE_UN_SALON, DE_SIEMPRE)
-    expect(grupoDeAncla("#hora-valle", delSalon)).toBe("reservas-y-clientes")
-    expect(grupoDeAncla("#fila-virtual", delSalon)).toBe("reservas-y-clientes")
+    expect(grupoDeAncla("#hora-valle", delSalon)).toBe("mas-adelante")
+    expect(grupoDeAncla("#fila-virtual", delSalon)).toBe("mas-adelante")
     expect(grupoDeAncla("#hora-valle", grupos)).toBeNull()
     expect(grupoDeAncla("#fila-virtual", grupos)).toBeNull()
   })

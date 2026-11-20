@@ -8,6 +8,7 @@ import type { EleccionDeProfesional } from "@/lib/gestion-de-cita"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 import type { HorasDelDia } from "../../_componentes/selector-fecha-hora"
+import { conMensajeClaro, mensajeParaQuienReserva, HORAS_SIN_CARGAR } from "../../_datos"
 import { frasesDeLaGestion } from "../../_frases"
 
 /**
@@ -75,7 +76,11 @@ export async function leerCita(
   token: string,
   rubro?: string | null
 ): Promise<ResultadoConCodigo<CitaDelEnlace>> {
-  return pedirConCodigo<CitaDelEnlace>(ruta(slug, token), frasesDeLaGestion(rubro).errores.cargar)
+  const resultado = await pedirConCodigo<CitaDelEnlace>(ruta(slug, token), frasesDeLaGestion(rubro).errores.cargar)
+  // El código se queda (un 404 es "este enlace no sirve"); el mensaje, sin nada técnico.
+  return resultado.ok
+    ? resultado
+    : { ...resultado, error: mensajeParaQuienReserva(resultado.error, frasesDeLaGestion(rubro).errores.cargar) }
 }
 
 /** Quien atiende la cita hoy: lo que se hace si la pantalla no cambia nada. */
@@ -114,11 +119,12 @@ export async function leerHorasParaReagendar(
   )
   return resultado.ok
     ? { ok: true, datos: { horas: resultado.datos.slots, precios: resultado.datos.precios ?? [] } }
-    : resultado
+    : conMensajeClaro(resultado, HORAS_SIN_CARGAR)
 }
 
 export async function cancelarCita(slug: string, token: string, rubro?: string | null): Promise<Resultado> {
-  return pedir(ruta(slug, token, "/cancelar"), frasesDeLaGestion(rubro).errores.cancelar, { method: "POST" })
+  const siFalla = `${frasesDeLaGestion(rubro).errores.cancelar}. Vuelve a intentar en un minuto.`
+  return conMensajeClaro(await pedir(ruta(slug, token, "/cancelar"), siFalla, { method: "POST" }), siFalla)
 }
 
 export async function reagendarCita(
@@ -129,9 +135,11 @@ export async function reagendarCita(
   rubro?: string | null,
   eleccion: EleccionDeProfesional = EL_MISMO_PROFESIONAL
 ): Promise<Resultado<{ fecha: string; hora: string; profesional: string | null; precio: number | null }>> {
-  return pedir(
+  const siFalla = `${frasesDeLaGestion(rubro).errores.cambiar}. Vuelve a intentar en un minuto.`
+  const resultado = await pedir<{ fecha: string; hora: string; profesional: string | null; precio: number | null }>(
     ruta(slug, token, "/reagendar"),
-    frasesDeLaGestion(rubro).errores.cambiar,
+    siFalla,
     conJson("POST", { fecha, hora, ...parametroDelCuerpo(eleccion) })
   )
+  return conMensajeClaro(resultado, siFalla)
 }

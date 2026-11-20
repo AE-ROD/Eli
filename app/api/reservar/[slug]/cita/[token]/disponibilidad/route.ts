@@ -69,12 +69,12 @@ export async function GET(request: NextRequest, contexto: Params) {
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
-    return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo, cita.business.type) })
+    return NextResponse.json({ slots: [], mensaje: mensajeFueraDePlazo(plazo, cita.business.type, cita.business.whatsapp) })
   }
   const servicios = serviciosDeLaCita(cita)
   const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
-    return NextResponse.json({ slots: [], mensaje: mensajeServicioYaNoSeReserva(cita.business.type) })
+    return NextResponse.json({ slots: [], mensaje: mensajeServicioYaNoSeReserva(cita.business.type, cita.business.whatsapp) })
   }
 
   // Con quién: el mismo, cualquiera o uno que se revalida acá (nunca se le cree al navegador).
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest, contexto: Params) {
     sedeId: cita.sedeId,
   })
   if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ slots: [], mensaje: mensajeSinHorasParaReagendar(cita.business.type) })
+    return NextResponse.json({ slots: [], mensaje: mensajeSinHorasParaReagendar(cita.business.type, cita.business.whatsapp) })
   }
   const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
   if (candidatos.length === 0) return NextResponse.json({ slots: [], mensaje: "No hay atención ese día" })

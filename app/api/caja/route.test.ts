@@ -161,6 +161,15 @@ describe("/api/caja", () => {
       })
       // El cierre del otro negocio no aparece.
       expect(cuerpo.cierres).toEqual([])
+      // Sin cierres propios no hay fondo que precargar (el del otro negocio no cuenta).
+      expect(cuerpo.fondoSugerido).toBeNull()
+    })
+
+    it("el fondo que se precarga es lo contado en el último cierre del negocio", async () => {
+      const visto = (await (await leer(sesiones.dueña)).json()).abierta
+      const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: visto.hasta, esperado: 20000, totalCobrado: visto.totalCobrado, fondoInicial: 10000, contado: 20000 })
+      expect(res.status).toBe(201)
+      expect((await (await leer(sesiones.dueña)).json()).fondoSugerido).toBe(20000)
     })
 
     describe("aviso de días sin cerrar (#120)", () => {

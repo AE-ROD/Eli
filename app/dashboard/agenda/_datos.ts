@@ -13,6 +13,7 @@ import { leerMonto, montoParaEscribir } from "@/lib/dinero"
 import { codigoDelServidor, pedir, pedirConCuerpo, conJson, type Resultado } from "@/lib/peticiones"
 import { CODIGO_CORREGIR_CON_AJUSTE } from "@/lib/bloqueos-de-dinero"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
+import { horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { sePuedeMover, type Advertencia } from "@/lib/mover-cita"
 import { sigueSinConfirmar } from "@/lib/por-confirmar"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
@@ -64,6 +65,11 @@ export interface Cita {
   primeraVez?: boolean
   /** Etapa 9: la sede donde se atiende (`null`: la hora no lleva sede). La agenda la muestra sólo con varias sedes. */
   sede?: SedeDeLaCita | null
+  /**
+   * Los servicios del catálogo de la cita, en el orden en que se hacen (los
+   * que siguen en el catálogo). Vacío: texto libre. Para "Agendar otra hora".
+   */
+  servicioIds?: string[]
 }
 
 /** La sede de una cita, como viene en la lista y en el detalle: sólo su id y su nombre. */
@@ -165,6 +171,32 @@ export function citaEnBlanco(dia: Date): DatosDeNuevaCita {
     precio: "",
     notas: "",
     memberId: "",
+  }
+}
+
+/**
+ * "Agendar otra hora": el borrador de una cita nueva con el mismo cliente, los
+ * mismos servicios (o el mismo texto, si no son del catálogo), el mismo
+ * profesional, el mismo precio y la misma duración desde las 09:00. La fecha
+ * va vacía: es lo que hay que elegir. El servidor revisa todo al guardar,
+ * como en cualquier cita nueva.
+ */
+export function borradorParaAgendarOtra(cita: Cita): DatosDeNuevaCita {
+  const base = citaEnBlanco(new Date())
+  const minutos = Math.round((new Date(cita.endTime).getTime() - new Date(cita.startTime).getTime()) / 60_000)
+  const inicio = horaAMinutos(base.horaInicio)
+  const horaFin = minutos > 0 && inicio + minutos < 24 * 60 ? minutosAHora(inicio + minutos) : base.horaFin
+  const servicioIds = (cita.servicioIds ?? []).join(",")
+  return {
+    ...base,
+    clienteId: cita.customer?.id ?? cita.customerId ?? "",
+    clienteNombre: cita.customer ? nombreCompletoDeCliente(cita.customer) : "",
+    servicio: servicioIds ? "" : cita.title,
+    servicioIds,
+    fecha: "",
+    horaFin,
+    precio: cita.price != null ? montoParaEscribir(cita.price) : "",
+    memberId: cita.memberId ?? "",
   }
 }
 
@@ -570,6 +602,23 @@ export interface DatosDeNuevoBloqueo {
   fechaHasta: string
   horaHasta: string
   motivo: string
+}
+
+/**
+ * El atajo "Todo el día": del primer minuto del día de inicio al último del
+ * día de fin (con un solo día, ese día entero). Lo demás queda como estaba.
+ */
+export function bloqueoTodoElDia(form: DatosDeNuevoBloqueo): DatosDeNuevoBloqueo {
+  return { ...form, horaDesde: "00:00", horaHasta: "23:59" }
+}
+
+/**
+ * El atajo "Esta tarde": hoy (`hoy`, el día del negocio) desde las 14:00
+ * hasta el final del día. Lo demás (a quién, el motivo) queda como estaba.
+ */
+export function bloqueoEstaTarde(form: DatosDeNuevoBloqueo, hoy: Date): DatosDeNuevoBloqueo {
+  const fecha = comoTexto(hoy)
+  return { ...form, fechaDesde: fecha, horaDesde: "14:00", fechaHasta: fecha, horaHasta: "23:59" }
 }
 
 /** Un bloqueo vacío para el día `dia`, de 13:00 a 14:00, a nombre de `memberId` ("" es todo el negocio). */

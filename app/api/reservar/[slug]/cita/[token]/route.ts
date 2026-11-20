@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { diasConAtencionDeLaReserva } from "@/lib/agenda-publica"
 import {
+  contactoDelNegocio,
   dentroDelPlazo,
   leerProfesionalesParaCambiar,
   lugarDeLaCitaDelEnlace,
@@ -15,7 +16,12 @@ import { abrirEnlace, fechaYHora, type Params } from "./_comun"
 /**
  * GET /api/reservar/[slug]/cita/[token] — la cita del enlace de gestión, en
  * el reloj del negocio, y si todavía se puede cambiar. Sólo lo que se le
- * muestra al cliente: ni ids ni datos de contacto.
+ * muestra al cliente: ni ids ni datos de contacto de personas.
+ *
+ * Del negocio, además del nombre, su contacto PÚBLICO (el de su página,
+ * `contactoDelNegocio`): `enlaceWhatsapp` y `whatsapp` para "Escribir por
+ * WhatsApp", y `direccion`, `comuna` y `mapas` para "Cómo llegar". Cada uno es
+ * null si el negocio no lo tiene. Nunca el correo de la dueña.
  *
  * Plan Independiente: si la cita tiene sede, responde su nombre y dirección
  * (con los enlaces de "Cómo llegar"), y los días que se pueden elegir al
@@ -60,7 +66,7 @@ export async function GET(request: NextRequest, contexto: Params) {
       : []
   const lugar = lugarDeLaCitaDelEnlace(cita)
   return NextResponse.json({
-    negocio: { nombre: cita.business.name },
+    negocio: { nombre: cita.business.name, ...contactoDelNegocio(cita.business) },
     // Con varios servicios (#89a), los nombres unidos y la duración total.
     servicio: { nombre: servicios.nombre, duracion: servicios.duracion },
     // Lo que cuesta hoy: al reagendar a una hora con otro precio (hora valle,

@@ -1,5 +1,6 @@
 import { cache } from "react"
 import { prisma } from "@/lib/prisma"
+import { contactoDelNegocio, type ContactoDelNegocio } from "./_contacto"
 
 /**
  * (servidor) El rubro de un negocio público (`Business.type`), leído por
@@ -19,3 +20,27 @@ export const leerRubroDelNegocio = cache(async (slug: string): Promise<string | 
   const negocio = await prisma.business.findUnique({ where: { slug }, select: { type: true } })
   return negocio?.type ?? null
 })
+
+/**
+ * (servidor) Lo público del negocio para contactarlo y llegar, leído por
+ * `slug`: el WhatsApp (también para "Llamar": el negocio no guarda otro
+ * teléfono) y la dirección con su comuna. Son los mismos datos que ya publica
+ * la mini página, nada de ninguna persona ni de otro negocio. Lo usan las
+ * pantallas que no leen nada más del negocio (el enlace para cancelar o
+ * cambiar), para que "contacta al negocio" venga con sus botones. Un `slug`
+ * que no existe da `null`, y la pantalla no los muestra.
+ */
+export const leerContactoDelNegocio = cache(
+  async (slug: string): Promise<(ContactoDelNegocio & { direccion: string | null; comuna: string | null }) | null> => {
+    const negocio = await prisma.business.findUnique({
+      where: { slug },
+      select: { whatsapp: true, address: true, comuna: true },
+    })
+    if (!negocio) return null
+    return {
+      ...contactoDelNegocio(negocio.whatsapp),
+      direccion: negocio.address?.trim() || null,
+      comuna: negocio.comuna?.trim() || null,
+    }
+  }
+)

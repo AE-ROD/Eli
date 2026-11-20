@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence } from "framer-motion"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { CircleAlert, ListX, MonitorPlay, RefreshCw, UserPlus } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -15,6 +16,7 @@ import { esEstadoActivo, type EstadoActivo, type PagoPedido } from "@/lib/atenci
 import { formatearMonto } from "@/lib/dinero"
 import {
   avisoDeComisionesPendientes,
+  estadoSiguiente,
   requisitoParaPasarA,
   textoDeMovimiento,
   type ColumnaDeAtencion,
@@ -25,6 +27,7 @@ import {
   actorDeSesion,
   puedeAnotarSinReserva,
   puedeAsignarLineasAOtros,
+  puedeCobrar,
   puedeGestionarServicios,
   puedeRegistrarPropina,
   puedeVaciarFilaVirtual,
@@ -37,7 +40,9 @@ import {
   anotarSinReserva,
   anularAtencion,
   cobrarAtencion,
+  cobroPedidoEnLaDireccion,
   deshacerLlegada,
+  destinoDelCobro,
   guardarServicios,
   leerAtencionesDelDia,
   leerTablero,
@@ -89,6 +94,12 @@ type ModalAbierto =
   | { tipo: "vaciar-fila"; personas: number }
   /** Clínica dental: abonar a una prótesis del paciente. */
   | { tipo: "abono"; atencion: Atencion }
+  /**
+   * "Cobrar" desde la agenda con la atención todavía en espera o en atención,
+   * o con la reserva sin llegada: se pregunta antes de moverla, y al
+   * confirmar se lleva a "Por cobrar" y se abre el cobro.
+   */
+  | { tipo: "llevar-a-cobrar"; nombre: string; atencion: Atencion | null; reservaId: string | null }
 
 type ModalDeServicios = Extract<ModalAbierto, { tipo: "servicios" }>
 
@@ -116,6 +127,7 @@ const tarjetaDe = (atencion: Atencion): DestinoDelFoco => ({ atencionId: atencio
 
 export default function PaginaTablero() {
   const { data: sesion, status: estadoDeSesion } = useSession()
+  const router = useRouter()
   const actor = actorDeSesion(sesion)
   const rubro = useRubroDelPanel()
   // Las palabras del rubro: "Tablero" / "Sala de espera", "No vino" / "No asistió", "servicio" / "prestación".
@@ -612,9 +624,98 @@ export default function PaginaTablero() {
       recargar()
     })
 
+  /**
+   * "Cobrar" desde la agenda, ya confirmado: marca la llegada si hacía falta,
+   * lleva la atención paso a paso hasta "Por cobrar" y abre el cobro. Si a
+   * algún paso le falta algo (quién hizo un servicio), se abre el editor con
+   * lo que falta y se sigue desde la tarjeta.
+   */
+  const llevarACobrar = (abierto: Extract<ModalAbierto, { tipo: "llevar-a-cobrar" }>) =>
+    desdeUnModal(async () => {
+      let actual = abierto.atencion
+      if (!actual && abierto.reservaId) {
+        const reservaId = abierto.reservaId
+        const llegada = await marcarLlegada(reservaId)
+        if (!llegada.ok) {
+          setGuardando(false)
+          if (llegada.motivo === "desactualizada") {
+            return tableroDesactualizado({ reservaId, columna: "reservas" }, frases.conRecarga(llegada.error))
+          }
+          return setAvisoDelModal(llegada.error)
+        }
+        actual = llegada.datos
+        const nueva = llegada.datos
+        setTablero(
+          (previo) =>
+            previo && {
+              ...previo,
+              reservas: previo.reservas.filter((otra) => otra.id !== reservaId),
+              atenciones: [...previo.atenciones, nueva],
+            }
+        )
+      }
+      if (!actual) return cerrarModal()
+
+      while (actual.estado !== "por-cobrar") {
+        const hacia = estadoSiguiente(actual.estado)
+        if (!hacia) return tableroDesactualizado(tarjetaDe(actual))
+        const falta = requisitoParaPasarA(actual.lineas, hacia, palabras)
+        if (falta) return editarServicios(actual, { tipo: "mover", hacia }, falta)
+        const movida = await moverAtencion(actual.id, hacia)
+        if (!movida.ok) {
+          if (movida.motivo === "falta-requisito") return editarServicios(actual, { tipo: "mover", hacia }, movida.error)
+          return falloEnModal(movida, actual)
+        }
+        ponerAtencion(movida.datos)
+        actual = movida.datos
+      }
+
+      seguirA(actual)
+      cobrar(actual)
+      recargar()
+    })
+
   // ─── Pantalla ─────────────────────────────────────────────────────────────
 
   const listo = tablero !== null && estadoDeSesion !== "loading"
+
+  // Desde la agenda se llega con `?cobrar=<citaId>`: con la atención por
+  // cobrar se abre el cobro (nada se escribe hasta cobrar); si todavía no
+  // está por cobrar, se pregunta antes de moverla. El parámetro se saca de la
+  // dirección, para que recargar o volver no lo repita. Sólo una vez, cuando
+  // ya cargaron el tablero y la sesión.
+  const cobroAlLlegar = useRef(true)
+  useEffect(() => {
+    if (!listo || !cobroAlLlegar.current) return
+    cobroAlLlegar.current = false
+    const pedido = cobroPedidoEnLaDireccion(window.location.search)
+    if (!pedido.habia) return
+    router.replace(`${window.location.pathname}${pedido.resto ? `?${pedido.resto}` : ""}`, { scroll: false })
+    if (!pedido.citaId) return
+    const textos = frases.cobrarDesdeLaAgenda
+    // Lo decide `lib/permisos.ts`; el servidor lo vuelve a mirar al cobrar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- la dirección sólo se lee en el navegador, al llegar
+    if (!puedeCobrar(actor)) return setAvisoDeCobro(textos.sinPermiso)
+    const destino = destinoDelCobro(tablero, pedido.citaId)
+    if (destino.tipo === "cobrar") {
+      setFoco(tarjetaDe(destino.atencion))
+      return cobrar(destino.atencion)
+    }
+    if (destino.tipo === "avanzar") {
+      return abrirModal({ tipo: "llevar-a-cobrar", nombre: destino.atencion.cliente.nombre, atencion: destino.atencion, reservaId: null })
+    }
+    if (destino.tipo === "llegada") {
+      const nombre = destino.reserva.cliente?.nombre ?? frases.sinCliente
+      return abrirModal({ tipo: "llevar-a-cobrar", nombre, atencion: null, reservaId: destino.reserva.id })
+    }
+    if (destino.tipo === "cobrada") {
+      setFoco(tarjetaDe(destino.atencion))
+      return setAvisoDeCobro(textos.cobrada(destino.atencion.cliente.nombre))
+    }
+    setAvisoDeCobro(textos.noEsta)
+    // Sólo al llegar: lo demás cambia en cada render y no debe volver a correr esto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo])
   const puedeAnotar = listo && puedeAnotarSinReserva(actor)
   // Quienes esperan en la fila virtual (#85). Vaciarla se ofrece aunque la
   // fila esté apagada: apagarla no saca a nadie.
@@ -793,6 +894,20 @@ export default function PaginaTablero() {
             guardando={guardando}
             version={versionDelAbono}
             onAbonar={(protesisId, monto) => abonar(modal.atencion, protesisId, monto)}
+            onCerrar={cerrarModal}
+          />
+        )}
+
+        {modal?.tipo === "llevar-a-cobrar" && (
+          <ModalConfirmar
+            key="llevar-a-cobrar"
+            titulo={frases.cobrarDesdeLaAgenda.titulo(modal.nombre)}
+            descripcion={modal.atencion ? frases.cobrarDesdeLaAgenda.avanzar : frases.cobrarDesdeLaAgenda.llegada}
+            textoConfirmar={frases.cobrarDesdeLaAgenda.confirmar}
+            textoCancelar={frases.cobrarDesdeLaAgenda.cancelar}
+            trabajando={guardando}
+            aviso={avisoDelModal}
+            onConfirmar={() => void llevarACobrar(modal)}
             onCerrar={cerrarModal}
           />
         )}

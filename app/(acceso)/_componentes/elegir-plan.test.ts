@@ -54,9 +54,10 @@ describe("detalleDePlan", () => {
     expect(sinRubro).toContain("tu negocio")
   })
 
-  it("Independiente habla de las sedes con su tope y de que no se invita a nadie", () => {
+  it("Independiente explica las sedes en palabras simples y dice que no se invita a nadie", () => {
     const vinetas = detalleDePlan("independiente", neutras).vinetas.join(" ")
-    expect(vinetas).toMatch(/Hasta \d+ sedes/)
+    expect(vinetas).toContain("Si atiendes en más de un lugar, cada uno con sus días")
+    expect(vinetas).not.toMatch(/sedes/i)
     expect(vinetas).toMatch(/no puedes invitar/i)
   })
 
@@ -112,6 +113,21 @@ describe("ElegirPlan", () => {
 
     expect(html).toContain(`Invita a tus ${palabras.profesional.plural}`)
     expect(html).toContain(`tu ${palabras.negocio.singular}`)
+  })
+
+  it("arriba pregunta cómo trabajas, con dos botones que eligen el plan", () => {
+    const html = sinElegir()
+    expect(html).toContain("¿Trabajas sola/o o con equipo?")
+    const botones = html.match(/<button[^>]*>/g) ?? []
+    expect(botones).toHaveLength(PLANES.length)
+    expect(botones.every((boton) => boton.includes('type="button"') && boton.includes('aria-pressed="false"'))).toBe(true)
+  })
+
+  it.each(PLANES)("con el plan %s elegido, su botón de la pregunta queda apretado", (plan) => {
+    const html = sinElegir({ plan })
+    const apretados = (html.match(/<button[^>]*aria-pressed="true"[^>]*>[\s\S]*?<\/button>/g) ?? [])
+    expect(apretados).toHaveLength(1)
+    expect(apretados[0]).toContain(nombreDePlan(plan))
   })
 
   it("cada radio se llama como su plan y lee el resto como descripción", () => {

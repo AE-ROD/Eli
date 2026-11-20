@@ -9,6 +9,7 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { mensajeParaQuienReserva } from "@/app/reservar/[slug]/_datos"
 import { frasesDeLaFila } from "@/app/reservar/[slug]/_frases"
 import {
   LARGO_MAXIMO_NOMBRE_EN_FILA,
@@ -110,7 +111,8 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, rubro = null, abierto, e
     )
     if (!resultado.ok) {
       setEnviando(false)
-      return setError(resultado.error)
+      // Nada técnico a la vista: qué hacer.
+      return setError(mensajeParaQuienReserva(resultado.error, "No pudimos anotarte en la fila. Vuelve a intentar en un minuto."))
     }
     const token = tokenDelEnlace(resultado.datos.enlace)
     if (token) guardarTurno(slug, token)

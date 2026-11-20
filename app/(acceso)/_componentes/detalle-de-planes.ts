@@ -7,7 +7,6 @@ import {
   PRECIO_INDEPENDIENTE,
   PRECIO_PERSONA_ADICIONAL,
 } from "@/lib/precios"
-import { MAX_SEDES } from "@/lib/sedes"
 import type { PalabrasDelRubro } from "@/lib/vocabulario"
 
 /** Lo que dice la tarjeta de un plan al elegirlo. Todo sale de `lib/`: nada de montos ni topes escritos a mano. */
@@ -45,7 +44,8 @@ export function detalleDePlan(plan: PlanId, palabras: PalabrasDelRubro): Detalle
       precio: formatearPesos(PRECIO_INDEPENDIENTE),
       vinetas: [
         "Atiendes tú: eres la única persona que atiende",
-        `Hasta ${MAX_SEDES} sedes, cada una con su horario por día`,
+        // Sin "sedes" ni topes: quien recién empieza no habla así.
+        "Si atiendes en más de un lugar, cada uno con sus días",
         "Sin equipo: no puedes invitar a nadie",
       ],
     }

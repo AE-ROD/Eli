@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
+import Link from "next/link"
 import { CircleAlert } from "lucide-react"
+import { ayudaDelError } from "./errores-de-acceso"
 
 interface PropsDeAvisoDeError {
   /** El error. Vacío, no se pinta nada. */
@@ -39,5 +41,20 @@ export function AvisoDeError({ mensaje, visible = true, children }: PropsDeAviso
         {children && <div className="mt-1 text-navy">{children}</div>}
       </div>
     </div>
+  )
+}
+
+/**
+ * El enlace con el paso siguiente de un error (`ayudaDelError`), para ponerlo
+ * dentro de `AvisoDeError`: "¿La olvidaste? Recupérala acá". Si el error no
+ * trae ayuda, `null`, y el aviso queda sólo con su mensaje.
+ */
+export function enlaceDeAyuda(mensaje: string): ReactNode {
+  const ayuda = ayudaDelError(mensaje)
+  if (!ayuda) return null
+  return (
+    <Link href={ayuda.href} className="font-medium underline decoration-[1.5px] underline-offset-4 anillo-foco rounded-sm">
+      {ayuda.texto}
+    </Link>
   )
 }

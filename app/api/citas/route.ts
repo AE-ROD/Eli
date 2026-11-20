@@ -107,6 +107,16 @@ const citaSchema = z
     path: ["endTime"],
   })
 
+/**
+ * Los ids de los servicios del catálogo de una cita, en orden: los de sus
+ * filas o, en una de antes de varios servicios, su `serviceId`. Un servicio
+ * borrado del catálogo deja su fila sin id: no se cuenta.
+ */
+function idsDeLosServicios(filas: { serviceId: string | null }[], serviceId: string | null | undefined): string[] {
+  if (filas.length > 0) return filas.flatMap((fila) => (fila.serviceId ? [fila.serviceId] : []))
+  return serviceId ? [serviceId] : []
+}
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   const actor = actorDeSesion(session)
@@ -173,6 +183,11 @@ export async function GET(request: NextRequest) {
       // Sólo para saber si el cliente ya llegó: una por confirmar con
       // atención viva en el Tablero ya está resuelta. No sale en la respuesta.
       visit: { select: { status: true } },
+      // Los servicios de la cita, para "Agendar otra hora" en la agenda: sólo
+      // sus ids, en orden. Las de antes de varios servicios (#89a) no tienen
+      // filas: ahí manda `serviceId`. No salen así en la respuesta (`servicioIds`).
+      serviceId: true,
+      servicios: { select: { serviceId: true }, orderBy: { orden: "asc" } },
       ...(conSillones && {
         sillonId: true,
         sillon: { select: { id: true, nombre: true } },
@@ -188,7 +203,11 @@ export async function GET(request: NextRequest) {
   })
 
   return NextResponse.json(
-    citas.map(({ visit, ...cita }) => ({ ...cita, conAtencion: visit ? visit.status !== "anulada" : false }))
+    citas.map(({ visit, serviceId, servicios, ...cita }) => ({
+      ...cita,
+      conAtencion: visit ? visit.status !== "anulada" : false,
+      servicioIds: idsDeLosServicios(servicios ?? [], serviceId),
+    }))
   )
 }
 

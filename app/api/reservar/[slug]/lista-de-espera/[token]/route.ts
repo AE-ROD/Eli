@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_ERROR_INTERNO } from "@/app/api/reservar/_mensajes"
 import { salirDeLaLista } from "@/lib/lista-de-espera"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -24,7 +25,7 @@ const RESPUESTA = { mensaje: "Listo. Ya no estás en la lista de espera." }
 export async function POST(request: NextRequest, { params }: { params: Promise<{ slug: string; token: string }> }) {
   const { permitido } = await verificarLimite("bajaPorToken", `lista-de-espera:${obtenerIp(request)}`)
   if (!permitido) {
-    return NextResponse.json({ error: "Demasiados intentos, intenta más tarde" }, { status: 429 })
+    return NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
   }
 
   const { slug, token } = await params
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await salirDeLaLista(slug, token)
   } catch (error) {
     registrarError("sacando a alguien de la lista de espera", error)
-    return NextResponse.json({ error: "No se pudo completar, intenta de nuevo" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   }
   return NextResponse.json(RESPUESTA)
 }

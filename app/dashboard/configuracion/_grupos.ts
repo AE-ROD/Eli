@@ -37,7 +37,7 @@ export type AnclaDeConfiguracion =
   | "mensajes"
   | "fila-virtual"
 
-export type IdDeGrupo = "horario-y-equipo" | "tu-negocio" | "catalogo-y-clinica" | "reservas-y-clientes" | "mensajes"
+export type IdDeGrupo = "horario-y-equipo" | "tu-negocio" | "catalogo-y-clinica" | "mensajes" | "mas-adelante"
 
 /**
  * Cómo se nombra cada sección en la línea que resume su grupo, con las palabras
@@ -57,7 +57,7 @@ export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> =
   productos: "Productos",
   "plazo-de-cambios": "Cancelar o reagendar",
   "por-confirmar": "Reservas por confirmar",
-  "hora-valle": "Precios de hora valle",
+  "hora-valle": "Descuento en horas tranquilas",
   mensajes: "Mensajes a clientes",
   "fila-virtual": "Fila virtual",
 }
@@ -77,24 +77,35 @@ export function nombreDeLaSeccion(ancla: AnclaDeConfiguracion, palabras: Palabra
 /**
  * Los grupos, en el orden en que se muestran, y las secciones de cada uno,
  * también en su orden. Toda sección está en exactamente un grupo.
+ *
+ * Lo que hace falta para empezar a recibir reservas va arriba; lo que se
+ * puede dejar para cuando el negocio ya anda (descuentos, faltas, fila,
+ * zona horaria, plazo para cancelar) va al final, en «Más adelante», que
+ * empieza plegado.
  */
 export const GRUPOS: readonly { id: IdDeGrupo; secciones: readonly AnclaDeConfiguracion[] }[] = [
-  { id: "horario-y-equipo", secciones: ["horario", "sedes", "zona-horaria", "mi-foto"] },
+  { id: "horario-y-equipo", secciones: ["horario", "sedes", "mi-foto"] },
   { id: "tu-negocio", secciones: ["pagina", "productos", "plan"] },
   { id: "catalogo-y-clinica", secciones: ["servicios", "sillones", "laboratorios"] },
-  { id: "reservas-y-clientes", secciones: ["plazo-de-cambios", "por-confirmar", "hora-valle", "fila-virtual"] },
   { id: "mensajes", secciones: ["mensajes"] },
+  { id: "mas-adelante", secciones: ["hora-valle", "por-confirmar", "fila-virtual", "zona-horaria", "plazo-de-cambios"] },
 ]
+
+/**
+ * Lo esencial para que se pueda reservar: el horario (o las sedes), los
+ * servicios y la página pública. El grupo que tenga alguna se marca
+ * «Recomendado».
+ */
+export const SECCIONES_RECOMENDADAS: readonly AnclaDeConfiguracion[] = ["horario", "sedes", "servicios", "pagina"]
 
 /** Sólo existen en una clínica dental: sin ellas, el grupo no habla de "clínica". */
 const SECCIONES_DE_CLINICA: readonly AnclaDeConfiguracion[] = ["sillones", "laboratorios"]
 
 /**
  * El título de un grupo. "Tu negocio" dice "Tu salón" o "Tu clínica" según el
- * rubro, "Reservas y clientes" dice "pacientes" en una clínica dental
- * (`vocabularioDe`), y "Catálogo y clínica" se queda en
- * "Catálogo" cuando no hay nada de clínica que mostrar (un salón no tiene
- * sillones ni laboratorios).
+ * rubro (`vocabularioDe`), y "Catálogo y clínica" se queda en "Catálogo"
+ * cuando no hay nada de clínica que mostrar (un salón no tiene sillones ni
+ * laboratorios).
  */
 function tituloDelGrupo(id: IdDeGrupo, visibles: readonly AnclaDeConfiguracion[], palabras: PalabrasDelRubro): string {
   switch (id) {
@@ -104,10 +115,10 @@ function tituloDelGrupo(id: IdDeGrupo, visibles: readonly AnclaDeConfiguracion[]
       return `Tu ${palabras.negocio.singular}`
     case "catalogo-y-clinica":
       return visibles.some((ancla) => SECCIONES_DE_CLINICA.includes(ancla)) ? "Catálogo y clínica" : "Catálogo"
-    case "reservas-y-clientes":
-      return `Reservas y ${palabras.cliente.plural}`
     case "mensajes":
       return "Mensajes"
+    case "mas-adelante":
+      return "Más adelante (opcional)"
   }
 }
 
@@ -117,6 +128,8 @@ export interface GrupoDeConfiguracion<T extends { id: AnclaDeConfiguracion }> {
   titulo: string
   /** Las secciones que contiene, separadas por "·": "Página pública · Productos". */
   resumen: string
+  /** Si tiene algo de lo esencial para empezar (`SECCIONES_RECOMENDADAS`): se marca «Recomendado». */
+  recomendado: boolean
   /** Sólo las visibles, en el orden del grupo (no en el de entrada). */
   secciones: T[]
 }
@@ -139,6 +152,7 @@ export function agruparSecciones<T extends { id: AnclaDeConfiguracion }>(
       id: grupo.id,
       titulo: tituloDelGrupo(grupo.id, anclas, palabras),
       resumen: anclas.map((ancla) => nombreDeLaSeccion(ancla, palabras)).join(" · "),
+      recomendado: anclas.some((ancla) => SECCIONES_RECOMENDADAS.includes(ancla)),
       secciones,
     })
   }

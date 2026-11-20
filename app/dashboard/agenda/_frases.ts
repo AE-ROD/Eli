@@ -49,7 +49,7 @@ export interface FrasesDeReactivar {
 }
 
 export function frasesDeLaAgenda(palabras: PalabrasDelRubro) {
-  const { cliente, profesional, servicio, cita, negocio, etiquetas } = palabras
+  const { cliente, profesional, servicio, cita, negocio, etiquetas, tablero } = palabras
   // "la" / "lo": el pronombre de la reserva ("Confírmala"), según su género.
   const laCita = pronombreDe(cita)
 
@@ -65,6 +65,50 @@ export function frasesDeLaAgenda(palabras: PalabrasDelRubro) {
     preguntaCancelar: `¿Cancelar ${el(cita)}?`,
     /** El botón de quien no llegó: "No vino" / "No asistió". */
     noVino: etiquetas.noVino,
+    /** El botón que lleva al cobro de esta cita en el Tablero. */
+    cobrar: "Cobrar",
+    /** "Agendar otra hora" / "Agendar otra cita": con el mismo cliente y los mismos servicios. */
+    agendarOtra: `Agendar ${concordar("otro", cita)} ${cita.singular}`,
+
+    /**
+     * Lo que pasa al cancelar desde el panel (verificado en PUT /api/citas/[id]):
+     * el horario se libera y se avisa a la lista de espera; al cliente no le
+     * llega ningún correo.
+     */
+    consecuenciaDeCancelar: `Su horario queda libre para otra reserva y, si alguien lo espera en la lista de espera, le avisamos. ${conMayuscula(el(cliente))} no recibe ningún aviso: avísale tú si hace falta.`,
+
+    /** La confirmación de "Marcar completada": marcarla no registra el pago. */
+    completar: {
+      titulo: `¿Marcar ${concordar("completado", cita)} sin cobrar?`,
+      /** Para quien cobra, con el atajo al cobro. */
+      preguntaCobrar: "Esto no registra el pago. ¿Quieres cobrar?",
+      /** Para quien cobra, cuando el cobro no se puede abrir desde acá (no es de hoy). */
+      cobroEnElTablero: `Esto no registra el pago. Los cobros se hacen en ${el(tablero)}, el mismo día.`,
+      /** Para quien no cobra. */
+      cobraLaGestion: "Esto no registra el pago: el cobro lo hace la dueña o el encargado.",
+      marcarSinCobrar: "Marcar sin cobrar",
+      noMarcar: "No marcar",
+    },
+
+    /** La línea de consecuencia de la confirmación de reactivar, según el estado de la reserva. */
+    consecuenciaDeReactivar: (estado: string): string =>
+      estado === "completada"
+        ? `Vuelve a ${concordar("confirmado", cita)}, como si todavía no se hubiera atendido. ${conMayuscula(el(cliente))} no recibe ningún aviso.`
+        : `Vuelve a ${concordar("confirmado", cita)} y ocupa otra vez su horario en la agenda. ${conMayuscula(el(cliente))} no recibe ningún aviso.`,
+
+    /**
+     * La reactivación rechazada porque la plata ya se rindió (caja cerrada o
+     * liquidación): dónde se corrige. Los ajustes los registra sólo la dueña
+     * (`puedeRegistrarAjuste`), en Liquidaciones.
+     */
+    corregirConAjuste: {
+      titulo: "No se puede reactivar: el cobro ya se cerró",
+      /** Para quien registra ajustes. */
+      registraLo: "Si hay que devolver o corregir plata, registra un ajuste en Liquidaciones, en «Adelantos, vales y ajustes».",
+      /** Para quien no. */
+      pideloALaDuena: "Si hay que devolver o corregir plata, pídele a la dueña que registre un ajuste en Liquidaciones.",
+      enlace: "Ir a Liquidaciones",
+    },
 
     /** La línea de debajo del título: "Cargando...", "Sin citas en este período", "3 citas en este período". */
     resumenDelPeriodo: (cargando: boolean, cantidad: number): string => {

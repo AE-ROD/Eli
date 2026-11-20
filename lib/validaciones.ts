@@ -73,6 +73,19 @@ const nombreSchema = (campo: string) =>
     .min(2, `El ${campo} tiene que tener al menos 2 caracteres`)
     .max(LARGO_MAXIMO_NOMBRE, `El ${campo} puede tener hasta ${LARGO_MAXIMO_NOMBRE} caracteres`)
 
+/**
+ * Un apellido que se puede dejar en blanco: ausente, `null`, vacío o de puros
+ * espacios es "". Si se escribe, las mismas reglas que `nombreSchema`.
+ */
+const apellidoOpcionalSchema = z.preprocess(
+  (valor) => (valor === undefined || valor === null ? "" : valor),
+  z
+    .string({ invalid_type_error: "El apellido no es válido" })
+    .trim()
+    .max(LARGO_MAXIMO_NOMBRE, `El apellido puede tener hasta ${LARGO_MAXIMO_NOMBRE} caracteres`)
+    .refine((apellido) => apellido === "" || apellido.length >= 2, "El apellido tiene que tener al menos 2 caracteres")
+)
+
 /** Un texto opcional de hasta `maximo` caracteres. */
 const opcionalHasta = (campo: string, maximo: number) =>
   z
@@ -259,7 +272,9 @@ export const listaDeEsperaSchema = z
     profesionalId: camposDeReservaSchema.shape.profesionalId,
     fecha: camposDeReservaSchema.shape.fecha,
     nombre: nombreSchema("nombre"),
-    apellido: nombreSchema("apellido"),
+    // Opcional: para avisar que se liberó una hora basta el nombre y el correo.
+    // Sin apellido (ausente, null o vacío) sale "", que es lo que guarda la base.
+    apellido: apellidoOpcionalSchema,
     email: correoPublicoSchema,
     telefono: camposDeReservaSchema.shape.telefono,
     whatsappConsentimiento: camposDeReservaSchema.shape.whatsappConsentimiento,

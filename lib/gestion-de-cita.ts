@@ -14,6 +14,8 @@ import { SELECCION_DE_LA_SEDE_DE_LA_CITA, lugarDeLaSede, type LugarDeLaReserva }
 import { whereDelHorarioDeLaSede } from "@/lib/sedes"
 import { SELECCION_DE_SERVICIOS_DE_LA_CITA } from "@/lib/servicios-de-la-reserva"
 import { hashDeToken } from "@/lib/tokens"
+import { enlaceDeWhatsapp, enlacesDeMapa } from "@/lib/pagina-del-negocio"
+import { aE164Chile, mostrarTelefono } from "@/lib/telefono"
 import { conMayuscula } from "@/lib/vocabulario"
 
 /**
@@ -101,12 +103,22 @@ export function plazoParaQuienReserva(horasAntes: number, rubro?: string | null)
   return `Puedes cancelar o cambiar hasta ${plazo} ${plazo === 1 ? "hora" : "horas"} antes.`
 }
 
-/** "…Contacta al local." en un rubro desconocido, "…Contacta al salón." o "…Contacta a la clínica." en los demás. */
-export function mensajeFueraDePlazo(horasAntes: number, rubro?: string | null): string {
+/**
+ * "Contacta al local." y, si el negocio tiene un WhatsApp que se puede leer,
+ * cómo: "Contacta al local por WhatsApp al +56 9 1234 5678." `whatsapp` es el
+ * número PÚBLICO del negocio (`Business.whatsapp`, el de su página).
+ */
+function contactaAlLocal(rubro: string | null | undefined, whatsapp: string | null | undefined): string {
   const { local } = palabrasDeLaReserva(rubro)
+  const numero = aE164Chile(whatsapp)
+  return numero ? `Contacta ${al(local)} por WhatsApp al ${mostrarTelefono(numero)}.` : `Contacta ${al(local)}.`
+}
+
+/** "…Contacta al local." en un rubro desconocido, "…Contacta al salón." o "…Contacta a la clínica." en los demás; con WhatsApp, también el número. */
+export function mensajeFueraDePlazo(horasAntes: number, rubro?: string | null, whatsapp?: string | null): string {
   return horasAntes === 1
-    ? `Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta ${al(local)}.`
-    : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. Contacta ${al(local)}.`
+    ? `Ya no se puede cambiar por acá: falta menos de 1 hora. ${contactaAlLocal(rubro, whatsapp)}`
+    : `Ya no se puede cambiar por acá: se puede hasta ${horasAntes} horas antes. ${contactaAlLocal(rubro, whatsapp)}`
 }
 
 /**
@@ -114,14 +126,14 @@ export function mensajeFueraDePlazo(horasAntes: number, rubro?: string | null): 
  * por el enlace: "Este servicio ya no se reserva por acá. Contacta al local.",
  * y con las palabras del rubro, "Este motivo… Contacta a la clínica."
  */
-export function mensajeServicioYaNoSeReserva(rubro?: string | null): string {
-  const { servicioDeLaReserva, local } = palabrasDeLaReserva(rubro)
-  return `${conMayuscula(este(servicioDeLaReserva))} ya no se reserva por acá. Contacta ${al(local)}.`
+export function mensajeServicioYaNoSeReserva(rubro?: string | null, whatsapp?: string | null): string {
+  const { servicioDeLaReserva } = palabrasDeLaReserva(rubro)
+  return `${conMayuscula(este(servicioDeLaReserva))} ya no se reserva por acá. ${contactaAlLocal(rubro, whatsapp)}`
 }
 
-/** Lo que se dice si ya no hay quién pueda tomar la reserva: "No hay horas para reagendar por acá. Contacta al local." */
-export function mensajeSinHorasParaReagendar(rubro?: string | null): string {
-  return `No hay horas para reagendar por acá. Contacta ${al(palabrasDeLaReserva(rubro).local)}.`
+/** Lo que se dice si ya no hay quién pueda tomar la reserva: "No hay horas para reagendar por acá. Contacta al local." (con WhatsApp, también el número). */
+export function mensajeSinHorasParaReagendar(rubro?: string | null, whatsapp?: string | null): string {
+  return `No hay horas para reagendar por acá. ${contactaAlLocal(rubro, whatsapp)}`
 }
 
 /** El `where` de la cita del enlace: hash del token, negocio del slug, estado gestionable y sin atención viva. */
@@ -188,6 +200,11 @@ const SELECCION = {
       cancelacionHorasAntes: true,
       // El rubro: en una clínica dental, una urgencia sólo se mueve a hoy.
       type: true,
+      // Lo público de su página, para que quien tiene el enlace sepa cómo
+      // contactarlo y llegar: el WhatsApp, la dirección y la comuna.
+      whatsapp: true,
+      address: true,
+      comuna: true,
       user: { select: { email: true } },
     },
   },
@@ -202,6 +219,38 @@ export type CitaDelEnlace = Prisma.AppointmentGetPayload<{ select: typeof SELECC
  */
 export function lugarDeLaCitaDelEnlace(cita: Pick<CitaDelEnlace, "sede">): LugarDeLaReserva | null {
   return cita.sede ? lugarDeLaSede(cita.sede) : null
+}
+
+/** Cómo contactar al negocio y llegar, tal como lo publica su página. */
+export interface ContactoDelNegocio {
+  /** `https://wa.me/569…`, o null sin un número que se pueda leer. */
+  enlaceWhatsapp: string | null
+  /** El mismo número para leerlo: "+56 9 1234 5678", o null. */
+  whatsapp: string | null
+  /** La dirección y la comuna del negocio (recortadas), o null. */
+  direccion: string | null
+  comuna: string | null
+  /** "Cómo llegar" a esa dirección (Google Maps y Waze), o null sin calle. */
+  mapas: { googleMaps: string; waze: string } | null
+}
+
+/**
+ * El contacto PÚBLICO del negocio de la cita: sólo lo que ya muestra su página
+ * (`/reservar/<slug>`), nunca el correo de la dueña.
+ */
+export function contactoDelNegocio(
+  negocio: Pick<CitaDelEnlace["business"], "whatsapp" | "address" | "comuna">
+): ContactoDelNegocio {
+  const numero = aE164Chile(negocio.whatsapp)
+  const direccion = negocio.address?.trim() || null
+  const comuna = negocio.comuna?.trim() || null
+  return {
+    enlaceWhatsapp: enlaceDeWhatsapp(negocio.whatsapp),
+    whatsapp: numero ? mostrarTelefono(numero) : null,
+    direccion,
+    comuna,
+    mapas: enlacesDeMapa(direccion, comuna),
+  }
 }
 
 /**

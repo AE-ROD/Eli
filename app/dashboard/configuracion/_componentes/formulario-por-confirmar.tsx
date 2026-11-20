@@ -9,6 +9,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { GuiaPlegable } from "@/components/panel/guia-plegable"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import {
   DIAS_EN_QUE_CUENTAN_LAS_FALTAS,
@@ -98,8 +99,9 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
 
       <div className="mt-5">
         <Interruptor
-          etiqueta="Pedir confirmación tras faltas"
-          descripcion={`Si quien reserva por tu página faltó varias veces en el último año (${DIAS_EN_QUE_CUENTAN_LAS_FALTAS} días), la reserva entra "por confirmar" y tú o tu encargado la confirman o cancelan en la agenda. A esa persona le avisamos por correo que confirmarás su reserva; la página no le dice nada distinto.`}
+          // Con el número que vale hoy: lo guardado, o lo que se propone al encenderlo.
+          etiqueta={frases.etiqueta(guardadas ?? FALTAS_SUGERIDAS)}
+          descripcion={frases.descripcion}
           activo={encendido}
           alCambiar={cambiarInterruptor}
         />
@@ -109,7 +111,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
         <form onSubmit={guardarNumero} className="mt-5 flex flex-wrap items-end gap-3">
           <div className="min-w-0 space-y-2">
             <label htmlFor={idDelCampo} className={CLASES_DE_ETIQUETA}>
-              Faltas para pedir confirmación
+              {frases.campo}
             </label>
             <input
               id={idDelCampo}
@@ -141,6 +143,13 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
           </p>
         </form>
       )}
+
+      {/* El detalle de cómo se cuentan, para quien lo quiera leer. */}
+      <GuiaPlegable
+        titulo={frases.detalle.titulo}
+        pasos={frases.detalle.pasos(DIAS_EN_QUE_CUENTAN_LAS_FALTAS)}
+        className="mt-5"
+      />
 
       <p role="status" className="sr-only">
         {anuncio}

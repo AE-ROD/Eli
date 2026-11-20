@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { AccesoConGoogle } from "../_componentes/acceso-con-google"
-import { AvisoDeError } from "../_componentes/aviso-de-error"
+import { AvisoDeError, enlaceDeAyuda } from "../_componentes/aviso-de-error"
 import { AvisoDeExito } from "../_componentes/aviso-de-exito"
 import { avisoDeAcceso, mensajeDeErrorAlEntrar, mensajeDeErrorDeAcceso } from "../_componentes/errores-de-acceso"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../_componentes/marco-de-acceso"
@@ -123,7 +123,9 @@ export default function PaginaIniciarSesion() {
           </div>
         </div>
 
-        <AvisoDeError mensaje={error} />
+        <AvisoDeError mensaje={error}>
+          {enlaceDeAyuda(error)}
+        </AvisoDeError>
 
         <Boton type="submit" tamano="lg" cargando={cargando} className="w-full">
           Iniciar sesión

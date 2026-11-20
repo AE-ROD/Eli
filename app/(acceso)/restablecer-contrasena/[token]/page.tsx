@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { restablecerContrasena } from "../../_datos"
-import { AvisoDeError } from "../../_componentes/aviso-de-error"
+import { AvisoDeError, enlaceDeAyuda } from "../../_componentes/aviso-de-error"
 import { borrarSiEs, CONTRASENA_CORTA, CONTRASENAS_DISTINTAS } from "../../_componentes/errores-de-validacion"
 import { MarcoDeAcceso, PreguntaConEnlace } from "../../_componentes/marco-de-acceso"
 
@@ -88,7 +88,9 @@ export default function PaginaRestablecerContrasena() {
           required
         />
 
-        <AvisoDeError mensaje={error} visible={!errorDeContrasena && !errorDeConfirmacion} />
+        <AvisoDeError mensaje={error} visible={!errorDeContrasena && !errorDeConfirmacion}>
+          {enlaceDeAyuda(error)}
+        </AvisoDeError>
 
         <Boton type="submit" tamano="lg" cargando={cargando} className="w-full">
           Guardar contraseña

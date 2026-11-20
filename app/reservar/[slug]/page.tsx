@@ -12,7 +12,7 @@ import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
 import { ANCLA_DE_RESERVA, MiniPagina } from "./_pagina/mini-pagina"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
-import { contactoDelNegocio } from "./_componentes/contactar-al-negocio"
+import { contactoDelNegocio } from "./_contacto"
 import { PieDeEli } from "./_componentes/pie-de-eli"
 import { frasesDeLaPagina, pestanaDeLaReserva, tituloDeLaReserva } from "./_frases"
 

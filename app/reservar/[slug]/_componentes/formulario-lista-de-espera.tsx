@@ -5,7 +5,7 @@ import { BellRing, Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
-import { frasesDeLaListaDeEspera } from "../_frases"
+import { CASILLA_DE_WHATSAPP, frasesDeLaListaDeEspera } from "../_frases"
 import { inscribirEnListaDeEspera } from "../_datos"
 
 interface PropsDeFormularioListaDeEspera {
@@ -78,7 +78,8 @@ export function FormularioListaDeEspera({
         className="outline-none flex items-start gap-2 rounded-boton-lg bg-superficie px-4 py-3 text-sm text-navy squircle">
         <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={2} />
         <span>
-          {frases.listo(fechaParaLeer)} <strong className="font-medium break-all">{email}</strong>.
+          {frases.listo(fechaParaLeer)} <strong className="font-medium break-all">{email}</strong>.{" "}
+          {frases.revisaSpam}
         </span>
       </p>
     )
@@ -134,11 +135,10 @@ export function FormularioListaDeEspera({
           required
         />
         <CampoFormulario
-          etiqueta="Apellido"
+          etiqueta="Apellido (opcional)"
           autoComplete="family-name"
           value={apellido}
           onChange={(e) => setApellido(e.target.value)}
-          required
         />
       </div>
       <CampoFormulario
@@ -161,8 +161,8 @@ export function FormularioListaDeEspera({
       {/*
         Sólo con teléfono: sin número no hay a dónde escribir. Nada viene
         marcado. Es el mismo consentimiento que pide la reserva, con las mismas
-        palabras: el aviso de esta lista llega por correo (WhatsApp todavía no
-        manda nada), así que no se promete por ahí.
+        palabras (`CASILLA_DE_WHATSAPP`): el aviso de esta lista llega por correo
+        (WhatsApp todavía no manda nada), así que no se promete por ahí.
       */}
       {telefono.trim() && (
         <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-navy">
@@ -172,7 +172,7 @@ export function FormularioListaDeEspera({
             onChange={(e) => setWhatsapp(e.target.checked)}
             className="size-4 shrink-0 accent-navy anillo-foco"
           />
-          Quiero recibir recordatorios por WhatsApp
+          {CASILLA_DE_WHATSAPP}
         </label>
       )}
       {error && (

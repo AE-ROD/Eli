@@ -100,7 +100,7 @@ export function FormularioHoraValle({
     // Al encender o apagar se mandan las guardadas: si había franjas a medio
     // editar (o se editó mientras se guardaba), se quedan como estaban.
     setFranjas((previas) => (igual(previas, nuevasFranjas) ? resultado.datos.franjas : previas))
-    setAnuncio(resultado.datos.activa ? "Hora valle: guardado" : "Hora valle: apagada")
+    setAnuncio(`${frases.titulo}: ${resultado.datos.activa ? "guardado" : "apagado"}`)
   }
 
   // Al encender o apagar se guardan las franjas que ya estaban guardadas: lo
@@ -119,7 +119,7 @@ export function FormularioHoraValle({
     if (!resultado.ok) return setError(resultado.error)
     // Con la lista de ahora, no la de cuando se tocó: marcar dos seguidos no deshace el primero.
     setServicios((previos) => previos.map((s) => (s.id === servicio.id ? { ...s, excluido: resultado.datos.excluido } : s)))
-    setAnuncio(`${servicio.nombre}: ${resultado.datos.excluido ? "sin rebaja" : "con rebaja"}`)
+    setAnuncio(`${servicio.nombre}: ${resultado.datos.excluido ? "sin descuento" : "con descuento"}`)
   }
 
   return (
@@ -127,14 +127,14 @@ export function FormularioHoraValle({
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
-        titulo="Precios de hora valle"
-        subtitulo="Llena las horas más tranquilas"
+        titulo={frases.titulo}
+        subtitulo={frases.subtitulo}
         icono={{ figura: Percent }}
       />
 
       <div className="mt-5">
         <Interruptor
-          etiqueta="Rebajar las horas valle"
+          etiqueta={frases.interruptor}
           descripcion={frases.descripcion}
           activo={activa}
           alCambiar={cambiarInterruptor}
@@ -156,13 +156,14 @@ export function FormularioHoraValle({
             }}
             className="mt-6 space-y-4"
           >
-            <p className={CLASES_DE_ETIQUETA}>Franjas</p>
+            <p className={CLASES_DE_ETIQUETA}>Horarios con descuento</p>
             {franjas.length === 0 && (
-              <p className="text-sm text-texto-2">Todavía no hay franjas: agrega una para que se note la rebaja.</p>
+              <p className="text-sm text-texto-2">Todavía no hay horarios: agrega uno para que se note el descuento.</p>
             )}
             <ul className="space-y-3">
               {franjas.map((franja, indice) => {
                 const id = `${idBase}-${indice}`
+                const ejemplo = frases.ejemplo(franja.porcentaje)
                 return (
                   <li key={indice} className="flex flex-wrap items-end gap-3 rounded-campo bg-superficie p-3 squircle">
                     <div className="min-w-0 space-y-1">
@@ -208,7 +209,7 @@ export function FormularioHoraValle({
                     </div>
                     <div className="min-w-0 space-y-1">
                       <label htmlFor={`${id}-porcentaje`} className="block text-xs text-texto-2">
-                        % menos
+                        {frases.porcentaje}
                       </label>
                       <input
                         id={`${id}-porcentaje`}
@@ -219,15 +220,22 @@ export function FormularioHoraValle({
                         step={1}
                         value={Number.isNaN(franja.porcentaje) ? "" : franja.porcentaje}
                         onChange={(evento) => cambiarFranja(indice, { porcentaje: evento.target.valueAsNumber })}
+                        aria-describedby={ejemplo ? `${id}-ejemplo` : undefined}
                         className={cn(CAMPO, "w-24")}
                       />
                     </div>
                     <BotonIcono
-                      etiqueta={`Quitar la franja del ${DIAS[franja.dayOfWeek]?.toLowerCase() ?? ""}`}
+                      etiqueta={`Quitar el horario del ${DIAS[franja.dayOfWeek]?.toLowerCase() ?? ""}`}
                       icono={<Trash2 />}
                       tamano="sm"
                       onClick={() => setFranjas((previas) => previas.filter((_, i) => i !== indice))}
                     />
+                    {/* El ejemplo en vivo: cuánto queda un precio redondo con este %. */}
+                    {ejemplo && (
+                      <p id={`${id}-ejemplo`} className="w-full text-[13px] text-texto-2">
+                        {ejemplo}
+                      </p>
+                    )}
                   </li>
                 )
               })}
@@ -241,7 +249,7 @@ export function FormularioHoraValle({
                 disabled={franjas.length >= MAX_FRANJAS_DE_HORA_VALLE}
                 onClick={() => setFranjas((previas) => [...previas, FRANJA_SUGERIDA])}
               >
-                Agregar franja
+                Agregar horario
               </BotonPrimario>
               <BotonPrimario
                 type="submit"
@@ -250,12 +258,12 @@ export function FormularioHoraValle({
                 cargando={guardando}
                 variante={pendiente ? "primario" : "secundario"}
               >
-                {pendiente ? "Guardar franjas" : "Guardado"}
+                {pendiente ? "Guardar horarios" : "Guardado"}
               </BotonPrimario>
             </div>
             <p className="text-sm text-texto-2">
               De {PORCENTAJE_MINIMO_DE_HORA_VALLE}% a {PORCENTAJE_MAXIMO_DE_HORA_VALLE}%, hasta{" "}
-              {MAX_FRANJAS_DE_HORA_VALLE} franjas, sin que se pisen en el mismo día. El precio se redondea al peso.
+              {MAX_FRANJAS_DE_HORA_VALLE} horarios, sin que se crucen en el mismo día. El precio se redondea al peso.
             </p>
           </form>
 

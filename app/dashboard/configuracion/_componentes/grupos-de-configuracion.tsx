@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react"
+import { Insignia } from "@/components/comunes/insignia"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { SeccionColapsable } from "@/components/panel/seccion-colapsable"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -24,7 +25,9 @@ export interface SeccionDeConfiguracion {
  * Las secciones de Configuración en grupos que se pliegan (`_grupos.ts`).
  * `page.tsx` sigue consultando y filtrando por rol y rubro en el servidor, y
  * pasa acá sólo las secciones visibles; este componente las reparte, abre el
- * primer grupo y pliega los demás, y se ocupa de las anclas de la URL.
+ * primer grupo y pliega los demás, y se ocupa de las anclas de la URL. Los
+ * grupos con lo esencial para empezar llevan «Recomendado»; lo opcional queda
+ * al final, en «Más adelante», plegado.
  *
  * Se pueden abrir varios grupos a la vez y no se recuerda cuáles entre
  * visitas. El contenido de un grupo plegado sigue montado (`SeccionColapsable`),
@@ -82,7 +85,19 @@ export function GruposDeConfiguracion({ secciones }: { secciones: readonly Secci
       {grupos.map((grupo) => (
         <SeccionColapsable
           key={grupo.id}
-          titulo={grupo.titulo}
+          titulo={
+            grupo.recomendado ? (
+              <>
+                {grupo.titulo}
+                <span className="sr-only">:</span>{" "}
+                <Insignia tono="lima" className="ml-1 align-middle">
+                  Recomendado
+                </Insignia>
+              </>
+            ) : (
+              grupo.titulo
+            )
+          }
           descripcion={grupo.resumen}
           abierta={abiertos.has(grupo.id)}
           onAlternar={() => alternar(grupo.id)}

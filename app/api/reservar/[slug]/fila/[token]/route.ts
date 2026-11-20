@@ -58,6 +58,6 @@ export async function POST(request: NextRequest, { params }: Contexto) {
     return NextResponse.json({ mensaje: "Listo. Saliste de la fila." })
   } catch (error) {
     registrarError("sacando a alguien de la fila virtual", error)
-    return NextResponse.json({ error: "No se pudo completar, intenta de nuevo" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   }
 }

@@ -106,13 +106,13 @@ export async function POST(request: NextRequest, contexto: Params) {
 
   const plazo = cita.business.cancelacionHorasAntes
   if (!dentroDelPlazo(cita.startTime, plazo, ahora)) {
-    return NextResponse.json({ error: mensajeFueraDePlazo(plazo, cita.business.type) }, { status: 409 })
+    return NextResponse.json({ error: mensajeFueraDePlazo(plazo, cita.business.type, cita.business.whatsapp) }, { status: 409 })
   }
   const servicios = serviciosDeLaCita(cita)
   // La mayor entre la suma de las filas y lo que dura hoy (`duracionAlReagendar`).
   const duracion = duracionAlReagendar(cita, servicios)
   if (!servicios.activos || duracion === null) {
-    return NextResponse.json({ error: mensajeServicioYaNoSeReserva(cita.business.type) }, { status: 409 })
+    return NextResponse.json({ error: mensajeServicioYaNoSeReserva(cita.business.type, cita.business.whatsapp) }, { status: 409 })
   }
 
   // Con quién: el mismo, cualquiera o uno que se revalida acá (nunca se le cree al navegador).
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest, contexto: Params) {
     sedeId: cita.sedeId,
   })
   if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ error: mensajeSinHorasParaReagendar(cita.business.type) }, { status: 409 })
+    return NextResponse.json({ error: mensajeSinHorasParaReagendar(cita.business.type, cita.business.whatsapp) }, { status: 409 })
   }
   // Sólo una hora de la grilla que ofrece la disponibilidad (#46).
   const candidatos = candidatosQueOfrecen(reserva.candidatos, hora, duracion)

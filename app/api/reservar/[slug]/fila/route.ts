@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { MENSAJE_DATOS_INVALIDOS, MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_DEMASIADO_LARGO, MENSAJE_ERROR_INTERNO } from "@/app/api/reservar/_mensajes"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
-import { enlaceDelTurno } from "@/lib/fila-virtual"
+import { enviarTurnoEnLaFila } from "@/lib/email"
+import { enlaceDelTurno, primerNombre } from "@/lib/fila-virtual"
 import { anotarseEnLaFila, negocioDeLaFila } from "@/lib/fila-virtual-servidor"
 import { prisma } from "@/lib/prisma"
 import { devolverLimite, obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
+import { urlBase } from "@/lib/url-base"
 import { hayVariasSedes, leerSedesDeLaReserva } from "@/lib/sede-de-la-reserva"
 import { filaVirtualSchema } from "@/lib/validaciones"
 
@@ -27,7 +29,10 @@ import { filaVirtualSchema } from "@/lib/validaciones"
  * - Local cerrado en este momento, o fila llena (tope del negocio): 409 con
  *   el motivo, que la persona puede leer en el local.
  * - Al anotarse: 201 con el número de turno y el enlace a su turno
- *   (`/fila/[slug]/[token]`). El token viaja sólo acá; la base guarda su hash.
+ *   (`/fila/[slug]/[token]`). El token viaja sólo acá y, si dejó su correo, en
+ *   el correo "Tu lugar en la fila" (`enviarTurnoEnLaFila`); la base guarda su
+ *   hash. Ese correo sale una vez por anotarse, así que lo acotan los mismos
+ *   dos límites de arriba.
  */
 
 const NO_ENCONTRADO = () => NextResponse.json({ error: "No encontrado" }, { status: 404 })
@@ -70,6 +75,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       case "llena":
         return NextResponse.json({ error: MENSAJE_LLENA }, { status: 409 })
       case "anotada":
+        if (datos.data.email) {
+          await mandarCorreoDelTurno({
+            negocio,
+            email: datos.data.email,
+            nombre: datos.data.nombre,
+            numero: resultado.numero,
+            ruta: enlaceDelTurno(negocio.slug, resultado.token),
+          })
+        }
         return NextResponse.json(
           {
             numero: resultado.numero,
@@ -84,5 +98,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } finally {
     // Cerrada, llena o un error: no quedó anotada, el cupo vuelve al balde.
     if (!anotada) await devolverLimite("filaVirtualPorNegocio", negocio.id)
+  }
+}
+
+/**
+ * El correo "Tu lugar en la fila", con el enlace completo a su turno. Nunca
+ * lanza: la persona ya quedó anotada y la respuesta le muestra el enlace
+ * igual. Sin `NEXTAUTH_URL` en producción (`urlBase` lanza) no hay enlace que
+ * mandar: se registra y no se manda. Del negocio se lee sólo su WhatsApp
+ * público, por su id.
+ */
+async function mandarCorreoDelTurno({
+  negocio,
+  email,
+  nombre,
+  numero,
+  ruta,
+}: {
+  negocio: { id: string; name: string; type: string }
+  email: string
+  nombre: string
+  numero: number
+  ruta: string
+}): Promise<void> {
+  try {
+    const enlaceTurno = `${urlBase()}${ruta}`
+    const contacto = await prisma.business.findUnique({ where: { id: negocio.id }, select: { whatsapp: true } })
+    const resultado = await enviarTurnoEnLaFila({
+      rubro: negocio.type,
+      emailCliente: email,
+      // Sólo el primer nombre, como el aviso "Ya casi es tu turno": lo escribió un anónimo.
+      nombreCliente: primerNombre(nombre),
+      nombreNegocio: negocio.name,
+      numero,
+      enlaceTurno,
+      whatsapp: contacto?.whatsapp ?? null,
+    })
+    // Sólo el código de Resend: su mensaje puede repetir el destinatario.
+    if (resultado?.error) console.error("Error enviando el correo del turno en la fila:", { name: resultado.error.name })
+  } catch (error) {
+    registrarError("enviando el correo del turno en la fila", error)
   }
 }

@@ -511,7 +511,8 @@ export default function PaginaClientes() {
         {aEliminar && (
           <ModalConfirmar
             titulo={`¿Eliminar a ${aEliminar.nombre}?`}
-            descripcion="Se borran sus datos personales y no se pueden recuperar."
+            // Lo que hace de verdad el DELETE (app/api/clientes/[id]): anonimiza, no cancela nada ni borra cobros.
+            descripcion="Se borran sus datos personales y no se pueden recuperar. Lo agendado y lo cobrado no se borra: queda en la agenda y en los reportes a nombre de “Cliente eliminado”. Lo que tenga agendado para más adelante no se cancela solo: si ya no viene, cancélalo en la agenda."
             textoConfirmar={frases.eliminar.boton}
             textoCancelar="No eliminar"
             peligro

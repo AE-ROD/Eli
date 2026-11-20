@@ -267,6 +267,8 @@ export function frasesDeLaGestion(rubro: Rubro) {
   return {
     /** El antetítulo y el título de la pestaña: "Tu cita" / "Tu hora". */
     tuCita: `Tu ${cita.singular}`,
+    /** El negocio cuando no se sabe su nombre (el enlace que no sirve): "el local" / "el salón" / "la clínica". */
+    elLocal: el(local),
     /** Lo que lee el lector de pantalla mientras carga. */
     cargando: `Cargando tu ${cita.singular}...`,
     /** El enlace que no sirve: "El enlace no es válido, o la cita ya pasó o se canceló. Si necesitas algo, contacta directamente al local." */

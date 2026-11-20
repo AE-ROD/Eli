@@ -7,6 +7,8 @@ import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { Tarjeta } from "@/components/comunes/tarjeta"
 import { EncabezadoDeReserva } from "@/app/reservar/[slug]/_componentes/encabezado-de-reserva"
+import { GuardarEnlace } from "@/app/reservar/[slug]/_componentes/guardar-enlace"
+import { mensajeParaQuienReserva } from "@/app/reservar/[slug]/_datos"
 import { frasesDeLaFila } from "@/app/reservar/[slug]/_frases"
 import { POLLING_DEL_CELULAR_MS } from "@/lib/fila-virtual"
 import { pedir, pedirConCodigo } from "@/lib/peticiones"
@@ -78,7 +80,8 @@ export function MiTurno({ slug, token, rubro = null }: { slug: string; token: st
     } else if (resultado.codigo === 404) {
       setNoExiste(true)
     } else {
-      setError(`${resultado.error}. Se vuelve a intentar solo.`)
+      const mensaje = mensajeParaQuienReserva(resultado.error, "No pudimos actualizar tu turno")
+      setError(`${mensaje.replace(/\.$/, "")}. Se vuelve a intentar solo.`)
     }
   }, [url])
 
@@ -103,10 +106,11 @@ export function MiTurno({ slug, token, rubro = null }: { slug: string; token: st
 
   const salir = async () => {
     setSaliendo(true)
-    const resultado = await pedir(url, "No se pudo salir de la fila, intenta de nuevo", { method: "POST" })
+    const siFalla = "No pudimos sacarte de la fila. Vuelve a intentar en un minuto."
+    const resultado = await pedir(url, siFalla, { method: "POST" })
     setSaliendo(false)
     setConfirmando(false)
-    if (!resultado.ok) return setError(resultado.error)
+    if (!resultado.ok) return setError(mensajeParaQuienReserva(resultado.error, siFalla))
     await cargar()
   }
 
@@ -166,6 +170,19 @@ export function MiTurno({ slug, token, rubro = null }: { slug: string; token: st
         {error && (
           <div role="alert" className="w-full">
             <ErrorDeCampo id={idDelError}>{error}</ErrorDeCampo>
+          </div>
+        )}
+
+        {/* Mientras espera: guardar el enlace del turno, para volver si cierra la página. */}
+        {esperando && (
+          <div className="w-full text-left">
+            <p className="text-sm font-medium text-navy">{frases.guardarTurno.explicacion}</p>
+            <GuardarEnlace
+              className="mt-3"
+              ruta={`/fila/${encodeURIComponent(slug)}/${encodeURIComponent(token)}`}
+              textoDeCopiar={frases.guardarTurno.copiar}
+              mensaje={(enlace) => frases.guardarTurno.mensaje(turno.negocio, enlace)}
+            />
           </div>
         )}
 

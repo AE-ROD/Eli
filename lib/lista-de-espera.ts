@@ -153,6 +153,7 @@ export interface DatosDeInscripcion {
   profesionalId?: string | null
   fecha: string
   nombre: string
+  /** Opcional para quien se anota: sin apellido llega "" (la columna no acepta null). */
   apellido: string
   email: string
   /** Ya en E.164, o null. */
@@ -422,7 +423,8 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
 
     const negocio = await prisma.business.findUnique({
       where: { id: liberada.businessId },
-      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true, type: true },
+      // `whatsapp`: el número público de su página, para "Escribir por WhatsApp" en el aviso.
+      select: { id: true, name: true, slug: true, timezone: true, listaDeEsperaActiva: true, type: true, whatsapp: true },
     })
     if (!negocio?.listaDeEsperaActiva) return resumen
 
@@ -550,6 +552,7 @@ export async function avisarHoraLiberada(liberada: HoraLiberada, ahora = new Dat
             servicio: fila.service?.name ?? "",
             profesional: fila.memberId ? (nombreDelProfesional.get(fila.memberId) ?? null) : null,
             fecha,
+            whatsapp: negocio.whatsapp,
             // Adentro de `enviar`: si los enlaces no se pueden armar (sin
             // NEXTAUTH_URL o NEXTAUTH_SECRET en producción), `enviarAClientes`
             // lo registra, lo cuenta como fallido y suelta el candado; el resto
