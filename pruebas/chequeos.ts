@@ -67,6 +67,12 @@ export const TABLAS_SQL: Record<NombreDeModelo, string> = {
   pagoAlLaboratorio: "pagos_al_laboratorio",
   sede: "sedes",
   workerInvitation: "invitaciones",
+  canalDeWhatsapp: "canales_de_whatsapp",
+  ajustesDeSecretaria: "ajustes_de_secretaria",
+  conversacionDeSecretaria: "conversaciones_de_secretaria",
+  mensajeDeSecretaria: "mensajes_de_secretaria",
+  consumoDeSecretaria: "consumo_de_secretaria",
+  avisoDelPanel: "avisos_del_panel",
 }
 
 // ─── Lógica de tres valores, como SQL ────────────────────────────────────────
@@ -184,6 +190,14 @@ const repartoOpcional = (odontologo: unknown, clinica: unknown, tecnico: unknown
 const chequeo = (nombre: string, cumple: (fila: Registro) => Logico): Chequeo => ({ nombre, cumple })
 
 export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
+  // Secretaria Eli (`20261120120000_secretaria_eli`).
+  conversacionDeSecretaria: [
+    chequeo("conversaciones_de_secretaria_estado_check", (f) => EN(f.estado, ["bot", "human", "closed"])),
+  ],
+  mensajeDeSecretaria: [chequeo("mensajes_de_secretaria_rol_check", (f) => EN(f.rol, ["user", "assistant"]))],
+  avisoDelPanel: [
+    chequeo("avisos_del_panel_tipo_check", (f) => EN(f.tipo, ["derivacion", "presupuesto-80", "presupuesto-100"])),
+  ],
   // ─── 20260907190000_add_commissions, 20261105120000_cierre_de_la_v1 ───────
   businessMember: [
     chequeo("miembros_negocio_commissionPercent_check", (f) => NULO_O_ENTRE(f.commissionPercent, 0, 100)),
@@ -203,7 +217,8 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
         (esNulo(f.commissionPercent) && esNulo(f.commissionAmount) && esNulo(f.commissionAt)) ||
         (noNulo(f.commissionPercent) && noNulo(f.commissionAmount) && noNulo(f.commissionAt))
     ),
-    chequeo("citas_source_check", (f) => EN(f.source, ["panel", "reserva-publica"])),
+    // `whatsapp` desde `20261120120000_secretaria_eli`.
+    chequeo("citas_source_check", (f) => EN(f.source, ["panel", "reserva-publica", "whatsapp"])),
     chequeo("citas_status_check", (f) =>
       EN(f.status, ["pendiente", "confirmada", "en-progreso", "completada", "cancelada", "no-asistio"])
     ),

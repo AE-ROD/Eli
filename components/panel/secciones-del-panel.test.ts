@@ -40,8 +40,8 @@ describe("seccionDeLaRuta", () => {
     expect(seccionDeLaRuta("/dashboard/reportes/")?.id).toBe("reportes")
   })
 
-  it("configuración y ayuda son secciones neutras", () => {
-    for (const ruta of ["/dashboard/configuracion", "/dashboard/ayuda"]) {
+  it("configuración, ayuda y la Secretaria son secciones neutras", () => {
+    for (const ruta of ["/dashboard/configuracion", "/dashboard/ayuda", "/dashboard/secretaria"]) {
       const seccion = seccionDeLaRuta(ruta)
       expect(seccion).not.toBeNull()
       expect(seccion?.modulo).toBeUndefined()
@@ -74,6 +74,7 @@ describe("SECCIONES_DEL_PANEL", () => {
       "caja",
       "liquidaciones",
       "comisiones",
+      "secretaria",
       "configuracion",
       "ayuda",
     ])

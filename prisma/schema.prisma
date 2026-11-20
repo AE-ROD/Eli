@@ -159,49 +159,56 @@ model Business {
   /// "independiente" a los negocios que no tenían integrantes ni invitaciones.
   plan String @default("equipo")
 
-  invitados                Business[]                     @relation("Referidos")
-  correosDeCuenta          CorreoDeCuenta[]
-  customers                Customer[]
-  appointments             Appointment[]
-  services                 Service[]
-  workSchedules            WorkSchedule[]
-  conversations            Conversation[]
-  members                  BusinessMember[]
-  invitations              WorkerInvitation[]
-  visits                   Visit[]
-  commissionRates          CommissionRate[]
-  commissionChanges        CommissionChange[]
-  solicitudesDeSoporte     SolicitudDeSoporte[]
-  memberServices           MemberService[]
-  timeBlocks               TimeBlock[]
-  productos                Producto[]
-  propinas                 PropinaDeAtencion[]
-  liquidaciones            Liquidacion[]
-  movimientosDeLiquidacion MovimientoDeLiquidacion[]
-  cierresDeCaja            CierreDeCaja[]
-  inscripcionesEnEspera    InscripcionEnEspera[]
-  enviosAClientes          EnvioAClientes[]
-  serviciosDeCitas         AppointmentService[]
-  franjasDeHoraValle       FranjaDeHoraValle[]
+  invitados                  Business[]                     @relation("Referidos")
+  correosDeCuenta            CorreoDeCuenta[]
+  customers                  Customer[]
+  appointments               Appointment[]
+  services                   Service[]
+  workSchedules              WorkSchedule[]
+  conversations              Conversation[]
+  members                    BusinessMember[]
+  invitations                WorkerInvitation[]
+  visits                     Visit[]
+  commissionRates            CommissionRate[]
+  commissionChanges          CommissionChange[]
+  solicitudesDeSoporte       SolicitudDeSoporte[]
+  memberServices             MemberService[]
+  timeBlocks                 TimeBlock[]
+  productos                  Producto[]
+  propinas                   PropinaDeAtencion[]
+  liquidaciones              Liquidacion[]
+  movimientosDeLiquidacion   MovimientoDeLiquidacion[]
+  cierresDeCaja              CierreDeCaja[]
+  inscripcionesEnEspera      InscripcionEnEspera[]
+  enviosAClientes            EnvioAClientes[]
+  serviciosDeCitas           AppointmentService[]
+  franjasDeHoraValle         FranjaDeHoraValle[]
   // Clínica dental (`type` "odontologia"). Las tablas existen para todo
   // negocio, pero sólo uno dental las usa: lo decide `lib/permisos.ts`.
-  sillones                 Sillon[]
-  fichasClinicas           FichaClinica[]
-  marcasDentales           MarcaDental[]
-  evoluciones              Evolucion[]
-  planesDeTratamiento      PlanDeTratamiento[]
-  etapasDelPlan            EtapaDelPlan[]
-  prestacionesDelPlan      PrestacionDelPlan[]
+  sillones                   Sillon[]
+  fichasClinicas             FichaClinica[]
+  marcasDentales             MarcaDental[]
+  evoluciones                Evolucion[]
+  planesDeTratamiento        PlanDeTratamiento[]
+  etapasDelPlan              EtapaDelPlan[]
+  prestacionesDelPlan        PrestacionDelPlan[]
   // Prótesis (clínica dental, etapa 7).
-  laboratorios             Laboratorio[]
-  materialesDeProtesis     MaterialDeProtesis[]
-  excepcionesDeReparto     ExcepcionDeRepartoDeProtesis[]
-  cambiosDeReparto         CambioDeRepartoDeProtesis[]
-  protesis                 Protesis[]
-  eventosDeProtesis        EventoDeProtesis[]
-  pagosAlLaboratorio       PagoAlLaboratorio[]
+  laboratorios               Laboratorio[]
+  materialesDeProtesis       MaterialDeProtesis[]
+  excepcionesDeReparto       ExcepcionDeRepartoDeProtesis[]
+  cambiosDeReparto           CambioDeRepartoDeProtesis[]
+  protesis                   Protesis[]
+  eventosDeProtesis          EventoDeProtesis[]
+  pagosAlLaboratorio         PagoAlLaboratorio[]
   // Sedes del plan Independiente (etapa 9).
-  sedes                    Sede[]
+  sedes                      Sede[]
+  // Secretaria Eli: el agente de IA que atiende el WhatsApp del negocio.
+  canalDeWhatsapp            CanalDeWhatsapp?
+  ajustesDeSecretaria        AjustesDeSecretaria?
+  conversacionesDeSecretaria ConversacionDeSecretaria[]
+  mensajesDeSecretaria       MensajeDeSecretaria[]
+  consumoDeSecretaria        ConsumoDeSecretaria[]
+  avisosDelPanel             AvisoDelPanel[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -340,9 +347,10 @@ model Customer {
   correoPromoConsentSource String?
   correoPromoBajaAt        DateTime?
 
-  appointments    Appointment[]
-  visits          Visit[]
-  enviosAClientes EnvioAClientes[]
+  appointments               Appointment[]
+  visits                     Visit[]
+  enviosAClientes            EnvioAClientes[]
+  conversacionesDeSecretaria ConversacionDeSecretaria[]
 
   // Clínica dental: la ficha clínica del paciente. Todo con FK compuesta
   // (customerId, businessId) y Cascade.
@@ -1868,4 +1876,146 @@ model Sede {
   @@unique([id, businessId])
   @@unique([businessId, nombre])
   @@map("sedes")
+}
+
+// ─── Secretaria Eli ─────────────────────────────────────────────────────────
+//
+// El agente de IA que atiende el WhatsApp de cada negocio (`lib/secretaria/`).
+// Todo lleva `businessId`: el negocio de un mensaje entrante sale SIEMPRE del
+// `phoneNumberId` del canal, nunca de lo que diga el modelo ni el mensaje.
+
+/// El número de WhatsApp Cloud API del negocio. Uno por negocio. El token de
+/// acceso va cifrado (`lib/secretaria/cifrado.ts`, AES-256-GCM con
+/// `WHATSAPP_TOKEN_KEY`): nunca se guarda ni se devuelve en claro.
+model CanalDeWhatsapp {
+  id                 String   @id @default(cuid())
+  businessId         String   @unique
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// El id del número en Meta: con él se reconoce el negocio de un mensaje entrante.
+  phoneNumberId      String   @unique
+  wabaId             String
+  accessTokenCifrado String
+  activo             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  conversaciones ConversacionDeSecretaria[]
+
+  @@unique([id, businessId])
+  @@map("canales_de_whatsapp")
+}
+
+/// Cómo atiende la Secretaria en un negocio. Sin fila, está apagada.
+model AjustesDeSecretaria {
+  id                         String   @id @default(cuid())
+  businessId                 String   @unique
+  business                   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  activa                     Boolean  @default(false)
+  /// Respuestas de la Secretaria por conversación antes de derivar.
+  maxTurnos                  Int      @default(8)
+  /// Tope de tokens de salida por llamada al modelo.
+  maxTokens                  Int      @default(200)
+  /// Presupuesto mensual en centavos de dólar. Al 100 % la Secretaria se pausa.
+  presupuestoMensualCentavos Int      @default(500)
+  /// Reglas propias del negocio para el system prompt (texto libre, opcional).
+  reglas                     String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@map("ajustes_de_secretaria")
+}
+
+/// Una conversación de WhatsApp (o del simulador del panel) con un número.
+/// Una sola por (negocio, número, simulación): se reabre al volver a escribir.
+model ConversacionDeSecretaria {
+  id                String           @id @default(cuid())
+  businessId        String
+  business          Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// Null en el simulador, que no pasa por Meta.
+  canalId           String?
+  canal             CanalDeWhatsapp? @relation(fields: [canalId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// En E.164 (+569...).
+  telefono          String
+  customerId        String?
+  customer          Customer?        @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// "bot" | "human" | "closed" (CHECK). En "human" la Secretaria no responde.
+  estado            String           @default("bot")
+  /// Respuestas que dio la Secretaria (para `AjustesDeSecretaria.maxTurnos`).
+  turnos            Int              @default(0)
+  simulacion        Boolean          @default(false)
+  motivoDerivacion  String?
+  /// A quién se derivó: un `BusinessMember.id`, o null = la dueña.
+  derivadaAMemberId String?
+  derivadaAt        DateTime?
+  ultimoMensajeAt   DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  mensajes MensajeDeSecretaria[]
+
+  @@unique([id, businessId])
+  @@unique([businessId, telefono, simulacion])
+  @@index([businessId, ultimoMensajeAt])
+  @@map("conversaciones_de_secretaria")
+}
+
+/// Un mensaje de una conversación. `contenido` son los bloques de contenido de
+/// la API de Anthropic (texto, tool_use o tool_result), para rearmar el historial.
+model MensajeDeSecretaria {
+  id             String                   @id @default(cuid())
+  businessId     String
+  business       Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  conversacionId String
+  conversacion   ConversacionDeSecretaria @relation(fields: [conversacionId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// "user" | "assistant" (CHECK).
+  rol            String
+  contenido      Json
+  tokensEntrada  Int                      @default(0)
+  tokensSalida   Int                      @default(0)
+  /// El id del mensaje entrante en WhatsApp: hace idempotente el webhook.
+  waMessageId    String?                  @unique
+  createdAt      DateTime                 @default(now())
+
+  @@index([conversacionId, createdAt])
+  @@map("mensajes_de_secretaria")
+}
+
+/// Lo que gastó la Secretaria de un negocio en un mes (`periodo` "AAAA-MM").
+/// El costo va en microdólares (millonésimas de dólar) para no usar decimales.
+/// Las alertas del 80 % y el 100 % se marcan por mes: el mes nuevo empieza sin ellas.
+model ConsumoDeSecretaria {
+  id                       String    @id @default(cuid())
+  businessId               String
+  business                 Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  periodo                  String
+  tokensEntrada            Int       @default(0)
+  tokensSalida             Int       @default(0)
+  costoMicrodolares        Int       @default(0)
+  mensajesWhatsappEnviados Int       @default(0)
+  alerta80At               DateTime?
+  alerta100At              DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@unique([businessId, periodo])
+  @@map("consumo_de_secretaria")
+}
+
+/// Un aviso para el panel (por ahora, las derivaciones y las alertas de
+/// presupuesto de la Secretaria). `memberId` null = para la dueña.
+model AvisoDelPanel {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  memberId   String?
+  /// "derivacion" | "presupuesto-80" | "presupuesto-100" (CHECK).
+  tipo       String
+  titulo     String
+  cuerpo     String
+  enlace     String?
+  leidoAt    DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([businessId, createdAt])
+  @@map("avisos_del_panel")
 }

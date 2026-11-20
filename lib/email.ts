@@ -111,6 +111,8 @@ type TipoCorreo =
   | "pedir-resena"
   | "reserva-confirmada-por-el-local"
   | "aviso-fila-virtual"
+  | "derivacion-de-secretaria"
+  | "presupuesto-de-secretaria"
   | TipoCorreoDePrueba
 
 /**
@@ -1130,5 +1132,66 @@ export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
     detalle: [["Tu número", String(datos.numero)]],
     destacado: true,
     cierre: html`Acércate ${al(palabrasDelCorreo(datos.rubro).local)} para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
+  })
+}
+
+// ─── Secretaria Eli ─────────────────────────────────────────────────────────
+
+export interface DatosDerivacionDeSecretaria {
+  para: string
+  nombreNegocio: string
+  /** Como la clienta se registró, o null si no alcanzó a dar su nombre. */
+  nombreCliente: string | null
+  /** En E.164, para escribirle o llamarla. */
+  telefono: string
+  motivo: string
+  /** Los últimos mensajes de la conversación, ya en texto plano. */
+  resumen: string
+  enlace: string | null
+}
+
+/** A quien atiende: la Secretaria le pasó una conversación de WhatsApp. */
+export function enviarDerivacionDeSecretaria(datos: DatosDerivacionDeSecretaria) {
+  const detalle: Array<[string, string]> = [
+    ["Clienta", datos.nombreCliente ?? "Sin registrar"],
+    ["Teléfono", datos.telefono],
+    ["Motivo", datos.motivo],
+  ]
+  if (datos.resumen) detalle.push(["Conversación", datos.resumen])
+  return enviar({
+    tipo: "derivacion-de-secretaria",
+    para: datos.para,
+    asunto: asunto`Te pasaron una consulta de WhatsApp — ${datos.nombreCliente ?? datos.telefono}`,
+    titulo: "La Secretaria Eli te pasó una consulta",
+    intro: html`Una clienta de <strong>${datos.nombreNegocio}</strong> necesita que le responda una persona. La Secretaria dejó de contestarle en esa conversación.`,
+    detalle,
+    destacado: true,
+    ...(datos.enlace ? { boton: { texto: "Ver en el panel", enlace: datos.enlace } } : {}),
+    cierre: html`Escríbele o llámala al número de arriba.`,
+  })
+}
+
+export interface DatosPresupuestoDeSecretaria {
+  para: string
+  nombreNegocio: string
+  /** 80 o 100. */
+  porcentaje: number
+  enlace: string | null
+}
+
+/** A la dueña: la Secretaria llegó al 80 % o al 100 % del presupuesto del mes. */
+export function enviarPresupuestoDeSecretaria(datos: DatosPresupuestoDeSecretaria) {
+  const agotado = datos.porcentaje >= 100
+  return enviar({
+    tipo: "presupuesto-de-secretaria",
+    para: datos.para,
+    asunto: agotado
+      ? asunto`La Secretaria Eli se pausó en ${datos.nombreNegocio}`
+      : asunto`La Secretaria Eli usó el 80 % del presupuesto en ${datos.nombreNegocio}`,
+    titulo: agotado ? "La Secretaria se pausó por presupuesto" : "La Secretaria va en el 80 % del presupuesto",
+    intro: agotado
+      ? html`La Secretaria de <strong>${datos.nombreNegocio}</strong> usó todo el presupuesto del mes. Hasta el mes que viene, cada consulta nueva de WhatsApp te llega a ti.`
+      : html`La Secretaria de <strong>${datos.nombreNegocio}</strong> ya usó el 80 % del presupuesto de este mes.`,
+    ...(datos.enlace ? { boton: { texto: "Ver la Secretaria", enlace: datos.enlace } } : {}),
   })
 }

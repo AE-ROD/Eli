@@ -23,6 +23,7 @@ export type IdDeSeccion =
   | "caja"
   | "liquidaciones"
   | "comisiones"
+  | "secretaria"
   | "configuracion"
   | "ayuda"
 
@@ -99,6 +100,17 @@ export function seccionesDeLaPlata(acceso: AccesoALaPlata | null | undefined): S
   })
 }
 
+/**
+ * La Secretaria Eli: el agente que atiende el WhatsApp del negocio. Neutra (no
+ * es un módulo de `lib/modulos.ts`). Se muestra según `puedeUsarSecretaria`
+ * (`lib/permisos.ts`), resuelto en el servidor por el layout del panel.
+ */
+export const SECCION_DE_SECRETARIA: SeccionDelPanel = {
+  id: "secretaria",
+  nombre: "Secretaria Eli",
+  ruta: "/dashboard/secretaria",
+}
+
 export const SECCION_DE_CONFIGURACION: SeccionDelPanel = {
   id: "configuracion",
   nombre: "Configuración",
@@ -113,6 +125,7 @@ export const SECCIONES_DEL_PANEL: readonly SeccionDelPanel[] = [
   SECCION_DE_INICIO,
   ...SECCIONES_DE_MODULOS,
   ...SECCIONES_DE_LA_PLATA,
+  SECCION_DE_SECRETARIA,
   SECCION_DE_CONFIGURACION,
   SECCION_DE_AYUDA,
 ]

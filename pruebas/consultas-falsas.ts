@@ -57,6 +57,13 @@ export type NombreDeModelo =
   // Las invitaciones al equipo (`invitaciones`): existen desde antes, pero la
   // base falsa no las tenía hasta que el trigger de la etapa 9 las mira.
   | "workerInvitation"
+  // Secretaria Eli (migración `20261120120000_secretaria_eli`).
+  | "canalDeWhatsapp"
+  | "ajustesDeSecretaria"
+  | "conversacionDeSecretaria"
+  | "mensajeDeSecretaria"
+  | "consumoDeSecretaria"
+  | "avisoDelPanel"
 
 /** Las tablas de la base falsa: todos los modelos, cada uno con sus filas. */
 export type TablasCompletas = Record<NombreDeModelo, Registro[]>
@@ -67,7 +74,15 @@ export type TablasCompletas = Record<NombreDeModelo, Registro[]>
  * tienen por qué conocer las nuevas. La base falsa, en cambio, siempre las tiene
  * (`TablasCompletas`).
  */
-type ModeloOpcional = "sede" | "workerInvitation"
+type ModeloOpcional =
+  | "sede"
+  | "workerInvitation"
+  | "canalDeWhatsapp"
+  | "ajustesDeSecretaria"
+  | "conversacionDeSecretaria"
+  | "mensajeDeSecretaria"
+  | "consumoDeSecretaria"
+  | "avisoDelPanel"
 export type Tablas = Record<Exclude<NombreDeModelo, ModeloOpcional>, Registro[]> & Partial<Record<ModeloOpcional, Registro[]>>
 
 /** Las filas de un modelo; vacías si una `Tablas` armada a mano no lo trae. */
@@ -298,6 +313,21 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     inscripcionesEnEspera: muchos("inscripcionEnEspera", "sedeId"),
   },
   workerInvitation: { business: uno("business", "businessId") },
+  // Secretaria Eli: las FK hacia la conversación, el canal y la clienta son compuestas (`COMPUESTAS`).
+  canalDeWhatsapp: { business: uno("business", "businessId"), conversaciones: muchos("conversacionDeSecretaria", "canalId") },
+  ajustesDeSecretaria: { business: uno("business", "businessId") },
+  conversacionDeSecretaria: {
+    business: uno("business", "businessId"),
+    canal: uno("canalDeWhatsapp", "canalId"),
+    customer: uno("customer", "customerId"),
+    mensajes: muchos("mensajeDeSecretaria", "conversacionId"),
+  },
+  mensajeDeSecretaria: {
+    business: uno("business", "businessId"),
+    conversacion: uno("conversacionDeSecretaria", "conversacionId"),
+  },
+  consumoDeSecretaria: { business: uno("business", "businessId") },
+  avisoDelPanel: { business: uno("business", "businessId") },
 }
 
 /**
@@ -307,6 +337,9 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
  * como en Postgres.
  */
 export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
+  // Secretaria Eli: `(canalId|customerId|conversacionId, businessId)`.
+  conversacionDeSecretaria: ["canal", "customer"],
+  mensajeDeSecretaria: ["conversacion"],
   // La sede de una franja del horario (etapa 9, `horarios_laborales_sedeId_businessId_fkey`);
   // su profesional es FK simple.
   workSchedule: ["sede"],

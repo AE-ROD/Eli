@@ -145,6 +145,19 @@ export const veElPanelDeSuDia = (actor: Actor | null): boolean =>
 export const puedeUsarChats = (_actor: Actor | null): boolean => false
 
 /**
+ * Secretaria Eli (el agente de IA del WhatsApp). Dueño y encargado la ven, la
+ * prueban en el simulador y devuelven a Eli una conversación derivada. El
+ * profesional no: ve sus derivaciones por correo.
+ */
+export const puedeUsarSecretaria = gestionaElNegocio
+
+/**
+ * Encenderla, cambiar su presupuesto (toca plata) y conectar el número de
+ * WhatsApp (una credencial): sólo el dueño.
+ */
+export const puedeConfigurarSecretaria = esDueño
+
+/**
  * Clientes (PRODUCTO.md, sección 10, decidido). Todo rol los ve y los crea:
  * el profesional los necesita para anotar a quien llega. También escribe sus
  * notas. Cambiar los datos (nombre, teléfono, email, etiquetas...) y borrar

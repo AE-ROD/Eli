@@ -328,10 +328,49 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   // `expiresAt` de la invitación.
   sede: () => ({ telefono: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
   workerInvitation: () => ({ role: "worker", acceptedAt: null, createdAt: new Date() }),
+  // Secretaria Eli (`20261120120000_secretaria_eli`).
+  canalDeWhatsapp: () => ({ activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  ajustesDeSecretaria: () => ({
+    activa: false,
+    maxTurnos: 8,
+    maxTokens: 200,
+    presupuestoMensualCentavos: 500,
+    reglas: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  conversacionDeSecretaria: () => ({
+    canalId: null,
+    customerId: null,
+    estado: "bot",
+    turnos: 0,
+    simulacion: false,
+    motivoDerivacion: null,
+    derivadaAMemberId: null,
+    derivadaAt: null,
+    ultimoMensajeAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  mensajeDeSecretaria: () => ({ tokensEntrada: 0, tokensSalida: 0, waMessageId: null, createdAt: new Date() }),
+  consumoDeSecretaria: () => ({
+    tokensEntrada: 0,
+    tokensSalida: 0,
+    costoMicrodolares: 0,
+    mensajesWhatsappEnviados: 0,
+    alerta80At: null,
+    alerta100At: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  avisoDelPanel: () => ({ memberId: null, enlace: null, leidoAt: null, createdAt: new Date() }),
 }
 
 /** Campos `Json` del esquema: aceptan un objeto como valor (cualquier otro objeto es una escritura anidada). */
-const CAMPOS_JSON: Partial<Record<NombreDeModelo, string[]>> = { cierreDeCaja: ["desglose"] }
+const CAMPOS_JSON: Partial<Record<NombreDeModelo, string[]>> = {
+  cierreDeCaja: ["desglose"],
+  mensajeDeSecretaria: ["contenido"],
+}
 const esJson = (modelo: NombreDeModelo, campo: string) => (CAMPOS_JSON[modelo] ?? []).includes(campo)
 
 /**
@@ -392,6 +431,12 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   // `invitaciones_token_key`: el sha256 del token (la columna se llama `token`).
   sede: [{ campos: ["businessId", "nombre"] }],
   workerInvitation: [{ campos: ["tokenHash"] }],
+  // Secretaria Eli.
+  canalDeWhatsapp: [{ campos: ["businessId"] }, { campos: ["phoneNumberId"] }, { campos: ["id", "businessId"] }],
+  ajustesDeSecretaria: [{ campos: ["businessId"] }],
+  conversacionDeSecretaria: [{ campos: ["id", "businessId"] }, { campos: ["businessId", "telefono", "simulacion"] }],
+  mensajeDeSecretaria: [{ campos: ["waMessageId"] }],
+  consumoDeSecretaria: [{ campos: ["businessId", "periodo"] }],
 }
 
 /**
@@ -418,12 +463,21 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
  */
 type Regla = "cascade" | "set null" | "restrict" | "no action"
 const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
+  // Secretaria Eli: todo cuelga del negocio y la conversación se lleva sus mensajes.
+  canalDeWhatsapp: [["conversacionDeSecretaria", "canalId", "cascade"]], // conversaciones_de_secretaria_canalId_businessId_fkey
+  conversacionDeSecretaria: [["mensajeDeSecretaria", "conversacionId", "cascade"]], // mensajes_de_secretaria_conversacionId_businessId_fkey
   user: [
     ["business", "userId", "cascade"], // negocios_userId_fkey
     ["businessMember", "userId", "cascade"], // miembros_negocio_userId_fkey
     ["commissionChange", "changedById", "set null"], // cambios_comision_changedById_fkey
   ],
   business: [
+    ["canalDeWhatsapp", "businessId", "cascade"],
+    ["ajustesDeSecretaria", "businessId", "cascade"],
+    ["conversacionDeSecretaria", "businessId", "cascade"],
+    ["mensajeDeSecretaria", "businessId", "cascade"],
+    ["consumoDeSecretaria", "businessId", "cascade"],
+    ["avisoDelPanel", "businessId", "cascade"],
     ["customer", "businessId", "cascade"], // clientes_businessId_fkey
     ["service", "businessId", "cascade"], // servicios_businessId_fkey
     ["workSchedule", "businessId", "cascade"], // horarios_laborales_businessId_fkey
@@ -479,6 +533,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["protesis", "memberId", "no action"], // protesis_memberId_businessId_fkey
   ],
   customer: [
+    ["conversacionDeSecretaria", "customerId", "cascade"], // conversaciones_de_secretaria_customerId_businessId_fkey
     ["appointment", "customerId", "set null"], // citas_patientId_fkey
     ["visit", "customerId", "set null"], // atenciones_customerId_fkey
     ["envioAClientes", "customerId", "set null"], // envios_a_clientes_customerId_fkey
@@ -693,6 +748,12 @@ function tablasVacias(): TablasCompletas {
     pagoAlLaboratorio: [],
     sede: [],
     workerInvitation: [],
+    canalDeWhatsapp: [],
+    ajustesDeSecretaria: [],
+    conversacionDeSecretaria: [],
+    mensajeDeSecretaria: [],
+    consumoDeSecretaria: [],
+    avisoDelPanel: [],
   }
 }
 
@@ -1310,10 +1371,19 @@ export function crearBaseFalsa() {
     if (!esObjetoPlano(datos)) return falla(`data inválido en ${modelo}`)
     for (const [clave, valor] of Object.entries(datos)) {
       if (valor === undefined) continue
+      if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
+      // Operación atómica `{ increment: n }` sobre un número (la Secretaria suma su consumo así).
+      if (esObjetoPlano(valor) && !esJson(modelo, clave) && Object.keys(valor).join() === "increment") {
+        const actual = registro[clave]
+        if (typeof actual !== "number" || typeof valor.increment !== "number") {
+          return falla(`increment sobre un campo no numérico: ${modelo}.${clave}`)
+        }
+        registro[clave] = actual + valor.increment
+        continue
+      }
       if (esObjetoPlano(valor) && !esJson(modelo, clave)) {
         return falla(`escritura anidada u operación atómica no soportada: ${modelo}.${clave}`)
       }
-      if (!(clave in registro)) return falla(`el campo ${modelo}.${clave} no existe`)
       registro[clave] = valor
     }
     if ("updatedAt" in registro) registro.updatedAt = new Date()
@@ -1660,6 +1730,12 @@ export function crearBaseFalsa() {
     pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
     sede: delegado("sede"),
     workerInvitation: delegado("workerInvitation"),
+    canalDeWhatsapp: delegado("canalDeWhatsapp"),
+    ajustesDeSecretaria: delegado("ajustesDeSecretaria"),
+    conversacionDeSecretaria: delegado("conversacionDeSecretaria"),
+    mensajeDeSecretaria: delegado("mensajeDeSecretaria"),
+    consumoDeSecretaria: delegado("consumoDeSecretaria"),
+    avisoDelPanel: delegado("avisoDelPanel"),
   }
 
   // ─── Consultas crudas ────────────────────────────────────────────────────

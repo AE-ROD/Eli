@@ -15,6 +15,7 @@ import {
   puedeEditarComisiones,
   puedeGestionarEquipo,
   puedeGestionarSuscripcion,
+  puedeUsarSecretaria,
   puedeVerCierresDeCaja,
   puedeVerLiquidacionesDelEquipo,
   veLaListaDeInicio,
@@ -102,6 +103,7 @@ export default async function LayoutDelPanel({
                   diasTrialRestantes={diasTrialRestantes}
                   puedeVerEquipo={puedeVerEquipo}
                   accesoALaPlata={accesoALaPlata}
+                  puedeVerSecretaria={puedeUsarSecretaria(actor)}
                   rubro={rubro}
                   puedeCambiarDeNegocio={puedeCambiarDeNegocio}
                   contexto={session?.user?.contexto ?? null}

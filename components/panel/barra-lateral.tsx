@@ -18,6 +18,7 @@ import {
   SECCION_DE_AYUDA,
   SECCION_DE_CONFIGURACION,
   SECCION_DE_INICIO,
+  SECCION_DE_SECRETARIA,
   SECCIONES_DE_MODULOS,
   seccionMarcadaEnLaBarra,
   seccionesConNombreDelRubro,
@@ -64,6 +65,8 @@ interface PropsDeBarraLateral {
    * Comisiones). Resuelto en el servidor con `lib/permisos.ts`; sin dato, ninguna.
    */
   accesoALaPlata?: AccesoALaPlata
+  /** Dueño y encargado ven la Secretaria Eli (`puedeUsarSecretaria`). Resuelto en el servidor; sin dato, no. */
+  puedeVerSecretaria?: boolean
   /**
    * El rubro del negocio, del actor en el servidor: elige el nombre de cada
    * sección (`seccionesConNombreDelRubro`). En una clínica dental, "Pacientes"
@@ -145,6 +148,7 @@ export function BarraLateral({
   diasTrialRestantes,
   puedeVerEquipo,
   accesoALaPlata,
+  puedeVerSecretaria,
   rubro,
   puedeCambiarDeNegocio,
   contexto,
@@ -171,6 +175,7 @@ export function BarraLateral({
       SECCION_DE_INICIO,
       ...SECCIONES_DE_MODULOS.filter((seccion) => seccion.id !== "equipo" || puedeVerEquipo),
       ...seccionesDeLaPlata(accesoALaPlata),
+      ...(puedeVerSecretaria ? [SECCION_DE_SECRETARIA] : []),
     ],
     rubro
   )

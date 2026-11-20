@@ -156,6 +156,12 @@ const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
 // (mover grupos a una categoría, renombrar, unir) son una docena de pasos
 // seguidos la primera vez, así que 10 se quedaban cortos para el uso normal.
 const limitadorServiciosEnLote = crearLimitador("servicios-en-lote", 20, "1 h")
+// Webhook de WhatsApp (Meta): 600 por minuto por IP. La barrera de verdad es
+// la firma `X-Hub-Signature-256`; esto sólo pone techo a un bombardeo.
+const limitadorWebhookWhatsapp = crearLimitador("webhook-whatsapp", 600, "1 m")
+// Simulador de la Secretaria en el panel: 60 mensajes por hora por usuario.
+// Cada mensaje es una llamada pagada al modelo.
+const limitadorSimuladorSecretaria = crearLimitador("simulador-secretaria", 60, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -181,6 +187,8 @@ export type TipoLimite =
   | "fotos"
   | "fotosPublicas"
   | "serviciosEnLote"
+  | "webhookWhatsapp"
+  | "simuladorSecretaria"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -206,6 +214,8 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   fotos: limitadorFotos,
   fotosPublicas: limitadorFotosPublicas,
   serviciosEnLote: limitadorServiciosEnLote,
+  webhookWhatsapp: limitadorWebhookWhatsapp,
+  simuladorSecretaria: limitadorSimuladorSecretaria,
 }
 
 /**
@@ -258,6 +268,12 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // sesión de dueño o encargado, así que una caída del proveedor sólo demora una
   // carga o un reordenamiento del catálogo que se puede hacer después.
   serviciosEnLote: false,
+  // Cerrado: cada mensaje del simulador es una llamada pagada al modelo, y
+  // una caída del proveedor sólo demora una prueba.
+  simuladorSecretaria: false,
+  // Abierto: lo llama Meta y la firma ya filtra lo ajeno; cortarlo dejaría a
+  // las clientas sin respuesta por una caída ajena.
+  webhookWhatsapp: true,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,
