@@ -15,6 +15,7 @@ import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "../_frases"
+import { QrDeLaFila } from "./qr-de-la-fila"
 
 interface FilaVirtual {
   activa: boolean
@@ -31,6 +32,8 @@ const sinSuscripcion = () => () => {}
 
 interface PropsDeFormularioFilaVirtual {
   slug: string
+  /** Para el afiche del QR. */
+  nombreDelNegocio: string
   activaInicial: boolean
   topeInicial: number
 }
@@ -40,7 +43,7 @@ interface PropsDeFormularioFilaVirtual {
  * de personas esperando a la vez y el enlace que se comparte para anotarse.
  * Sólo la dueña llega acá (`SeccionFilaVirtual`).
  */
-export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: PropsDeFormularioFilaVirtual) {
+export function FormularioFilaVirtual({ slug, nombreDelNegocio, activaInicial, topeInicial }: PropsDeFormularioFilaVirtual) {
   const idDelTitulo = useId()
   const { filaVirtual: frases } = frasesDeConfiguracion(vocabularioDe(useRubroDelPanel()).palabras)
   const idDelTope = useId()
@@ -52,7 +55,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
   const [anuncio, setAnuncio] = useState("")
   // La dirección completa sólo se conoce en el navegador; en el servidor, la ruta.
   const origen = useSyncExternalStore(sinSuscripcion, () => window.location.origin, () => "")
-  const enlace = `${origen}/fila/${slug}`
+  const enlace = origen ? `${origen}/fila/${slug}` : ""
 
   const tope = Number(texto)
   const topeValido =
@@ -145,7 +148,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
       {activa && (
         <div className="mt-5 rounded-[20px] bg-superficie p-4 squircle sm:p-5">
           <p className="text-sm font-medium text-navy">Enlace para anotarse</p>
-          <p className="mt-1 font-mono text-sm break-all text-texto-2">{enlace}</p>
+          <p className="mt-1 font-mono text-sm break-all text-texto-2">{enlace || `/fila/${slug}`}</p>
           <Link
             href="/dashboard/fila"
             className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-navy underline-offset-4 hover:underline anillo-foco rounded-boton"
@@ -154,6 +157,7 @@ export function FormularioFilaVirtual({ slug, activaInicial, topeInicial }: Prop
             Abrir la pantalla de la fila
           </Link>
           <p className="mt-2 text-sm text-texto-2">{frases.pantalla}</p>
+          <QrDeLaFila enlace={enlace} slug={slug} nombreDelNegocio={nombreDelNegocio} />
         </div>
       )}
 

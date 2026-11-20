@@ -332,3 +332,53 @@ describe("el catálogo ordenado del primer paso: la búsqueda, 'Todos' y lo eleg
     expect(c.sinResultados).toBe("No encontramos prestaciones con esa búsqueda.")
   })
 })
+
+describe("simplicidad: lo que se dice al confirmar, la primera vez, el RUT y los enlaces", () => {
+  it("por confirmar no se dice 'confirmada': 'Recibimos tu solicitud' y quién confirma, con su palabra", () => {
+    expect(frasesDelFormulario(null).confirmada.titulo).toBe("¡Reserva confirmada!")
+    expect(frasesDelFormulario(null).porConfirmar.titulo).toBe("Recibimos tu solicitud")
+    expect(frasesDelFormulario(null).porConfirmar.bajada(false)).toBe("El local te confirmará la hora.")
+    expect(frasesDelFormulario("salon").porConfirmar.bajada(true)).toBe(
+      "El salón te confirmará la hora y te avisaremos por correo."
+    )
+    expect(frasesDelFormulario("odontologia").porConfirmar.bajada(false)).toBe("La clínica te confirmará la hora.")
+  })
+
+  it("sin correo, guardar el enlace; con correo, también llegó por ahí", () => {
+    const f = frasesDelFormulario(null)
+    expect(f.confirmada.guardaElEnlace).toBe("Guarda este enlace: con él puedes cancelar o cambiar tu cita.")
+    expect(f.confirmada.enlaceEnElCorreo).toBe("También te lo mandamos por correo.")
+    expect(frasesDelFormulario("salon").confirmada.mensajeParaGuardar("Salón Uno", "https://x.test/r")).toBe(
+      "Mi hora en Salón Uno: https://x.test/r"
+    )
+  })
+
+  it("la primera vez: 'Sí, es la primera' y 'No, ya vine antes'", () => {
+    const { paso2 } = frasesDelFormulario("odontologia")
+    expect(paso2.respuestaDePrimeraVez).toBe("Sí, es la primera")
+    expect(paso2.respuestaDeNoPrimeraVez).toBe("No, ya vine antes")
+  })
+
+  it("el RUT sólo en una clínica dental", () => {
+    expect(frasesDelFormulario("odontologia").paso3.documento).toBe("RUT (opcional)")
+    for (const rubro of [null, "salon", "barberia", "unas", "otro"]) {
+      expect(frasesDelFormulario(rubro).paso3.documento).toBeNull()
+    }
+  })
+
+  it("la lista de espera avisa por correo y manda a mirar Spam", () => {
+    expect(frasesDeLaListaDeEspera(null).revisaSpam).toBe("Te avisamos por correo: revisa también la carpeta Spam.")
+  })
+
+  it("la fila: guardar el enlace del turno para volver", () => {
+    const { guardarTurno } = frasesDeLaFila("salon")
+    expect(guardarTurno.explicacion).toBe("Si cierras esta página, vuelve con este enlace.")
+    expect(guardarTurno.copiar).toBe("Copiar enlace de mi turno")
+    expect(guardarTurno.mensaje("Salón Uno", "https://x.test/f")).toBe("Mi turno en Salón Uno: https://x.test/f")
+  })
+
+  it("el enlace que no sirve nombra al negocio con su palabra", () => {
+    expect(frasesDeLaGestion(null).elLocal).toBe("el local")
+    expect(frasesDeLaGestion("odontologia").elLocal).toBe("la clínica")
+  })
+})

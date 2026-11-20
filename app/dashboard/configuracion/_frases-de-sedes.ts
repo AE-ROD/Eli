@@ -9,8 +9,8 @@
  * Es lógica sin pantalla: `_frases.ts` las suma a
  * `frasesDeConfiguracion(...).sedes`. Y como los avisos de un pedido que falló
  * dependen del código con que respondió el servidor, `error` elige el mensaje
- * por código (como `errorDeLote` de `_frases-de-servicios.ts`): el 401, el
- * 404, el 429 y los 5xx siempre con un texto nuestro, porque el del servidor
+ * por código (como `errorDeLote` de `_frases-de-servicios.ts`): el 401, el 403,
+ * el 404, el 429 y los 5xx siempre con un texto nuestro, porque el del servidor
  * ("No autorizado", "Error interno") no le dice nada a quien lo lee; el 400 y
  * el 409 con el motivo del servidor, que sí es claro.
  *
@@ -34,6 +34,11 @@ export type AccionDeSedes =
   | "borrar"
   | "guardar-horario"
   | "cambiar-de-plan"
+
+/** El 401: la sesión se cerró (o venció) y hay que volver a entrar. */
+export const SESION_CERRADA = "Tu sesión se cerró: vuelve a entrar e inténtalo de nuevo."
+/** El 403: la sesión sigue, pero este cambio no es de quien lo intenta. */
+export const SIN_PERMISO = "Esto lo cambia la dueña."
 
 export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
   const { cliente, cita, negocio } = palabras
@@ -73,14 +78,14 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
       case "desactivar":
         return `Esta sede tiene ${cita.plural} ${agendadas} por delante. Muévelas o cancélalas antes de desactivarla.`
       case "activar":
-        return `No se pudo activar la sede: su horario se pisaría con el de otra sede activa, o ya tienes ${MAX_SEDES} sedes activas.`
+        return `No se pudo activar la sede: su horario se cruzaría con el de otra sede activa, o ya tienes ${MAX_SEDES} sedes activas.`
       case "agregar":
       case "convertir":
         return `Ya tienes una sede con ese nombre, o ya tienes ${MAX_SEDES} sedes activas.`
       case "editar":
         return "Ya tienes otra sede con ese nombre."
       case "guardar-horario":
-        return "El horario de esta sede se pisa con el de otra sede el mismo día. Revisa los días y las horas."
+        return "El horario de esta sede se cruza con el de otra sede el mismo día. Revisa los días y las horas."
       case "cambiar-de-plan":
         return "Por ahora no se puede cambiar de plan. Revisa tu equipo y tus sedes e inténtalo de nuevo."
       case "leer":
@@ -97,9 +102,8 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
   const error = (codigo: number | null, delServidor: string, accion: AccionDeSedes): string => {
     const mensaje = delServidor.trim()
     if (codigo === null) return mensaje || porDefecto(accion)
-    if (codigo === 401) {
-      return "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo."
-    }
+    if (codigo === 401) return SESION_CERRADA
+    if (codigo === 403) return SIN_PERMISO
     if (codigo === 404) return "No se encontró lo que querías cambiar. Recarga la página e inténtalo de nuevo."
     if (codigo === 429) return "Hiciste varios cambios seguidos. Espera un momento e inténtalo de nuevo."
     if (codigo === 503) return "Por ahora no se puede hacer este cambio. Inténtalo más tarde."
@@ -116,7 +120,7 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
     subtitulo: `Tus ${cliente.plural} eligen la sede al reservar y ven qué días y a qué horas estás en cada una.`,
     /** La regla que el servidor hace respetar, dicha una vez. */
     regla:
-      "Dos sedes no pueden tener franjas que se pisen el mismo día, porque no puedes estar en dos lugares a la vez. Que una termine justo cuando empieza la otra sí se puede.",
+      "Dos sedes no pueden tener tramos que se crucen el mismo día, porque no puedes estar en dos lugares a la vez. Que uno termine justo cuando empieza el otro sí se puede.",
 
     /** «2 de 5 sedes activas». */
     cupo: (activas: number): string => `${activas} de ${MAX_SEDES} sedes activas`,
@@ -124,7 +128,6 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
     agregar: "Agregar sede",
 
     fila: {
-      lugar: (lugar: number, total: number): string => `Lugar ${lugar} de ${total}`,
       desactivada: "Desactivada",
       sinHorario: `Sin horario cargado: tus ${cliente.plural} no ven ${cita.plural} en esta sede hasta que lo cargues.`,
       /** «Sin horas agendadas por delante» / «1 cita agendada por delante» / «3 horas agendadas por delante». */
@@ -179,13 +182,13 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
 
     editor: {
       titulo: (nombre: string): string => `Horario de ${nombre}`,
-      ayuda: "Marca los días en que estás en esta sede y elige de qué hora a qué hora. Si atiendes en dos tramos, agrega otra franja.",
+      ayuda: "Marca los días en que estás en esta sede y elige de qué hora a qué hora. Si atiendes en dos tramos (por ejemplo, mañana y tarde), agrega otro tramo.",
       sinAtencion: "No disponible",
-      franja: (dia: string, numero: number, total: number): string => (total > 1 ? `${dia}, franja ${numero}` : dia),
-      agregarFranja: (dia: string): string => `Agregar otra franja el ${dia.toLowerCase()}`,
-      agregarFranjaVisible: "Otra franja",
-      sinLugar: "No queda lugar para otra franja este día",
-      quitarFranja: (dia: string, numero: number): string => `Quitar la franja ${numero} de ${dia}`,
+      franja: (dia: string, numero: number, total: number): string => (total > 1 ? `${dia}, tramo ${numero}` : dia),
+      agregarFranja: (dia: string): string => `Agregar otro tramo el ${dia.toLowerCase()}`,
+      agregarFranjaVisible: "Otro tramo",
+      sinLugar: "No queda lugar para otro tramo este día",
+      quitarFranja: (dia: string, numero: number): string => `Quitar el tramo ${numero} de ${dia}`,
       guardar: "Guardar horario",
       guardado: "Guardado",
       cerrar: "Cerrar",
@@ -193,14 +196,14 @@ export function frasesDeLasSedes(palabras: PalabrasDelRubro) {
       sinDias: `Sin ningún día marcado: tus ${cliente.plural} no verán ${cita.plural} en esta sede.`,
       choques: {
         titulo: (cantidad: number): string =>
-          cantidad === 1 ? "Este horario se pisa con el de otra sede" : "Este horario se pisa con el de otras sedes",
-        ayuda: "No se puede guardar así: cambia las horas o quita el día. Que una franja termine justo cuando empieza la otra sí se puede.",
-        /** Para el lector de pantalla, cada vez que cambia: «Se pisa con otra sede el lunes y el martes.» */
+          cantidad === 1 ? "Este horario se cruza con el de otra sede" : "Este horario se cruza con el de otras sedes",
+        ayuda: "No se puede guardar así: cambia las horas o quita el día. Que un tramo termine justo cuando empieza el otro sí se puede.",
+        /** Para el lector de pantalla, cada vez que cambia: «Se cruza con otra sede: lunes, martes.» */
         anuncio: (dias: string[]): string =>
           dias.length === 0
             ? ""
-            : `Se pisa con otra sede: ${dias.join(", ")}. No se puede guardar así.`,
-        delServidor: "Días que se pisan",
+            : `Se cruza con otra sede: ${dias.join(", ")}. No se puede guardar así.`,
+        delServidor: "Días que se cruzan",
       },
       descartar: {
         titulo: "¿Descartar los cambios sin guardar?",

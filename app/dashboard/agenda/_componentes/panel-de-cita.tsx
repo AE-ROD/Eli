@@ -18,8 +18,11 @@ import {
   esClinicaDental,
   puedeAsignarCitasAOtros,
   puedeAsignarSillon,
+  puedeCobrar,
   puedeReactivarCita,
+  puedeRegistrarAjuste,
   puedeResolverPorConfirmar,
+  puedeVerLiquidacionesDelEquipo,
 } from "@/lib/permisos"
 import type { Resultado } from "@/lib/peticiones"
 import { Aviso } from "@/components/panel/aviso"
@@ -50,7 +53,8 @@ import { useSedesDeLaAgenda } from "./sedes-de-la-agenda"
 import { useAhora } from "./usar-ahora"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 import { useEsEscritorio } from "./usar-escritorio"
-import { diaLargoEn, horaEn } from "../_hora-del-negocio"
+import { caeEnElDia, diaLargoEn, hoyEn, horaEn } from "../_hora-del-negocio"
+import { direccionParaCobrar } from "../../tablero/_datos"
 
 /** Un fundido corto al abrir y al cerrar: el panel no se desliza. */
 const FUNDIDO = { duration: DURACION.sombra, ease: CURVA.suave }
@@ -66,6 +70,8 @@ interface PropsDePanelDeCita {
   onReactivada: (id: string, estado: string) => void
   /** Abre el modal para elegirle profesional a una cita sin asignar (#103). */
   onAsignar: (cita: Cita) => void
+  /** "Agendar otra hora": abre la cita nueva con el mismo cliente y los mismos servicios, sin fecha. */
+  onAgendarOtra: (cita: Cita) => void
   /** Si hay profesionales a quien asignar: entonces se dice que la cita no tiene y se ofrece asignarla. */
   destacarSinProfesional?: boolean
   /**
@@ -102,6 +108,7 @@ export function PanelDeCita({
   onMover,
   onReactivada,
   onAsignar,
+  onAgendarOtra,
   destacarSinProfesional = false,
   aviso = "",
   sillones = null,
@@ -137,6 +144,13 @@ export function PanelDeCita({
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [errorAlCancelar, setErrorAlCancelar] = useState("")
+  // "Marcar completada" no registra el pago: se pregunta antes, y a quien
+  // cobra se le ofrece cobrar en su lugar.
+  const [confirmandoCompletar, setConfirmandoCompletar] = useState(false)
+  const [completando, setCompletando] = useState(false)
+  const [errorAlCompletar, setErrorAlCompletar] = useState("")
+  // Reactivar también se confirma, con lo que pasa al hacerlo.
+  const [confirmandoReactivar, setConfirmandoReactivar] = useState(false)
   // Cancelada, el botón que abrió la confirmación ya no está: al terminar de
   // salir el modal, el foco va al título del detalle.
   const enfocarElTituloAlSalir = useRef(false)
@@ -198,6 +212,22 @@ export function PanelDeCita({
     setConfirmandoCancelar(false)
   }
 
+  const pedirCompletar = () => {
+    setErrorAlCompletar("")
+    setConfirmandoCompletar(true)
+  }
+
+  const completar = async () => {
+    if (completando) return
+    setCompletando(true)
+    setErrorAlCompletar("")
+    const error = await onCambiarEstado(cita.id, "completada")
+    setCompletando(false)
+    if (error) return setErrorAlCompletar(error)
+    enfocarElTituloAlSalir.current = true
+    setConfirmandoCompletar(false)
+  }
+
   const alSalirLaConfirmacion = () => {
     if (!enfocarElTituloAlSalir.current) return
     enfocarElTituloAlSalir.current = false
@@ -219,8 +249,10 @@ export function PanelDeCita({
     setAdvertencias([])
     setErrorAlReactivar("")
     setSeCorrigeConAjuste(false)
-    // Otra cita, o ésta cambió de estado: la confirmación de cancelar era de lo de antes.
+    // Otra cita, o ésta cambió de estado: las confirmaciones eran de lo de antes.
     if (!cancelando) setConfirmandoCancelar(false)
+    if (!completando) setConfirmandoCompletar(false)
+    if (!reactivando) setConfirmandoReactivar(false)
   }
 
   const cerrada = cita.status === "cancelada" || cita.status === "no-asistio"
@@ -257,7 +289,14 @@ export function PanelDeCita({
       return setErrorAlReactivar(resultado.error)
     }
     if (resultado.tipo === "error") return setErrorAlReactivar(resultado.error)
+    enfocarElTituloAlSalir.current = true
     onReactivada(cita.id, ESTADO_AL_REACTIVAR)
+  }
+
+  // Desde la confirmación: lo que salga (advertencias o un error) se ve en el panel.
+  const confirmarReactivar = async () => {
+    await pedirReactivar(false)
+    setConfirmandoReactivar(false)
   }
   const puedeMoverse = sePuedeMover(cita.status)
   // Sin profesional habiendo equipo (#103): se dice, y quien puede editarla
@@ -280,6 +319,20 @@ export function PanelDeCita({
   // Clínica dental: asignar el sillón (todo rol de la clínica; el odontólogo
   // ve sólo sus citas) mientras la cita se puede mover.
   const asignaSillon = clinica && puedeAsignarSillon(actorDeSesion(sesion)) && sePuedeMover(cita.status)
+
+  // "Cobrar" (lo decide `lib/permisos.ts`): lleva al cobro de esta cita en el
+  // Tablero. Sólo si todavía se puede completar y el cobro se puede abrir
+  // allá: el cliente ya llegó, o la cita es de hoy (el Tablero es del día).
+  const cobra = puedeCobrar(actorDeSesion(sesion))
+  const ofreceCobro =
+    cobra &&
+    puedeCompletarse &&
+    (cita.conAtencion === true || caeEnElDia(cita.startTime, hoyEn(zona, new Date(ahora)), zona))
+  // "Agendar otra hora": con el mismo cliente; sin cliente no hay a quién agendar.
+  const agendaOtra = Boolean(cita.customerId)
+  // Reactivar rechazado porque la plata ya se rindió: dónde se corrige.
+  const registraAjustes = puedeRegistrarAjuste(actorDeSesion(sesion))
+  const veLiquidaciones = puedeVerLiquidacionesDelEquipo(actorDeSesion(sesion))
 
   const contenido = (
     <>
@@ -404,8 +457,20 @@ export function PanelDeCita({
 
       {errorAlReactivar &&
         (seCorrigeConAjuste ? (
-          <Aviso tono="atencion" rol="status" titulo="Se corrige con un ajuste">
-            {errorAlReactivar}
+          <Aviso
+            tono="atencion"
+            rol="status"
+            titulo={frases.corregirConAjuste.titulo}
+            accion={
+              veLiquidaciones ? (
+                <Boton href="/dashboard/liquidaciones" variante="secundario" tamano="sm">
+                  {frases.corregirConAjuste.enlace}
+                </Boton>
+              ) : undefined
+            }
+          >
+            {errorAlReactivar.replace(/\.?\s*$/, ".")}{" "}
+            {registraAjustes ? frases.corregirConAjuste.registraLo : frases.corregirConAjuste.pideloALaDuena}
           </Aviso>
         ) : (
           <Aviso>{errorAlReactivar}</Aviso>
@@ -420,8 +485,20 @@ export function PanelDeCita({
         </Aviso>
       )}
 
-      {(puedeConfirmarse || asigna || puedeCompletarse || puedeCancelarse || puedeMoverse || puedeNoVenir || puedeReactivarse) && (
+      {(puedeConfirmarse ||
+        asigna ||
+        puedeCompletarse ||
+        puedeCancelarse ||
+        puedeMoverse ||
+        puedeNoVenir ||
+        puedeReactivarse ||
+        agendaOtra) && (
         <div className="grid gap-2 px-1 pb-1">
+          {ofreceCobro && (
+            <Boton href={direccionParaCobrar(cita.id)} tamano="sm" className="w-full">
+              {frases.cobrar}
+            </Boton>
+          )}
           {puedeConfirmarse && (
             <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "confirmada")}>
               Confirmar reserva
@@ -433,7 +510,8 @@ export function PanelDeCita({
               className="w-full"
               disabled={reactivando}
               aria-busy={reactivando}
-              onClick={() => pedirReactivar(advertencias.length > 0)}
+              // La primera vez se confirma; con advertencias a la vista, "Reactivar igual" va directo.
+              onClick={() => (advertencias.length > 0 ? void pedirReactivar(true) : setConfirmandoReactivar(true))}
             >
               {advertencias.length > 0 ? reactivacion.botonIgual : reactivacion.boton}
             </Boton>
@@ -448,8 +526,13 @@ export function PanelDeCita({
               Cambiar fecha y hora
             </Boton>
           )}
+          {agendaOtra && (
+            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onAgendarOtra(cita)}>
+              {frases.agendarOtra}
+            </Boton>
+          )}
           {puedeCompletarse && (
-            <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "completada")}>
+            <Boton tamano="sm" variante={ofreceCobro ? "secundario" : undefined} className="w-full" onClick={pedirCompletar}>
               {frases.marcarCompletada}
             </Boton>
           )}
@@ -481,7 +564,7 @@ export function PanelDeCita({
       {confirmandoCancelar && (
         <ModalConfirmar
           titulo={frases.preguntaCancelar}
-          descripcion={`${nombreDeCliente(cita, palabras.cliente.singular)}, ${diaLargoEn(cita.startTime, zona)} a las ${horaEn(cita.startTime, zona)}. Su hora queda libre para otra reserva.`}
+          descripcion={`${nombreDeCliente(cita, palabras.cliente.singular)}, ${diaLargoEn(cita.startTime, zona)} a las ${horaEn(cita.startTime, zona)}. ${frases.consecuenciaDeCancelar}`}
           textoConfirmar={frases.cancelarCita}
           textoCancelar="No cancelar"
           peligro
@@ -489,6 +572,73 @@ export function PanelDeCita({
           aviso={errorAlCancelar}
           onConfirmar={() => void cancelar()}
           onCerrar={() => setConfirmandoCancelar(false)}
+        />
+      )}
+    </AnimatePresence>
+  )
+
+  const confirmacionDeCompletar = (
+    <AnimatePresence onExitComplete={alSalirLaConfirmacion}>
+      {confirmandoCompletar && (
+        <MarcoDeModal
+          titulo={frases.completar.titulo}
+          descripcion={
+            ofreceCobro
+              ? frases.completar.preguntaCobrar
+              : cobra
+                ? frases.completar.cobroEnElTablero
+                : frases.completar.cobraLaGestion
+          }
+          bloqueado={completando}
+          alCerrar={() => setConfirmandoCompletar(false)}
+        >
+          <div className="space-y-5">
+            {errorAlCompletar && <Aviso>{errorAlCompletar}</Aviso>}
+            {/* En el teléfono uno debajo del otro, con el recomendado arriba (como `ModalConfirmar`). */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              {ofreceCobro ? (
+                <>
+                  <BotonPrimario type="button" variante="secundario" anchoCompleto cargando={completando} onClick={() => void completar()}>
+                    {frases.completar.marcarSinCobrar}
+                  </BotonPrimario>
+                  <Boton href={direccionParaCobrar(cita.id)} className="w-full">
+                    {frases.cobrar}
+                  </Boton>
+                </>
+              ) : (
+                <>
+                  <BotonPrimario
+                    type="button"
+                    variante="secundario"
+                    anchoCompleto
+                    disabled={completando}
+                    onClick={() => setConfirmandoCompletar(false)}
+                  >
+                    {frases.completar.noMarcar}
+                  </BotonPrimario>
+                  <BotonPrimario type="button" anchoCompleto cargando={completando} onClick={() => void completar()}>
+                    {frases.marcarCompletada}
+                  </BotonPrimario>
+                </>
+              )}
+            </div>
+          </div>
+        </MarcoDeModal>
+      )}
+    </AnimatePresence>
+  )
+
+  const confirmacionDeReactivar = (
+    <AnimatePresence onExitComplete={alSalirLaConfirmacion}>
+      {confirmandoReactivar && (
+        <ModalConfirmar
+          titulo={`¿${reactivacion.boton}?`}
+          descripcion={frases.consecuenciaDeReactivar(cita.status)}
+          textoConfirmar={reactivacion.boton}
+          textoCancelar="Volver"
+          trabajando={reactivando}
+          onConfirmar={() => void confirmarReactivar()}
+          onCerrar={() => setConfirmandoReactivar(false)}
         />
       )}
     </AnimatePresence>
@@ -504,6 +654,8 @@ export function PanelDeCita({
           </div>
         </MarcoDeModal>
         {confirmacionDeCancelar}
+        {confirmacionDeCompletar}
+        {confirmacionDeReactivar}
       </>
     )
   }
@@ -536,6 +688,8 @@ export function PanelDeCita({
         {contenido}
       </motion.aside>
       {confirmacionDeCancelar}
+      {confirmacionDeCompletar}
+      {confirmacionDeReactivar}
     </>
   )
 }

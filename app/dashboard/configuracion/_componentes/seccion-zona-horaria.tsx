@@ -11,6 +11,7 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { ZONA_POR_DEFECTO } from "@/lib/zona-horaria"
 import { ZONAS_DE_CHILE, esZonaDeChile, horaActualEn, zonaDeChilePorId } from "@/lib/zonas-de-chile"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -42,6 +43,18 @@ function useAhora(): Date | null {
   return minuto === null ? null : new Date(minuto * 60_000)
 }
 
+const sinSuscripcion = () => () => {}
+/** La zona del dispositivo (`Intl`), o `null` si no la dice. */
+const zonaDelDispositivo = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+/** En el servidor no hay dispositivo: el HTML es el mismo para todos. */
+const sinDispositivo = () => null
+
 interface PropsDeSeccionZonaHoraria {
   /** La zona con que trabaja hoy el negocio (`zonaVigente`): la guardada, o Santiago si no hay una válida. */
   zonaGuardada: string
@@ -66,8 +79,17 @@ export function SeccionZonaHoraria({ zonaGuardada }: PropsDeSeccionZonaHoraria) 
   const ahora = useAhora()
 
   const [guardada, setGuardada] = useState(zonaGuardada)
+  // Lo que se marcó a mano; `undefined` mientras no se toca ninguna.
+  const [elegidaAMano, setElegidaAMano] = useState<string | null | undefined>(undefined)
+  const delDispositivo = useSyncExternalStore(sinSuscripcion, zonaDelDispositivo, sinDispositivo)
+  // Si el negocio sigue con la de siempre (Santiago) y este dispositivo está en otra zona de Chile
+  // (Magallanes, Isla de Pascua), se marca esa de antemano: queda por guardar, nada cambia solo.
+  const sugerida =
+    guardada === ZONA_POR_DEFECTO && delDispositivo !== guardada && esZonaDeChile(delDispositivo) ? delDispositivo : null
   // Una zona guardada que no está en la lista (un dato puesto a mano) no deja ninguna marcada.
-  const [elegida, setElegida] = useState<string | null>(esZonaDeChile(zonaGuardada) ? zonaGuardada : null)
+  const elegida =
+    elegidaAMano !== undefined ? elegidaAMano : (sugerida ?? (esZonaDeChile(guardada) ? guardada : null))
+  const setElegida = setElegidaAMano
   const [confirmando, setConfirmando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [avisoDelModal, setAvisoDelModal] = useState("")
@@ -104,6 +126,13 @@ export function SeccionZonaHoraria({ zonaGuardada }: PropsDeSeccionZonaHoraria) 
       {!esZonaDeChile(guardada) && (
         <Aviso tono="atencion" className="mt-5">
           {frases.otraZona(guardada)}
+        </Aviso>
+      )}
+
+      <p className="mt-4 text-sm text-texto-2">{frases.soloSiEstas}</p>
+      {sugerida && elegida === sugerida && (
+        <Aviso tono="info" className="mt-3">
+          {frases.sugerida(nombreDe(sugerida))}
         </Aviso>
       )}
 

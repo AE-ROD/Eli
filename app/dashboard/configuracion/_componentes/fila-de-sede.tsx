@@ -64,7 +64,6 @@ export function FilaDeSede({
           </div>
           {lugar && <p className="mt-0.5 text-sm break-words text-texto-2">{lugar}</p>}
           {sede.telefono && <p className="text-[13px] text-texto-2">{mostrarTelefono(sede.telefono)}</p>}
-          <p className="mt-1 text-[13px] text-texto-2">{frases.lugar(indice + 1, total)}</p>
 
           {horario.length > 0 ? (
             <ul className="mt-2 space-y-0.5 text-sm">

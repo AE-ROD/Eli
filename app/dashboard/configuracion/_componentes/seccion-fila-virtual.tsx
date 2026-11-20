@@ -14,11 +14,14 @@ export async function SeccionFilaVirtual({ actor }: { actor: Actor }) {
 
   const negocio = await prisma.business.findUnique({
     where: { id: actor.businessId },
-    select: { slug: true, filaVirtualActiva: true, filaVirtualTope: true },
+    select: { slug: true, name: true, filaVirtualActiva: true, filaVirtualTope: true },
   })
   if (!negocio) return null
 
   return (
-    <FormularioFilaVirtual slug={negocio.slug} activaInicial={negocio.filaVirtualActiva} topeInicial={negocio.filaVirtualTope} />
+    <FormularioFilaVirtual
+      slug={negocio.slug}
+      nombreDelNegocio={negocio.name}
+      activaInicial={negocio.filaVirtualActiva} topeInicial={negocio.filaVirtualTope} />
   )
 }

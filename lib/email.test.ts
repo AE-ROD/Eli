@@ -165,7 +165,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
     const subject = enviarMock.mock.calls[0][0].subject as string
 
     expect(subject).not.toMatch(/[\r\n]/)
-    expect(subject).toBe("Cita confirmada — NegocioBcc: atacante@evil.com")
+    expect(subject).toBe("Confirmada: jue 10 de sept, 10:00 — NegocioBcc: atacante@evil.com")
   })
 
   it("quita un \\r suelto del nombre del cliente", async () => {
@@ -219,7 +219,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
     const subject = enviarMock.mock.calls[0][0].subject as string
 
     expect(subject).not.toMatch(/[\u2028\u2029]/)
-    expect(subject).toBe("Cita confirmada — NegocioBcc: atacante@evil.com")
+    expect(subject).toBe("Confirmada: jue 10 de sept, 10:00 — NegocioBcc: atacante@evil.com")
   })
 
   it("quita caracteres de control (por ejemplo, un BEL) sin tocar el resto del texto", async () => {
@@ -237,7 +237,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
 
     const subject = enviarMock.mock.calls[0][0].subject as string
 
-    expect(subject).toBe("Cita confirmada — NegocioMalicioso")
+    expect(subject).toBe("Confirmada: jue 10 de sept, 10:00 — NegocioMalicioso")
   })
 
   it("la fecha del correo es el día calendario recibido, sin importar la zona del servidor", async () => {
@@ -272,7 +272,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
       hora: "10:00",
       duracion: 30,
     })
-    expect(enviarMock.mock.calls[0][0].subject).toBe("Cita confirmada — Peluquería Sol")
+    expect(enviarMock.mock.calls[0][0].subject).toBe("Confirmada: jue 10 de sept, 10:00 — Peluquería Sol")
 
     await enviarRecordatorio({
       emailCliente: "cliente@ejemplo.com",
@@ -282,7 +282,7 @@ describe("lib/email — inyección de encabezados en el asunto", () => {
       fecha: "2026-09-10",
       hora: "10:00",
     })
-    expect(enviarMock.mock.calls[1][0].subject).toBe("Recordatorio — tu cita es mañana")
+    expect(enviarMock.mock.calls[1][0].subject).toBe("Mañana 10:00 en Peluquería Sol")
 
     await enviarRecuperacionContrasena({
       emailUsuario: "usuario@ejemplo.com",
@@ -626,7 +626,7 @@ describe("lib/email — mensajes a clientes (etapa 3)", () => {
     expect(conEnlace).toContain("Cancelar o cambiar mi cita")
     expect(conEnlace).toContain("hasta 24 horas antes")
     expect(sinEnlace).not.toContain("Cancelar o cambiar mi cita")
-    expect(sinEnlace).toContain("avísanos con anticipación")
+    expect(sinEnlace).toContain("avísale al local con anticipación")
   })
 
   it("#164: dentro del plazo el recordatorio no ofrece cancelar ni cambiar, aunque venga el enlace", async () => {
@@ -696,7 +696,7 @@ describe("lib/email — reservas por confirmar (#84)", () => {
     await enviarConfirmacionCliente({ ...reserva, porConfirmar: true })
 
     const { subject, html } = enviarMock.mock.calls[0][0]
-    expect(subject).toBe("Reserva recibida — Salón Uno")
+    expect(subject).toBe("Recibimos tu solicitud — Salón Uno")
     expect(html).toContain("confirmará tu reserva")
     expect(html).not.toMatch(/falt|no vino|inasist/i)
     expect(html).not.toContain("¡Tu cita está confirmada!")
@@ -708,7 +708,7 @@ describe("lib/email — reservas por confirmar (#84)", () => {
     await enviarConfirmacionCliente(reserva)
 
     const { subject, html } = enviarMock.mock.calls[0][0]
-    expect(subject).toBe("Cita confirmada — Salón Uno")
+    expect(subject).toBe("Confirmada: jue 10 de sept, 10:00 — Salón Uno")
     expect(html).toContain("¡Tu cita está confirmada!")
     expect(html).not.toContain("confirmará tu reserva")
   })
@@ -746,7 +746,7 @@ describe("lib/email — reservas por confirmar (#84)", () => {
 
     const { subject, html, to } = enviarMock.mock.calls[0][0]
     expect(to).toBe("cliente@ejemplo.com")
-    expect(subject).toBe("Reserva confirmada — Salón Uno")
+    expect(subject).toBe("Confirmada: jue 10 de sept, 10:00 — Salón Uno")
     expect(html).toContain("confirmó tu reserva")
     expect(html).toContain("&lt;b&gt;Lucía&lt;/b&gt;")
     expect(html).toContain("septiembre")
@@ -923,7 +923,6 @@ interface PalabrasEsperadas {
   /** Quien reservó lee su reserva como... */
   suCita: string
   unaCita: string
-  citaConfirmada: string
   alLocal: string
   hastaSinPlazo: string
   /** El negocio lee la reserva como... */
@@ -954,7 +953,6 @@ const DE_UN_SALON_DE_BELLEZA = {
   servicioDeLaReserva: "Servicio",
   suCita: "hora",
   unaCita: "una hora",
-  citaConfirmada: "Hora confirmada",
   hastaSinPlazo: "hasta que llegue la hora",
   unaNuevaCita: "una nueva hora",
   citasAnteriores: "horas anteriores",
@@ -1013,7 +1011,6 @@ const RUBROS_CON_PALABRAS: PalabrasEsperadas[] = [
     servicioDeLaReserva: "Motivo",
     suCita: "hora",
     unaCita: "una hora",
-    citaConfirmada: "Hora confirmada",
     alLocal: "a la clínica",
     hastaSinPlazo: "hasta que llegue la hora",
     unaNuevaCita: "una nueva cita",
@@ -1044,7 +1041,6 @@ const RUBROS_CON_PALABRAS: PalabrasEsperadas[] = [
     servicioDeLaReserva: "Servicio",
     suCita: "cita",
     unaCita: "una cita",
-    citaConfirmada: "Cita confirmada",
     alLocal: "al local",
     hastaSinPlazo: "hasta la hora de la cita",
     unaNuevaCita: "una nueva cita",
@@ -1078,7 +1074,8 @@ describe.each(RUBROS_CON_PALABRAS)("lib/email — los correos de $nombre", (p) =
   describe("a quien reservó", () => {
     it("la confirmación: el asunto, el título y las etiquetas con las palabras del rubro", () => {
       const { subject, texto } = correos["confirmacion"]
-      expect(subject).toBe(`${p.citaConfirmada} — Estudio Sol`)
+      // El cuándo en el asunto, con el participio concordado con la reserva ("la hora", "la cita").
+      expect(subject).toBe("Confirmada: lun 2 de nov, 10:00 — Estudio Sol")
       expect(texto).toContain(`¡Tu ${p.suCita} está confirmada!`)
       expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
       // "Con" es una preposición y "Hora" la hora del reloj: no cambian con el rubro.
@@ -1093,15 +1090,15 @@ describe.each(RUBROS_CON_PALABRAS)("lib/email — los correos de $nombre", (p) =
       expect(correos["confirmacion-dentro-del-plazo"].texto).toContain(
         `Tu hora es en menos de 24 horas, así que no se puede cancelar ni cambiar por el enlace. Si lo necesitas, contacta directamente ${p.alLocal}.`,
       )
-      expect(correos["confirmacion-sin-enlace"].texto).toContain(`Si necesitas cancelar o cambiar tu ${p.suCita}, contáctanos con anticipación.`)
-      // "Reserva" es el acto de reservar, no la cita: no depende del rubro.
-      expect(correos["confirmacion-por-confirmar"].subject).toBe("Reserva recibida — Estudio Sol")
+      expect(correos["confirmacion-sin-enlace"].texto).toContain(`Si necesitas cancelar o cambiar tu ${p.suCita}, contacta ${p.alLocal} con anticipación.`)
+      // "Solicitud" y "reserva" son el acto de reservar, no la cita: no dependen del rubro.
+      expect(correos["confirmacion-por-confirmar"].subject).toBe("Recibimos tu solicitud — Estudio Sol")
       expect(correos["confirmacion-por-confirmar"].texto).toContain("Recibimos tu reserva")
     })
 
     it("el recordatorio: 'tu hora es mañana' / 'tu cita es mañana'", () => {
       const { subject, texto } = correos["recordatorio"]
-      expect(subject).toBe(`Recordatorio — tu ${p.suCita} es mañana`)
+      expect(subject).toBe("Mañana 10:00 en Estudio Sol")
       expect(texto).toContain(`Tu ${p.suCita} es mañana`)
       expect(texto).toContain(`te recordamos que tienes ${p.unaCita} mañana en Estudio Sol`)
       expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
@@ -1109,12 +1106,12 @@ describe.each(RUBROS_CON_PALABRAS)("lib/email — los correos de $nombre", (p) =
       expect(texto).toContain(`cancela o cambia tu ${p.suCita} con el botón hasta 24 horas antes. Después, contacta directamente ${p.alLocal}.`)
       expect(correos["recordatorio-sin-plazo"].texto).toContain(`cancela o cambia tu ${p.suCita} con el botón ${p.hastaSinPlazo}.`)
       expect(correos["recordatorio-dentro-del-plazo"].texto).toContain(`Si no puedes asistir, contacta directamente ${p.alLocal}.`)
-      expect(correos["recordatorio-sin-enlace"].texto).toContain("por favor avísanos con anticipación")
+      expect(correos["recordatorio-sin-enlace"].texto).toContain(`por favor avísale ${p.alLocal} con anticipación`)
     })
 
     it("la reserva confirmada por el local", () => {
       const { subject, texto } = correos["confirmada-por-el-local"]
-      expect(subject).toBe("Reserva confirmada — Estudio Sol")
+      expect(subject).toBe("Confirmada: lun 2 de nov, 10:00 — Estudio Sol")
       expect(texto).toContain(`${p.servicioDeLaReserva}: Limpieza`)
       expect(texto).toContain(`Si necesitas cancelar o cambiar tu ${p.suCita}, usa el enlace del correo de tu reserva o contacta ${p.alLocal}.`)
     })
@@ -1226,10 +1223,10 @@ describe("lib/email — el rubro cambia las palabras, no el resto", () => {
 
   it("las palabras de siempre siguen siendo las de los textos de antes del vocabulario", async () => {
     const c = await correosDe(null)
-    expect(c["confirmacion"].subject).toBe("Cita confirmada — Estudio Sol")
+    expect(c["confirmacion"].subject).toBe("Confirmada: lun 2 de nov, 10:00 — Estudio Sol")
     expect(c["confirmacion"].texto).toContain("¡Tu cita está confirmada! Hola Ana, te esperamos en Estudio Sol. Servicio: Limpieza Con: Carla Fecha:")
     expect(c["confirmacion-dentro-del-plazo"].texto).toContain("Tu hora es en menos de 24 horas")
-    expect(c["recordatorio"].subject).toBe("Recordatorio — tu cita es mañana")
+    expect(c["recordatorio"].subject).toBe("Mañana 10:00 en Estudio Sol")
     expect(c["recordatorio"].texto).toContain("te recordamos que tienes una cita mañana en Estudio Sol")
     expect(c["aviso-profesional"].texto).toContain("Tienes una nueva cita en Estudio Sol. Cliente: Ana Servicio: Limpieza Profesional: Carla")
     expect(c["aviso-cancelo"].subject).toBe("Cita cancelada — Ana")
@@ -1271,5 +1268,158 @@ describe("lib/email — el rubro cambia las palabras, no el resto", () => {
     expect(html).not.toContain("<script>x")
     expect(html).not.toContain('"><img>')
     expect(subject).not.toMatch(/[\r\n]/)
+  })
+})
+
+describe("lib/email — los correos a clientes llevan el nombre del negocio", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.stubEnv("RESEND_FROM_EMAIL", "Eli <no-reply@eli.app>")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const reserva = {
+    emailCliente: "ana@ejemplo.com",
+    nombreCliente: "Ana",
+    nombreNegocio: "Salón Sol",
+    servicio: "Corte",
+    fecha: "2026-11-19",
+    hora: "10:00",
+    duracion: 30,
+  }
+
+  it("el encabezado dice el negocio, el remitente es '<Negocio> vía Eli' y el pie no vende Eli", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente(reserva)
+
+    const { html, from } = enviarMock.mock.calls[0][0]
+    expect(from).toBe('"Salón Sol vía Eli" <no-reply@eli.app>')
+    expect(html).toMatch(/>Salón Sol<\/td>/)
+    expect(html).not.toMatch(/>Eli<\/td>/)
+    expect(html).toContain("Enviado por Eli")
+    expect(html).not.toContain("Agenda y cobros para tu negocio")
+  })
+
+  it("los correos al dueño o al equipo siguen siendo de Eli, con su pie", async () => {
+    const { enviarAvisoProfesional } = await import("./email")
+    await enviarAvisoProfesional({ ...reserva, emailProfesional: "duena@ejemplo.com" })
+
+    const { html, from } = enviarMock.mock.calls[0][0]
+    expect(from).toBe("Eli <no-reply@eli.app>")
+    expect(html).toMatch(/>Eli<\/td>/)
+    expect(html).toContain("Agenda y cobros para tu negocio")
+  })
+
+  it("todos los correos a clientes salen a nombre del negocio", async () => {
+    const email = await import("./email")
+    const cliente = { emailCliente: "ana@ejemplo.com", nombreCliente: "Ana", nombreNegocio: "Salón Sol" }
+    const baja = { enlaceDeBaja: "https://eli.app/baja/x", enlaceDeBajaEnUnClic: "https://eli.app/api/baja?token=x" }
+    await email.enviarConfirmacionCliente({ ...reserva, porConfirmar: true })
+    await email.enviarReservaConfirmadaPorElLocal(reserva)
+    await email.enviarRecordatorio(reserva)
+    await email.enviarAvisoListaDeEspera({ ...cliente, servicio: "Corte", fecha: "2026-11-19", enlaceReservar: "https://eli.app/r", enlaceSalir: "https://eli.app/s", enlaceSalirEnUnClic: "https://eli.app/s1" })
+    await email.enviarTeToca({ ...cliente, enlaceReservar: "https://eli.app/r", ...baja })
+    await email.enviarPedirResena({ ...cliente, enlaceResenas: "https://g.page/r/x/review", ...baja })
+    await email.enviarAvisoFilaVirtual({ ...cliente, numero: 3 })
+    await email.enviarTurnoEnLaFila({ ...cliente, numero: 3, enlaceTurno: "https://eli.app/fila/sol/tok" })
+
+    expect(enviarMock).toHaveBeenCalledTimes(8)
+    for (const [envio] of enviarMock.mock.calls) {
+      expect(envio.from).toBe('"Salón Sol vía Eli" <no-reply@eli.app>')
+      expect(envio.html).not.toContain("Agenda y cobros para tu negocio")
+    }
+  })
+
+  it("el nombre en el remitente no puede romper el encabezado ni abrir otra dirección", async () => {
+    const { remitenteDelNegocio } = await import("./email")
+    expect(remitenteDelNegocio('Sol"\r\nBcc: x@y.z <otro@evil.com>')).toBe('"SolBcc: x@y.z otro@evil.com vía Eli" <no-reply@eli.app>')
+    expect(remitenteDelNegocio("  \r\n ")).toBe("Eli <no-reply@eli.app>")
+    expect(remitenteDelNegocio("x".repeat(200))).toBe(`"${"x".repeat(60)} vía Eli" <no-reply@eli.app>`)
+  })
+
+  it("con una dirección de envío sin nombre, la usa tal cual", async () => {
+    vi.stubEnv("RESEND_FROM_EMAIL", "reservas@eli.app")
+    vi.resetModules()
+    const { remitenteDelNegocio } = await import("./email")
+    expect(remitenteDelNegocio("Sol")).toBe('"Sol vía Eli" <reservas@eli.app>')
+  })
+
+  it("el nombre del negocio en el encabezado se escapa", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente({ ...reserva, nombreNegocio: "<img src=x>" })
+    expect(enviarMock.mock.calls[0][0].html).not.toContain("<img src=x>")
+  })
+})
+
+describe("lib/email — cómo llegar y cómo escribirle al negocio", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  const reserva = {
+    emailCliente: "ana@ejemplo.com",
+    nombreCliente: "Ana",
+    nombreNegocio: "Salón Sol",
+    servicio: "Corte",
+    fecha: "2026-11-19",
+    hora: "10:00",
+    duracion: 30,
+  }
+  const LUGAR = { direccion: "Av. Italia 1500", comuna: "Ñuñoa" }
+  const MAPA = "https://www.google.com/maps/search/?api=1&amp;query=Av.%20Italia%201500%2C%20%C3%91u%C3%B1oa"
+
+  it("la confirmación, la confirmada por el local y el recordatorio llevan 'Cómo llegar' y 'Escribir por WhatsApp'", async () => {
+    const email = await import("./email")
+    await email.enviarConfirmacionCliente({ ...reserva, lugar: LUGAR, whatsapp: "+56912345678" })
+    await email.enviarReservaConfirmadaPorElLocal({ ...reserva, lugar: LUGAR, whatsapp: "+56912345678" })
+    await email.enviarRecordatorio({ ...reserva, lugar: LUGAR, whatsapp: "+56912345678" })
+
+    for (const [envio] of enviarMock.mock.calls) {
+      const html = envio.html as string
+      expect(html).toContain(`href="${MAPA}"`)
+      expect(html).toContain("Cómo llegar")
+      expect(html).toContain('href="https://wa.me/56912345678"')
+      expect(html).toContain("Escribir por WhatsApp")
+      expect(html).toContain("<strong>Dónde:</strong> Av. Italia 1500, Ñuñoa")
+    }
+  })
+
+  it("sin dirección ni WhatsApp, ninguno de los dos enlaces", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    await enviarConfirmacionCliente(reserva)
+    await enviarConfirmacionCliente({ ...reserva, lugar: { comuna: "Ñuñoa" }, whatsapp: "no es un número" })
+
+    for (const [envio] of enviarMock.mock.calls) {
+      expect(envio.html).not.toContain("Cómo llegar")
+      expect(envio.html).not.toContain("wa.me")
+    }
+  })
+
+  it("los avisos de la lista de espera, la fila, te toca y la reseña también ofrecen el WhatsApp", async () => {
+    const email = await import("./email")
+    const cliente = { emailCliente: "ana@ejemplo.com", nombreCliente: "Ana", nombreNegocio: "Salón Sol", whatsapp: "9 1234 5678" }
+    const baja = { enlaceDeBaja: "https://eli.app/baja/x", enlaceDeBajaEnUnClic: "https://eli.app/api/baja?token=x" }
+    await email.enviarAvisoListaDeEspera({ ...cliente, servicio: "Corte", fecha: "2026-11-19", enlaceReservar: "https://eli.app/r", enlaceSalir: "https://eli.app/s", enlaceSalirEnUnClic: "https://eli.app/s1" })
+    await email.enviarTeToca({ ...cliente, enlaceReservar: "https://eli.app/r", ...baja })
+    await email.enviarPedirResena({ ...cliente, enlaceResenas: "https://g.page/r/x/review", ...baja })
+    await email.enviarAvisoFilaVirtual({ ...cliente, numero: 3 })
+
+    for (const [envio] of enviarMock.mock.calls) expect(envio.html).toContain('href="https://wa.me/56912345678"')
+  })
+
+  it("el correo al anotarse en la fila trae el número y el enlace al turno", async () => {
+    const { enviarTurnoEnLaFila } = await import("./email")
+    await enviarTurnoEnLaFila({ rubro: "barberia", emailCliente: "ana@ejemplo.com", nombreCliente: "<b>Ana</b>", nombreNegocio: "Barbería Sol", numero: 7, enlaceTurno: "https://eli.app/fila/sol/tok" })
+
+    const { subject, html, to } = enviarMock.mock.calls[0][0]
+    expect(to).toBe("ana@ejemplo.com")
+    expect(subject).toBe("Tu lugar en la fila de Barbería Sol")
+    expect(html).toContain("<strong>Tu número:</strong> 7")
+    expect(html).toContain('href="https://eli.app/fila/sol/tok"')
+    expect(html).toContain("Ver mi turno")
+    expect(html).not.toContain("<b>Ana</b>")
   })
 })
