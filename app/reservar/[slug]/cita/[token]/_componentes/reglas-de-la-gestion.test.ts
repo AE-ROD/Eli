@@ -27,6 +27,13 @@ const pedro: ProfesionalParaCambiar = { id: "m-pedro", nombre: "Pedro", especial
 const EQUIPO = [carla, pedro]
 
 describe("profesionalMarcadoAlAbrir", () => {
+  it("sin lista (una sola persona puede atender) no marca a nadie ni pide elegir: se reagenda con la misma", () => {
+    const marcado = profesionalMarcadoAlAbrir({ profesional: "Carla" }, [])
+    expect(marcado).toBeNull()
+    expect(marcado).not.toBe(NADIE_MARCADO)
+    expect(eleccionDelPedido(marcado, marcado)).toEqual({ tipo: "mismo" })
+  })
+
   it("quien atiende la cita hoy, si es de la lista", () => {
     expect(profesionalMarcadoAlAbrir({ profesional: "Carla" }, EQUIPO)).toBe("m-carla")
   })

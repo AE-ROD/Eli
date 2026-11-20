@@ -29,6 +29,10 @@ export function profesionalMarcadoAlAbrir(
   cita: { profesional: string | null },
   profesionales: readonly ProfesionalParaCambiar[]
 ): string | null {
+  // Sin lista no hay a quién elegir (el servidor no la manda cuando sólo una
+  // persona puede atender): sigue con la misma y el calendario se muestra.
+  // Marcar "nadie" acá escondía el calendario y no dejaba reagendar.
+  if (profesionales.length === 0) return null
   const actual = profesionales.find((profesional) => profesional.actual === true)
   if (actual) return actual.id
   return cita.profesional ? NADIE_MARCADO : null
