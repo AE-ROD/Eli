@@ -30,15 +30,20 @@ const LARGO_MAXIMO_DEL_REMITENTE = 60
  * siempre la de `FROM`. El nombre del negocio lo escribió una persona y va a
  * un encabezado: se le sacan los saltos de línea, los caracteres de control y
  * todo lo que podría cerrar las comillas o abrir otra dirección (`"`, `\`,
- * `<`, `>`). Si no queda nada, el remitente de siempre.
+ * `<`, `>`). También los controles C1 (`\u0085` es un salto de línea para
+ * algunos lectores) y los que invierten el sentido del texto (`\u202e`), que
+ * harían que el nombre visible se lea distinto de lo que dice. El corte al
+ * largo máximo va por caracteres y no por unidades de UTF-16: un emoji en el
+ * borde no queda partido en una mitad suelta. Si no queda nada, el remitente
+ * de siempre.
  */
 export function remitenteDelNegocio(nombreNegocio: string | null | undefined): string {
-  const nombre = limpiarAsunto(nombreNegocio ?? "")
+  const limpio = limpiarAsunto(nombreNegocio ?? "")
+    .replace(/[\x80-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/["\\<>]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, LARGO_MAXIMO_DEL_REMITENTE)
-    .trim()
+  const nombre = Array.from(limpio).slice(0, LARGO_MAXIMO_DEL_REMITENTE).join("").trim()
   return nombre ? `"${nombre} vía Eli" <${direccionDeEnvio()}>` : FROM
 }
 
@@ -527,15 +532,19 @@ function enlacesParaElCliente({
 /**
  * "jue 15 de nov" de una fecha calendario "AAAA-MM-DD", para el asunto: corto,
  * para que quepa en la bandeja junto a la hora. Se lee en UTC, como
- * `fechaLegible`.
+ * `fechaLegible`. Una fecha que no se puede leer sale tal cual: con una fecha
+ * inválida `formatToParts` lanza, y lanzaría ANTES de devolver la promesa del
+ * envío, por fuera del `.catch` de quien manda el correo.
  */
 function fechaCorta(fechaISO: string): string {
+  const instante = new Date(fechaISO)
+  if (Number.isNaN(instante.getTime())) return limpiarAsunto(fechaISO)
   const partes = new Intl.DateTimeFormat("es-CL", {
     timeZone: "UTC",
     weekday: "short",
     day: "numeric",
     month: "short",
-  }).formatToParts(new Date(fechaISO))
+  }).formatToParts(instante)
   const parte = (tipo: Intl.DateTimeFormatPartTypes) =>
     (partes.find((p) => p.type === tipo)?.value ?? "").replace(/\.$/, "")
   return `${parte("weekday")} ${parte("day")} de ${parte("month")}`

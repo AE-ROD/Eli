@@ -22,8 +22,8 @@ interface PropsDeFilaDeDiaCompacta {
   etiqueta: string
   activo: boolean
   alAlternar: () => void
-  /** Las horas del día, ya escritas: "09:00 – 18:00", o varias franjas. */
-  resumen: string
+  /** Las franjas del día, ya escritas: ["09:00 – 13:00", "15:00 – 19:00"]. Cada una va entera, sin cortarse. */
+  resumen: readonly string[]
   /** Lo que se le dice al lector de pantalla en lugar del resumen: "de 09:00 a 18:00". */
   resumenParaLeer: string
   alAbrirLasHoras: () => void
@@ -55,7 +55,7 @@ export function FilaDeDiaCompacta({
 
   return (
     <li className="flex min-h-14 items-center gap-2 py-1.5">
-      <label htmlFor={idDelInterruptorFinal} id={idDelDia} className="w-[5.5rem] shrink-0 cursor-pointer text-[15px] font-medium text-navy">
+      <label htmlFor={idDelInterruptorFinal} id={idDelDia} className="w-20 shrink-0 cursor-pointer text-[15px] font-medium text-navy">
         {etiqueta}
       </label>
 
@@ -67,11 +67,17 @@ export function FilaDeDiaCompacta({
             onClick={alAbrirLasHoras}
             aria-label={`${etiqueta}: ${resumenParaLeer}${conProblema ? ". Revisa las horas" : ""}. Cambiar las horas`}
             className={cn(
-              "flex min-h-11 w-full items-center justify-between gap-1 rounded-campo border bg-tarjeta px-3 py-2 text-left text-[15px] tabular-nums text-navy anillo-foco squircle",
+              "flex min-h-11 w-full items-center justify-between gap-1 rounded-campo border bg-tarjeta px-2.5 py-2 text-left text-[15px] tabular-nums text-navy anillo-foco squircle",
               conProblema ? "border-error text-error" : "border-borde"
             )}
           >
-            <span className="min-w-0 break-words">{resumen}</span>
+            <span className="flex min-w-0 flex-wrap gap-x-2">
+              {resumen.map((franja) => (
+                <span key={franja} className="whitespace-nowrap">
+                  {franja}
+                </span>
+              ))}
+            </span>
             <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-texto-2" strokeWidth={1.75} />
           </button>
         ) : (

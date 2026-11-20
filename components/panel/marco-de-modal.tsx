@@ -15,6 +15,7 @@ import { X } from "lucide-react"
 import { Antetitulo } from "@/components/comunes/antetitulo"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
+import { useAreaVisible } from "@/components/panel/area-visible"
 import { ANILLO_DE_FOCO } from "@/components/panel/estilos"
 import { crearBloqueoDeScroll } from "@/components/panel/bloqueo-de-scroll"
 import { crearPilaDeDialogos, destinoAlCerrar, type DialogoEnLaPila } from "@/components/panel/pila-de-dialogos"
@@ -166,6 +167,9 @@ export function MarcoDeModal({
   pie,
 }: PropsDeMarcoDeModal) {
   const esEscritorio = useEsEscritorio()
+  // Con el teclado abierto en el celular, lo que se ve encima de él (`area-visible.ts`).
+  const areaConTeclado = useAreaVisible()
+  const conTeclado = esEscritorio ? null : areaConTeclado
   const reducirMovimiento = useReducedMotion()
   const idDelTitulo = useId()
   const idDeLaDescripcion = useId()
@@ -314,6 +318,17 @@ export function MarcoDeModal({
     if (venia && !sePuedeEnfocar(document.activeElement, nodo)) volverAdentro(nodo, ultimoEnfocado.current)
   }, [bloqueado, presente])
 
+  // Cuando el teclado se abre (o cambia de alto), la hoja se achica: el campo
+  // que se está escribiendo no queda escondido detrás del pie.
+  const altoConTeclado = conTeclado ? conTeclado.height : null
+  useEffect(() => {
+    if (altoConTeclado === null) return
+    const activo = document.activeElement
+    if (activo instanceof HTMLElement && activo !== panel.current && panel.current?.contains(activo)) {
+      activo.scrollIntoView({ block: "nearest" })
+    }
+  }, [altoConTeclado])
+
   const recordarFoco = (evento: FocusEvent<HTMLDivElement>) => {
     if (evento.target !== panel.current) ultimoEnfocado.current = evento.target
   }
@@ -340,6 +355,9 @@ export function MarcoDeModal({
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6"
+      // En el celular, con el teclado abierto, la capa ocupa sólo lo que se ve:
+      // la hoja se apoya encima del teclado y su pie (Guardar) no queda tapado.
+      style={conTeclado ? { top: conTeclado.top, height: conTeclado.height, bottom: "auto" } : undefined}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -366,9 +384,10 @@ export function MarcoDeModal({
         className={cn(
           "relative flex w-full flex-col overflow-hidden bg-tarjeta text-navy shadow-md focus:outline-none",
           // En el celular, una hoja pegada abajo: bordes de arriba redondeados,
-          // hasta el 90 % del alto, y lo de adentro se desplaza entre la
+          // hasta el 90 % de lo que se ve (con el teclado abierto, de lo que
+          // queda encima), y lo de adentro se desplaza entre la
           // cabecera y el pie, que quedan fijos.
-          "max-h-[90dvh] rounded-t-[24px]",
+          "max-h-[90%] rounded-t-[24px]",
           // En el computador, la tarjeta de siempre: lo que no entra en el
           // alto se desplaza entero adentro, y lo que se sale de la tarjeta se
           // corta; el relleno deja lugar al anillo del foco de lo que va pegado

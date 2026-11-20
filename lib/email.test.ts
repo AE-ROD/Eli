@@ -1338,6 +1338,36 @@ describe("lib/email — los correos a clientes llevan el nombre del negocio", ()
     expect(remitenteDelNegocio("x".repeat(200))).toBe(`"${"x".repeat(60)} vía Eli" <no-reply@eli.app>`)
   })
 
+  it("el nombre en el remitente pierde los controles C1 y los que invierten el texto", async () => {
+    const { remitenteDelNegocio } = await import("./email")
+    // \u0085 (NEL) es un salto de línea para algunos lectores; ‮ da vuelta lo que sigue.
+    expect(remitenteDelNegocio("Sol\u0085Bcc: x@y.z")).toBe('"SolBcc: x@y.z vía Eli" <no-reply@eli.app>')
+    expect(remitenteDelNegocio("Sol ‮ilE‬")).toBe('"Sol ilE vía Eli" <no-reply@eli.app>')
+  })
+
+  it("el corte del remitente no parte un emoji en una mitad suelta", async () => {
+    const { remitenteDelNegocio } = await import("./email")
+    // 59 letras y un emoji (2 unidades UTF-16): con `slice` quedaba la primera mitad del par.
+    const remitente = remitenteDelNegocio(`${"x".repeat(59)}💇‍♀️ y más`)
+    expect(remitente).toBe(`"${"x".repeat(59)}💇 vía Eli" <no-reply@eli.app>`)
+    expect(remitente).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/)
+  })
+
+  it("una fecha que no se puede leer no hace lanzar el envío: el asunto la dice tal cual", async () => {
+    const { enviarConfirmacionCliente } = await import("./email")
+    const envio = enviarConfirmacionCliente({
+      emailCliente: "cliente@ejemplo.com",
+      nombreCliente: "Ana",
+      nombreNegocio: "Salón Sol",
+      servicio: "Corte",
+      fecha: "2026-13-01",
+      hora: "10:00",
+      duracion: 30,
+    })
+    await expect(envio).resolves.toBeDefined()
+    expect(enviarMock.mock.calls[0][0].subject).toBe("Confirmada: 2026-13-01, 10:00 — Salón Sol")
+  })
+
   it("con una dirección de envío sin nombre, la usa tal cual", async () => {
     vi.stubEnv("RESEND_FROM_EMAIL", "reservas@eli.app")
     vi.resetModules()

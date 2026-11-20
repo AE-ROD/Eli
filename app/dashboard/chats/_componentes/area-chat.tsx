@@ -81,7 +81,7 @@ export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver,
       {/* Cabecera. Si no entran los botones al lado del nombre, bajan a la derecha. */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-borde px-3 py-2.5 sm:px-5">
         {onVolver && (
-          <button type="button" onClick={onVolver} aria-label="Volver a las conversaciones" className={cn(BOTON_DE_ICONO, "md:hidden")}>
+          <button type="button" onClick={onVolver} aria-label="Volver a las conversaciones" className={cn(BOTON_DE_ICONO, "lg:hidden")}>
             <ArrowLeft className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
         )}
@@ -141,8 +141,8 @@ export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver,
         ))}
       </div>
 
-      {/* Escribir */}
-      <div className="shrink-0 border-t border-borde p-3 sm:px-5">
+      {/* Escribir. En el celular, fijo abajo de la pantalla, sobre el área segura. */}
+      <div className="shrink-0 border-t border-borde p-3 sm:px-5 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex items-end gap-2">
           <div className="relative min-w-0 flex-1">
             <textarea
@@ -157,7 +157,8 @@ export function AreaChat({ conversacion, mensajes, cargando, onEnviar, onVolver,
               }}
               placeholder="Escribe un mensaje..."
               rows={1}
-              className={cn(CAMPO, "block max-h-32 resize-none pr-12")}
+              // 16 px en el celular: con menos, el teléfono acerca la pantalla al tocar el campo.
+              className={cn(CAMPO, "block max-h-32 resize-none pr-12 max-lg:text-base")}
             />
             <button
               type="button"

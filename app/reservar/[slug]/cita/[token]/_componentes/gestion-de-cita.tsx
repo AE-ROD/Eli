@@ -375,11 +375,24 @@ export function GestionDeCita({
                   : "."}
               </p>
             )}
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <Boton variante="secundario" onClick={() => elegirModo("ver")} disabled={trabajando} className="w-full sm:w-auto">
+            {/*
+              Por debajo de lg, un pie pegajoso: con el calendario y las horas, "Cambiar a
+              esta hora" queda a la vista sin bajar hasta el final. De borde a borde de la
+              tarjeta (el `-mx` deshace su relleno), con el área segura del iPhone. En el
+              celular van en fila; para que entren a 360px, la acción pierde su cuadro de
+              ícono. Desde lg, como siempre.
+            */}
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:-mx-4 max-lg:mt-6 max-lg:flex-row max-lg:items-center max-lg:border-t max-lg:border-borde max-lg:bg-tarjeta max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:max-lg:-mx-8 sm:max-lg:px-8">
+              <Boton variante="secundario" onClick={() => elegirModo("ver")} disabled={trabajando} className="w-full max-sm:w-auto sm:w-auto">
                 Volver
               </Boton>
-              <Boton icono={<Check />} disabled={!fecha || !hora || sinCambios} cargando={trabajando} onClick={reagendar} className="w-full sm:w-auto">
+              <Boton
+                icono={<Check />}
+                disabled={!fecha || !hora || sinCambios}
+                cargando={trabajando}
+                onClick={reagendar}
+                className="w-full max-sm:w-auto max-sm:flex-1 max-sm:pl-5 max-sm:[&>span[aria-hidden]:first-child]:hidden sm:w-auto"
+              >
                 Cambiar a esta hora
               </Boton>
             </div>

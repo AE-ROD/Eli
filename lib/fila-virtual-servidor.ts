@@ -372,7 +372,12 @@ export async function vaciarLaFilaDeHoy(
 export async function avisarFilaVirtual(businessId: string, ahora = new Date()): Promise<number> {
   let enviados = 0
   try {
-    const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { name: true, timezone: true, type: true } })
+    // `whatsapp`: el número público de su página, para "Escribir por WhatsApp"
+    // en el aviso, como en el correo de cuando se anotó (`enviarTurnoEnLaFila`).
+    const negocio = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true, timezone: true, type: true, whatsapp: true },
+    })
     if (!negocio) return 0
 
     // Los dos primeros de la fila: sólo a ellos les puede tocar.
@@ -401,6 +406,7 @@ export async function avisarFilaVirtual(businessId: string, ahora = new Date()):
           nombreCliente: primerNombre(turno.customerName),
           nombreNegocio: negocio.name,
           numero: turno.filaNumero ?? 0,
+          whatsapp: negocio.whatsapp,
         })
         if (resultado?.error) console.error("Error enviando el aviso de la fila virtual:", { name: resultado.error.name })
         enviado = resultado !== null && !resultado.error

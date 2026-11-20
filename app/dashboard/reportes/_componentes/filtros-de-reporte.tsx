@@ -107,9 +107,14 @@ export function FiltrosDeReporte({
         </p>
       </div>
 
-      <fieldset>
+      {/* `min-w-0`: un fieldset mide por defecto lo que su contenido, y la fila de períodos ensanchaba la página. */}
+      <fieldset className="min-w-0">
         <legend className={cn(ETIQUETA, "mb-2")}>Período</legend>
-        {/* En el celular, una fila que se desliza; el relleno de arriba y abajo deja ver el anillo del foco. */}
+        {/*
+          En el celular, una fila que se desliza; el relleno de arriba y abajo
+          deja ver el anillo del foco. Cada píldora es `relative`: su radio
+          `sr-only` (absoluto) queda dentro de la fila y no ensancha la página.
+        */}
         <div className="flex gap-2 max-lg:-mx-4 max-lg:overflow-x-auto max-lg:px-4 max-lg:py-1.5 lg:flex-wrap">
           {PERIODOS.map((periodo) => {
             const elegido = filtros.periodo === periodo.id
@@ -117,7 +122,7 @@ export function FiltrosDeReporte({
               <label
                 key={periodo.id}
                 className={cn(
-                  "inline-flex h-11 shrink-0 cursor-pointer items-center rounded-full px-4 text-sm font-medium whitespace-nowrap",
+                  "relative inline-flex h-11 shrink-0 cursor-pointer items-center rounded-full px-4 text-sm font-medium whitespace-nowrap",
                   "transition-[background-color,color,box-shadow] duration-150 ease-suave",
                   ANILLO_DE_LA_OPCION,
                   elegido
@@ -177,7 +182,8 @@ export function FiltrosDeReporte({
       {soloPeriodo ? (
         <p className="text-sm text-texto-2">Lo anulado se filtra solo por período, por la fecha en que se anuló.</p>
       ) : (
-        <>
+        // Con `gap` y no `space-y`: con los filtros plegados no queda un margen vacío debajo del botón.
+        <div className="flex flex-col gap-4">
           <button
             type="button"
             aria-expanded={masFiltros}
@@ -248,7 +254,7 @@ export function FiltrosDeReporte({
               </Selector>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {errorDeOpciones && !soloPeriodo && (

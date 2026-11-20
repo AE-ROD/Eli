@@ -163,6 +163,18 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
     return (
       <div className={cn("flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-1", enLaHoja && cn("gap-3", LISTAS_GRANDES))}>
         {enLaHoja && dia.franjas.length === 0 && <p className="text-sm text-texto-2">{frases.sinAtencion}</p>}
+        {/* En la hoja no se ve el aviso de la grilla: los cruces de este día van acá. */}
+        {enLaHoja && choques.some((choque) => choque.dayOfWeek === dia.dayOfWeek) && (
+          <Aviso tono="atencion" titulo={frases.choques.titulo(choques.filter((choque) => choque.dayOfWeek === dia.dayOfWeek).length)}>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {choques
+                .filter((choque) => choque.dayOfWeek === dia.dayOfWeek)
+                .map((choque) => (
+                  <li key={`${choque.conSede}-${choque.estaFranja.startTime}-${choque.suFranja.startTime}`}>{textoDeChoque(choque)}</li>
+                ))}
+            </ul>
+          </Aviso>
+        )}
         {dia.franjas.map((franja, indice) => {
           const problema = problemas.find((otro) => otro.dayOfWeek === dia.dayOfWeek && otro.indice === indice)
           return (
@@ -211,14 +223,14 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
     )
   }
 
-  /** El resumen de las horas de un día, para su fila del celular: «09:00 – 13:00 · 15:00 – 19:00». */
-  const resumenDelDia = (dia: DiaDeLaSemana) => dia.franjas.map((franja) => `${franja.startTime} – ${franja.endTime}`).join(" · ")
+  /** Las horas de un día, para su fila del celular: «09:00 – 13:00», «15:00 – 19:00». */
+  const resumenDelDia = (dia: DiaDeLaSemana) => dia.franjas.map((franja) => `${franja.startTime} – ${franja.endTime}`)
   const resumenParaLeer = (dia: DiaDeLaSemana) => dia.franjas.map((franja) => `de ${franja.startTime} a ${franja.endTime}`).join(" y ")
 
   const diaDeLaHoja = semana.find((dia) => dia.dayOfWeek === diaEnLaHoja) ?? null
 
   return (
-    <div role="group" aria-labelledby={idDelTitulo} className="rounded-campo bg-superficie p-4 squircle sm:p-5">
+    <div role="group" aria-labelledby={idDelTitulo} className="rounded-campo bg-superficie p-3 squircle lg:p-5">
       <h5 id={idDelTitulo} className="font-medium text-navy break-words">
         {frases.titulo(sede.nombre)}
       </h5>
@@ -273,7 +285,10 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
             alAlternar={() => alternarDia(dia)}
             resumen={resumenDelDia(dia)}
             resumenParaLeer={resumenParaLeer(dia)}
-            conProblema={problemas.some((problema) => problema.dayOfWeek === dia.dayOfWeek)}
+            conProblema={
+              problemas.some((problema) => problema.dayOfWeek === dia.dayOfWeek) ||
+              choques.some((choque) => choque.dayOfWeek === dia.dayOfWeek)
+            }
             alAbrirLasHoras={() => setDiaEnLaHoja(dia.dayOfWeek)}
             textoSinAtencion={frases.sinAtencion}
           />

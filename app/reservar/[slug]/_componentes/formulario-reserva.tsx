@@ -769,7 +769,7 @@ export function FormularioReserva({
                     onClick={() => setPaso(0)}
                     className={BOTON_ATRAS}
                   >
-                    Atrás
+                    <TextoDeAtras />
                   </Boton>
                 )}
                 <Boton
@@ -905,7 +905,7 @@ export function FormularioReserva({
                   onClick={() => setPaso(1)}
                   className={BOTON_ATRAS}
                 >
-                  Atrás
+                  <TextoDeAtras />
                 </Boton>
                 <Boton
                   icono={<ArrowRight />}
@@ -1087,7 +1087,7 @@ export function FormularioReserva({
                   onClick={() => setPaso(2)}
                   className={BOTON_ATRAS}
                 >
-                  Atrás
+                  <TextoDeAtras />
                 </Boton>
                 <Boton
                   type="submit"
@@ -1258,9 +1258,16 @@ function BarraDeAcciones({ children }: { children: ReactNode }) {
 
 /**
  * Los botones de la barra: en el celular, "Atrás" a su medida y la acción
- * principal ocupa el resto; desde @[32rem] (y en lg), como siempre.
+ * principal ocupa el resto; desde @[32rem] (y en lg), como siempre. En un
+ * celular angosto (menos de 24rem de ancho) "Atrás" queda sólo con su flecha
+ * (el texto sigue para el lector de pantalla), para que "Confirmar reserva"
+ * entre entero a su lado a 360px.
  */
-const BOTON_ATRAS = "w-full max-lg:w-auto max-lg:shrink-0 @[32rem]:w-auto"
+function TextoDeAtras() {
+  return <span className="max-lg:@max-[24rem]:sr-only">Atrás</span>
+}
+
+const BOTON_ATRAS = "w-full max-lg:w-auto max-lg:shrink-0 max-lg:@max-[24rem]:px-2 @[32rem]:w-auto"
 const BOTON_PRINCIPAL = "w-full max-lg:w-auto max-lg:flex-1 @[32rem]:w-auto"
 
 /*

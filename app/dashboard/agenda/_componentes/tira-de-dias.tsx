@@ -26,7 +26,7 @@ export function TiraDeDias({ fecha, onElegir }: PropsDeTiraDeDias) {
   const zona = useZonaDelNegocio()
 
   return (
-    <div role="group" aria-label="Días de la semana" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1">
+    <div role="group" aria-label="Días de la semana" className="-mx-1 flex gap-1 overflow-x-auto px-1 py-1">
       {diasDeLaSemanaDe(fecha).map((dia) => {
         const elegido = mismoDia(dia, fecha)
         const hoy = esHoyEn(dia, zona)

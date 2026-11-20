@@ -528,12 +528,23 @@ describe("aviso por correo cuando queda 1 persona adelante", () => {
       nombreNegocio: "Salón Uno",
       numero: 2,
       rubro: "salon",
+      // Sin WhatsApp cargado: el correo no ofrece escribirle.
+      whatsapp: null,
     })
     expect(base.buscar("visit", { id: "b" })[0].filaAvisadaAt).toEqual(AHORA)
 
     // Otra vuelta sin cambios: nadie más.
     expect(await avisarFilaVirtual(NEGOCIO)).toBe(0)
     expect(correos.aviso).toHaveBeenCalledTimes(1)
+  })
+
+  it("el aviso lleva el WhatsApp público del negocio, como el correo de cuando se anotó", async () => {
+    const { avisarFilaVirtual } = await import("@/lib/fila-virtual-servidor")
+    escenario({ negocio: { whatsapp: "+56912345678" }, visitas: [enFila("a", 1), enFila("b", 2, { filaEmail: "b@correo.test" })] })
+
+    await avisarFilaVirtual(NEGOCIO)
+
+    expect(correos.aviso).toHaveBeenCalledWith(expect.objectContaining({ whatsapp: "+56912345678" }))
   })
 
   it("el correo lleva el rubro del negocio de la fila", async () => {

@@ -179,8 +179,8 @@ async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, 
           emailCliente: cliente.email,
           nombreCliente: cliente.name,
           nombreNegocio: negocio.name,
-            // El WhatsApp público del negocio: el correo ofrece escribirle.
-            whatsapp: negocio.whatsapp,
+          // El WhatsApp público del negocio: el correo ofrece escribirle.
+          whatsapp: negocio.whatsapp,
           servicio: frecuencia.ultimoServicio,
           // `urlBase` lanza en producción sin NEXTAUTH_URL: adentro de `enviar`,
           // `enviarAClientes` lo registra, lo cuenta como fallido y suelta el

@@ -15,16 +15,22 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import type { InvitacionPendiente, MiembroDelEquipo } from "../_datos"
 import { frasesDeEquipo } from "../_frases"
+import { MenuDeLaPersona } from "./menu-de-la-persona"
 
 /**
- * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde sm
- * el rol va a la derecha; en el teléfono baja debajo del correo, alineado con
- * el texto, para que al nombre y al correo les quede el ancho de la fila.
+ * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde lg
+ * el rol va a la derecha y las acciones debajo, a la vista. En el celular la
+ * fila es compacta: el rol baja debajo del correo, alineado con el texto, y
+ * las acciones van en el menú ⋯ de la derecha (`MenuDeLaPersona`).
  */
 const FILA_DE_PERSONA =
-  "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:px-5"
-const LUGAR_DEL_AVATAR = "row-span-2 self-start sm:row-span-1 sm:self-center"
-const LUGAR_DEL_ROL = "col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end"
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 lg:gap-x-4 lg:gap-y-2 lg:px-5 lg:py-3.5"
+const LUGAR_DEL_AVATAR = "row-span-2 self-center lg:row-span-1"
+const LUGAR_DEL_ROL = "col-start-2 row-start-2 justify-self-start lg:col-start-3 lg:row-start-1 lg:justify-self-end"
+/** El ⋯ del celular, a la derecha de las dos líneas. */
+const LUGAR_DEL_MENU = "col-start-3 row-span-2 row-start-1 -mr-2 lg:hidden"
+/** Los botones de la persona, desde lg. */
+const LUGAR_DE_LAS_ACCIONES = "col-start-2 col-span-2 flex flex-wrap gap-2 max-lg:hidden"
 
 /**
  * El encargado lleva el turquesa del equipo; el profesional, gris. El nombre
@@ -103,7 +109,23 @@ export function ListaEquipo({
                 <div className={LUGAR_DEL_ROL}>
                   <InsigniaDelRol rol={miembro.role} />
                 </div>
-                <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
+                <MenuDeLaPersona
+                  className={LUGAR_DEL_MENU}
+                  etiqueta={`Opciones de ${miembro.user.name}`}
+                  opciones={[
+                    { texto: frases.servicios.queHace, icono: <ListChecks aria-hidden="true" />, onElegir: () => alEditarServicios(miembro) },
+                    ...(puedeCambiarLaFotoDe(miembro)
+                      ? [
+                          {
+                            texto: miembro.fotoUrl ? "Cambiar foto" : "Subir foto",
+                            icono: <Camera aria-hidden="true" />,
+                            onElegir: () => alEditarFoto(miembro),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+                <div className={LUGAR_DE_LAS_ACCIONES}>
                   <Boton
                     variante="fantasma"
                     tamano="sm"
@@ -145,7 +167,7 @@ export function ListaEquipo({
                     <Clock className="size-5" strokeWidth={1.75} />
                   </span>
                   <DatosDeLaPersona nombre={invitacion.name} email={invitacion.email} />
-                  <div className={cn(LUGAR_DEL_ROL, "flex items-center gap-2 sm:flex-col sm:items-end sm:gap-1")}>
+                  <div className={cn(LUGAR_DEL_ROL, "flex flex-wrap items-center gap-x-2 gap-y-1 lg:flex-col lg:flex-nowrap lg:items-end lg:gap-1")}>
                     <InsigniaDelRol rol={invitacion.role} />
                     {vencida ? (
                       <Insignia tono="gris">Vencida</Insignia>
@@ -153,7 +175,20 @@ export function ListaEquipo({
                       <p className="text-xs text-texto-2">Vence el {diaDeVencimiento(invitacion.expiresAt)}</p>
                     )}
                   </div>
-                  <div className="col-start-2 flex flex-wrap gap-2 sm:col-span-2 sm:col-start-2">
+                  <MenuDeLaPersona
+                    className={LUGAR_DEL_MENU}
+                    etiqueta={`Opciones de la invitación de ${invitacion.name}`}
+                    opciones={[
+                      {
+                        texto: reenviandoId === invitacion.id ? "Reenviando…" : "Reenviar",
+                        icono: <RotateCw aria-hidden="true" />,
+                        deshabilitada: reenviandoId !== null,
+                        onElegir: () => alReenviar(invitacion),
+                      },
+                      { texto: "Anular", icono: <X aria-hidden="true" />, peligro: true, onElegir: () => alAnular(invitacion) },
+                    ]}
+                  />
+                  <div className={LUGAR_DE_LAS_ACCIONES}>
                     <Boton
                       variante={vencida ? "secundario" : "fantasma"}
                       tamano="sm"
@@ -222,7 +257,7 @@ function ListaCargando() {
     <div aria-busy="true" className={cn(TARJETA_DEL_PANEL, "divide-y divide-borde")}>
       <span className="sr-only">Cargando el equipo...</span>
       {[0, 1, 2].map((fila) => (
-        <div key={fila} aria-hidden="true" className="flex items-center gap-4 px-4 py-3.5 sm:px-5">
+        <div key={fila} aria-hidden="true" className="flex items-center gap-4 px-4 py-3 lg:px-5 lg:py-3.5">
           <Esqueleto forma="circulo" className="size-10" />
           <span className="flex min-w-0 flex-1 flex-col gap-2">
             <Esqueleto className="w-1/3" />

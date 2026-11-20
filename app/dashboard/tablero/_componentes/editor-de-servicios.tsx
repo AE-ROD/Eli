@@ -169,13 +169,13 @@ export function EditorDeServicios({
           // contra él y se ve dónde termina uno y empieza el otro.
           <fieldset
             key={fila.clave}
-            className="grid grid-cols-1 items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] sm:p-4"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[20px] bg-superficie p-3 squircle sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_auto] sm:p-4"
           >
             <legend className="sr-only">
               {loQueEs.titulo} {numero}
             </legend>
 
-            <div className={cn(!eligeProfesional && "sm:col-span-2")}>
+            <div className={cn("col-span-2", eligeProfesional && "sm:col-span-1")}>
               <label htmlFor={id("servicio")} className={ETIQUETA}>
                 {loQueEs.titulo}
               </label>
@@ -221,7 +221,7 @@ export function EditorDeServicios({
             </div>
 
             {eligeProfesional && (
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <label htmlFor={id("profesional")} className={ETIQUETA}>
                   {frases.editor.profesional}
                 </label>
@@ -301,8 +301,8 @@ export function EditorDeServicios({
             </div>
 
             {/*
-              En el teléfono, a lo ancho y con su nombre; desde sm, sólo el
-              ícono, a la altura de los campos (baja lo que mide la etiqueta).
+              Sólo el ícono, al lado del precio y a su altura (baja lo que mide
+              la etiqueta): en el teléfono el bloque gana un renglón.
             */}
             <div className="flex justify-end">
               <Boton
@@ -312,10 +312,9 @@ export function EditorDeServicios({
                 disabled={deshabilitado}
                 aria-label={`${loQueEs.quitar(numero)}${nombreDelServicio ? `: ${nombreDelServicio}` : ""}`}
                 title="Quitar"
-                className="text-texto-2 hover:bg-error/8 hover:text-error sm:mt-6.5 sm:size-11 sm:px-0 sm:after:hidden"
+                className="mt-6.5 size-11 px-0 text-texto-2 after:hidden hover:bg-error/8 hover:text-error"
               >
                 <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
-                <span className="sm:hidden">Quitar</span>
               </Boton>
             </div>
           </fieldset>

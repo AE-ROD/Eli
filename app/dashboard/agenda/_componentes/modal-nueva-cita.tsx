@@ -305,8 +305,10 @@ export function ModalNuevaCita({
             </Boton>
           ) : (
             <Boton type="submit" form={idDelFormulario} className="w-full" cargando={guardando}>
-              {frases.guardarCita}
-              {resumenDelBoton && <span className="lg:hidden"> · {resumenDelBoton}</span>}
+              <span>
+                {frases.guardarCita}
+                {resumenDelBoton && <span className="lg:hidden"> · {resumenDelBoton}</span>}
+              </span>
             </Boton>
           )}
         </div>

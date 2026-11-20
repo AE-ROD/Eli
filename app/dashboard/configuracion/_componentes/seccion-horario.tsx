@@ -198,7 +198,7 @@ export function SeccionHorario({
               etiqueta={dia}
               activo={horario.active}
               alAlternar={() => alternarDia(horario.dayOfWeek)}
-              resumen={`${horario.startTime} – ${horario.endTime}`}
+              resumen={[`${horario.startTime} – ${horario.endTime}`]}
               resumenParaLeer={`de ${horario.startTime} a ${horario.endTime}`}
               alAbrirLasHoras={() => {
                 setAnuncio("")
