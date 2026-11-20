@@ -334,14 +334,13 @@ describe("el catálogo ordenado del primer paso: la búsqueda, 'Todos' y lo eleg
 })
 
 describe("simplicidad: lo que se dice al confirmar, la primera vez, el RUT y los enlaces", () => {
-  it("por confirmar no se dice 'confirmada': 'Recibimos tu solicitud' y quién confirma, con su palabra", () => {
+  it("con correo, un mismo texto para todos que manda al correo (no revela si ese correo faltó antes)", () => {
     expect(frasesDelFormulario(null).confirmada.titulo).toBe("¡Reserva confirmada!")
-    expect(frasesDelFormulario(null).porConfirmar.titulo).toBe("Recibimos tu solicitud")
-    expect(frasesDelFormulario(null).porConfirmar.bajada(false)).toBe("El local te confirmará la hora.")
-    expect(frasesDelFormulario("salon").porConfirmar.bajada(true)).toBe(
-      "El salón te confirmará la hora y te avisaremos por correo."
+    expect(frasesDelFormulario(null).registrada.titulo).toBe("¡Listo! Recibimos tu reserva")
+    expect(frasesDelFormulario("salon").registrada.bajada).toBe(
+      "Te mandamos el detalle a tu correo: revísalo para saber si tu hora ya quedó confirmada. Si no lo ves, mira en Spam."
     )
-    expect(frasesDelFormulario("odontologia").porConfirmar.bajada(false)).toBe("La clínica te confirmará la hora.")
+    expect(frasesDelFormulario("odontologia").registrada.bajada).toContain("tu hora ya quedó confirmada")
   })
 
   it("sin correo, guardar el enlace; con correo, también llegó por ahí", () => {

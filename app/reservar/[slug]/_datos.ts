@@ -172,11 +172,6 @@ export interface ReservaConfirmada {
   recibiraRecordatorio?: boolean
   /** La sede donde quedó la cita, tal como la guardó el servidor. Sólo viene si la cita tiene sede. */
   sede?: { nombre: string; direccion: string; comuna: string }
-  /**
-   * La reserva entró por confirmar (#84): el negocio la confirma después. Con
-   * `true` la pantalla no dice "confirmada". Ausente: confirmada, como siempre.
-   */
-  porConfirmar?: boolean
 }
 
 /**

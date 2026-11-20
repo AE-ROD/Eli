@@ -201,13 +201,15 @@ export function frasesDelFormulario(rubro: Rubro) {
     },
 
     /**
-     * La reserva quedó por confirmar (#84): no se dice "confirmada". "Recibimos
-     * tu solicitud" y "El salón te confirmará la hora".
+     * Con correo, la pantalla dice lo mismo a todos y el correo dice si quedó
+     * confirmada o por confirmar (#84). Así la pantalla no revela a nadie si
+     * ese correo faltó antes: lo sabe sólo quien lee esa casilla. Sin correo
+     * una reserva nunca queda por confirmar, así que ahí se dice "confirmada".
      */
-    porConfirmar: {
-      titulo: "Recibimos tu solicitud",
-      bajada: (conCorreo: boolean): string =>
-        `${conMayuscula(el(local))} te confirmará ${el(hora)}${conCorreo ? " y te avisaremos por correo" : ""}.`,
+    registrada: {
+      titulo: "¡Listo! Recibimos tu reserva",
+      /** "Te mandamos el detalle a tu correo: revísalo para saber si tu hora ya quedó confirmada." */
+      bajada: `Te mandamos el detalle a tu correo: revísalo para saber si tu ${hora.singular} ya quedó confirmada. Si no lo ves, mira en Spam.`,
     },
   }
 }

@@ -294,7 +294,7 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
         ${bloqueCierre}
       </td></tr>
       <tr><td style="padding: 24px 12px 0;">
-        <p style="margin: 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};">${negocio ? "Enviado por Eli" : "Enviado por Eli · Agenda y cobros para tu negocio"}</p>
+        <p style="margin: 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};">${negocio ? "Enviado por Eli · Correo automático: no lo respondas" : "Enviado por Eli · Agenda y cobros para tu negocio · Correo automático: no lo respondas"}</p>
         ${bloqueBaja}
       </td></tr>
     </table>

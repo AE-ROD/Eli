@@ -279,7 +279,6 @@ export function FormularioReserva({
   // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
   const [conRecordatorio, setConRecordatorio] = useState(false)
   // La reserva entró por confirmar (#84): el negocio la confirma después.
-  const [porConfirmar, setPorConfirmar] = useState(false)
   // El día elegido en el calendario. El que vale es `fecha` (abajo): con una
   // urgencia dental, siempre hoy.
   const [fechaElegida, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
@@ -529,7 +528,6 @@ export function FormularioReserva({
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
       setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
       setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
-      setPorConfirmar(resultado.datos.porConfirmar === true)
       setSedeConfirmada(resultado.datos.sede ?? null)
       setCitaId(resultado.datos.citaId)
     }
@@ -584,9 +582,11 @@ export function FormularioReserva({
           ref={titulo}
           nivel={2}
           antetitulo={nombreNegocio}
-          // Por confirmar (#84) no se dice "confirmada": el negocio la confirma después.
-          titulo={porConfirmar ? frases.porConfirmar.titulo : frases.confirmada.titulo}
-          bajada={porConfirmar ? frases.porConfirmar.bajada(!!email.trim()) : `Te esperamos, ${nombre}. ¡Hasta pronto!`}
+          // Con correo, el mismo texto para todos: el correo dice si quedó confirmada o por
+          // confirmar (#84), sin revelar en pantalla si ese correo faltó antes. Sin correo
+          // nunca queda por confirmar.
+          titulo={email.trim() ? frases.registrada.titulo : frases.confirmada.titulo}
+          bajada={email.trim() ? frases.registrada.bajada : `Te esperamos, ${nombre}. ¡Hasta pronto!`}
         />
         <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12 lg:mt-5 lg:p-6">
           <div className="flex items-center gap-4">
