@@ -12,6 +12,7 @@ import { leerPaginaDelNegocio } from "./_pagina/datos-de-la-pagina"
 import { ANCLA_DE_RESERVA, MiniPagina } from "./_pagina/mini-pagina"
 import { EncabezadoDeReserva } from "./_componentes/encabezado-de-reserva"
 import { FormularioReserva } from "./_componentes/formulario-reserva"
+import { contactoDelNegocio } from "./_componentes/contactar-al-negocio"
 import { PieDeEli } from "./_componentes/pie-de-eli"
 import { frasesDeLaPagina, pestanaDeLaReserva, tituloDeLaReserva } from "./_frases"
 
@@ -66,6 +67,8 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
       // El calendario cuenta "hoy" y la ventana de reserva en este reloj.
       timezone: true,
       listaDeEsperaActiva: true,
+      // El mismo WhatsApp que publica la mini página: "Escribir por WhatsApp" y "Llamar" en la confirmación.
+      whatsapp: true,
       services: {
         where: { active: true },
         select: { id: true, name: true, description: true, duration: true, price: true, category: true, esUrgencia: true },
@@ -149,6 +152,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
               }))
             : undefined
         }
+        contacto={contactoDelNegocio(negocio.whatsapp)}
       />
       </div>
     </MarcoDeReserva>

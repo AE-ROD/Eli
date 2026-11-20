@@ -1,4 +1,5 @@
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
+import { MENSAJE_DEMASIADAS_SOLICITUDES } from "@/app/api/reservar/_mensajes"
 import { NextResponse, type NextRequest } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -31,7 +32,7 @@ export interface EnlaceAbierto {
 export const noEncontrada = (rubro?: string | null) =>
   NextResponse.json({ error: mensajeEnlaceInvalido(rubro) }, { status: 404 })
 
-const demasiadas = () => NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+const demasiadas = () => NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
 
 /**
  * Los límites y la cita. `limiteDeIp` es el de lectura pública para mirar y

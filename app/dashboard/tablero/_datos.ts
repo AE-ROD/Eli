@@ -497,3 +497,61 @@ export async function anularAtencion(id: string, motivo: string): Promise<Result
   }
   return conMotivo(resultado)
 }
+
+// ─── Cobrar desde la agenda ──────────────────────────────────────────────────
+
+/** El parámetro con que la agenda pide cobrar una cita: `/dashboard/tablero?cobrar=<citaId>`. */
+export const PARAMETRO_COBRAR = "cobrar"
+
+/** Un id de cita como los que genera la base (cuid): letras, números, `-` y `_`, sin espacios ni barras. */
+const ID_DE_CITA = /^[A-Za-z0-9_-]{1,64}$/
+
+/** La dirección del tablero que abre el cobro de esa cita. */
+export function direccionParaCobrar(citaId: string): string {
+  return `/dashboard/tablero?${PARAMETRO_COBRAR}=${encodeURIComponent(citaId)}`
+}
+
+/**
+ * Lo que trae la dirección al llegar al tablero: `?cobrar=<citaId>` pide
+ * cobrar esa cita. Un valor que no tiene forma de id se descarta (`null`).
+ * `resto` es la consulta sin el parámetro, para dejar la dirección limpia:
+ * recargar o volver no lo repite. El id sólo se busca entre lo que el
+ * tablero ya cargó (del negocio de la sesión): no se le pide nada nuevo al
+ * servidor con él.
+ */
+export function cobroPedidoEnLaDireccion(consulta: string): { citaId: string | null; resto: string; habia: boolean } {
+  const parametros = new URLSearchParams(consulta)
+  const valor = parametros.get(PARAMETRO_COBRAR)
+  const habia = parametros.has(PARAMETRO_COBRAR)
+  parametros.delete(PARAMETRO_COBRAR)
+  const citaId = valor && ID_DE_CITA.test(valor) ? valor : null
+  return { citaId, resto: parametros.toString(), habia }
+}
+
+/**
+ * Dónde está, en el tablero, la cita que se pidió cobrar:
+ * - `cobrar`: su atención ya está por cobrar; se abre el cobro.
+ * - `avanzar`: su atención está en espera o en atención; hay que pasarla a
+ *   "Por cobrar" antes (lo confirma quien cobra).
+ * - `llegada`: todavía es una reserva de hoy sin llegada.
+ * - `cobrada`: su atención ya se cobró.
+ * - `no-esta`: no está en el tablero de hoy (otro día, anulada o ajena).
+ */
+export type DestinoDelCobro =
+  | { tipo: "cobrar"; atencion: Atencion }
+  | { tipo: "avanzar"; atencion: Atencion }
+  | { tipo: "llegada"; reserva: Reserva }
+  | { tipo: "cobrada"; atencion: Atencion }
+  | { tipo: "no-esta" }
+
+export function destinoDelCobro(tablero: Pick<Tablero, "atenciones" | "reservas">, citaId: string): DestinoDelCobro {
+  const atencion = tablero.atenciones.find((otra) => otra.citaId === citaId)
+  if (atencion) {
+    if (atencion.estado === "por-cobrar") return { tipo: "cobrar", atencion }
+    if (atencion.estado === "en-espera" || atencion.estado === "en-atencion") return { tipo: "avanzar", atencion }
+    if (atencion.estado === "finalizada") return { tipo: "cobrada", atencion }
+  }
+  const reserva = tablero.reservas.find((otra) => otra.id === citaId)
+  if (reserva) return { tipo: "llegada", reserva }
+  return { tipo: "no-esta" }
+}

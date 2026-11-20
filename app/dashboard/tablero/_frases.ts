@@ -160,6 +160,27 @@ export function frasesDelTablero(palabras: PalabrasDelRubro) {
       escribeElNombre: (letras: number): string => `Escribe el nombre ${del(cliente)} (al menos ${letras} letras).`,
     },
 
+    /**
+     * "Cobrar" desde el detalle de la agenda (`?cobrar=<citaId>`): si la
+     * atención todavía no está por cobrar, se pregunta antes de moverla.
+     */
+    cobrarDesdeLaAgenda: {
+      /** El título de la pregunta: "¿Cobrar a María González?". */
+      titulo: (nombre: string): string => `¿Cobrar a ${nombre}?`,
+      /** Lo que pasa si se confirma con la atención en espera o en atención. */
+      avanzar: "Su tarjeta pasa a «Por cobrar» y se abre el cobro. Todavía no se registra ningún pago.",
+      /** Lo que pasa si se confirma con la reserva sin llegada. */
+      llegada: "Se marca su llegada, su tarjeta pasa a «Por cobrar» y se abre el cobro. Todavía no se registra ningún pago.",
+      confirmar: "Ir a cobrar",
+      cancelar: "Ahora no",
+      /** Ya se cobró: no hay nada que abrir. */
+      cobrada: (nombre: string): string => `El cobro de ${nombre} ya está registrado: su tarjeta está en «Finalizado».`,
+      /** No está entre lo de hoy (otro día, o se anuló). */
+      noEsta: `Eso no está en ${el(tablero)} de hoy: aquí se cobra sólo lo del día.`,
+      /** Quien mira no cobra. */
+      sinPermiso: "Cobrar lo hace la dueña o el encargado.",
+    },
+
     /** Los textos de cuando un pedido al servidor falla sin decir por qué. */
     errores: {
       cargarElTablero: `No se pudo cargar ${el(tablero)}`,

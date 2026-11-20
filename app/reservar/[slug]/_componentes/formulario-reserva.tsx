@@ -37,7 +37,9 @@ import { EncabezadoDeReserva } from "./encabezado-de-reserva"
 import { IndicadorDePasos, PASOS_DE_RESERVA, pasosDeLaReserva } from "./indicador-de-pasos"
 import { AgregarAlCalendario } from "./agregar-al-calendario"
 import { InvitacionAEli } from "./pie-de-eli"
-import { frasesDelFormulario } from "../_frases"
+import { ContactarAlNegocio, DireccionYComoLlegar, type ContactoDelNegocio } from "./contactar-al-negocio"
+import { GuardarEnlace } from "./guardar-enlace"
+import { AYUDA_DEL_CORREO, CASILLA_DE_WHATSAPP, frasesDelFormulario } from "../_frases"
 import { FRASES_DE_LAS_SEDES } from "../_frases-de-sedes"
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
 import { ResumenDeReserva } from "./resumen-de-reserva"
@@ -72,6 +74,8 @@ import {
 import {
   confirmarReserva,
   leerProfesionales,
+  mensajeParaQuienReserva,
+  noSePudoGuardarLaReserva,
   type ProfesionalDelEquipo,
   type ProfesionalPublico,
   type ReservaConfirmada,
@@ -135,6 +139,12 @@ interface PropsDeFormularioReserva {
    * siempre (`direccion` es la del negocio).
    */
   sedes?: SedeParaElegir[]
+  /**
+   * El WhatsApp y el teléfono públicos del negocio (los de la mini página): los
+   * botones "Escribir por WhatsApp" y "Llamar" de la confirmación. Sin ellos,
+   * no se muestran.
+   */
+  contacto?: ContactoDelNegocio | null
 }
 
 /**
@@ -199,6 +209,7 @@ export function FormularioReserva({
   plazoDeCambiosHoras,
   direccion = null,
   sedes = [],
+  contacto = null,
 }: PropsDeFormularioReserva) {
   const parametros = useSearchParams()
   // `?servicio=<id>&fecha=AAAA-MM-DD` (el enlace del aviso de la lista de
@@ -263,6 +274,8 @@ export function FormularioReserva({
   const [sePuedeCambiar, setSePuedeCambiar] = useState(true)
   // Si el cron alcanza a mandar el recordatorio (N4): lo dice `confirmar`, con la hora del servidor.
   const [conRecordatorio, setConRecordatorio] = useState(false)
+  // La reserva entró por confirmar (#84): el negocio la confirma después.
+  const [porConfirmar, setPorConfirmar] = useState(false)
   // El día elegido en el calendario. El que vale es `fecha` (abajo): con una
   // urgencia dental, siempre hoy.
   const [fechaElegida, setFecha] = useState(conFechaDeLaUrl ? fechaDeLaUrl : "")
@@ -306,6 +319,8 @@ export function FormularioReserva({
   const idDeComentarios = useId()
   const idDelResumen = useId()
   const idDelError = useId()
+  const idDelCorreo = useId()
+  const idDeLaAyudaDelCorreo = useId()
 
   // El equipo se pide al montar. Si falla, la reserva sigue: sin elegir con
   // quién, el servidor asigna (o es un negocio sin equipo).
@@ -494,7 +509,8 @@ export function FormularioReserva({
       hora,
       nombre: nombre.trim(),
       apellido: apellido.trim(),
-      cedula,
+      // Sólo una clínica dental muestra el campo: en otro rubro no se manda.
+      cedula: frases.paso3.documento ? cedula : "",
       email: email.trim(),
       telefono,
       whatsapp,
@@ -509,10 +525,12 @@ export function FormularioReserva({
       setEnlaceDeGestion(resultado.datos.enlaceDeGestion ?? null)
       setSePuedeCambiar(resultado.datos.sePuedeCambiar !== false)
       setConRecordatorio(resultado.datos.recibiraRecordatorio === true)
+      setPorConfirmar(resultado.datos.porConfirmar === true)
       setSedeConfirmada(resultado.datos.sede ?? null)
       setCitaId(resultado.datos.citaId)
     }
-    else setError(resultado.error)
+    // Nada técnico a la vista: lo que hay que hacer, y los datos siguen escritos.
+    else setError(mensajeParaQuienReserva(resultado.error, noSePudoGuardarLaReserva(nombreNegocio)))
   }
 
   /*
@@ -553,14 +571,17 @@ export function FormularioReserva({
   const lugarDeLaCita = conSedes ? (sedeConfirmada ?? sedeElegida) : null
 
   if (confirmado && servicioSeleccionado) {
+    // Dónde es: la sede de la cita, o la dirección del negocio si no hay sedes.
+    const direccionDeLaCita = lugarDeLaCita ? direccionConComuna(lugarDeLaCita) : direccion
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={FUNDIDO}>
         <EncabezadoDeReserva
           ref={titulo}
           nivel={2}
           antetitulo={nombreNegocio}
-          titulo="¡Reserva confirmada!"
-          bajada={`Te esperamos, ${nombre}. ¡Hasta pronto!`}
+          // Por confirmar (#84) no se dice "confirmada": el negocio la confirma después.
+          titulo={porConfirmar ? frases.porConfirmar.titulo : frases.confirmada.titulo}
+          bajada={porConfirmar ? frases.porConfirmar.bajada(!!email.trim()) : `Te esperamos, ${nombre}. ¡Hasta pronto!`}
         />
         <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
           <div className="flex items-center gap-4">
@@ -578,6 +599,8 @@ export function FormularioReserva({
             detalleDeDuracion={detalleDeDuracion}
             sinServicio
           />
+          {/* Siempre cómo llegar: con sede, a la sede (su dirección ya está en el resumen); sin sede, al negocio. */}
+          <DireccionYComoLlegar className="mt-5" direccion={direccionDeLaCita} comuna={null} mostrarDireccion={!lugarDeLaCita} />
           <AgregarAlCalendario
             className="mt-7"
             conRecordatorio={conRecordatorio}
@@ -590,21 +613,34 @@ export function FormularioReserva({
               duracionMinutos: servicioConDuracion?.duration ?? servicioSeleccionado.duration,
               zona,
               // Con varias sedes, el evento lleva la dirección de la sede de la cita.
-              direccion: lugarDeLaCita ? direccionConComuna(lugarDeLaCita) : direccion,
+              direccion: direccionDeLaCita,
             }}
           />
           {enlaceDeGestion && !sePuedeCambiar && (
             <p className="mt-6 text-sm text-texto-2">{avisoSinCambiosDespuesDeReservar(plazoDeCambiosHoras, rubro)}</p>
           )}
           {enlaceDeGestion && sePuedeCambiar && (
-            <p className="mt-6 text-sm text-texto-2">
-              {frases.confirmada.pregunta}{" "}
-              <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
-                {frases.confirmada.enlace}
-              </a>
-              . Guarda este enlace{email ? "; también te lo mandamos por correo" : ""}.
-            </p>
+            <div className="mt-6">
+              <p className="text-sm text-texto-2">
+                {frases.confirmada.pregunta}{" "}
+                <a href={enlaceDeGestion} className="font-medium text-navy underline underline-offset-4 anillo-foco">
+                  {frases.confirmada.enlace}
+                </a>
+                .{" "}
+                {email.trim() ? frases.confirmada.enlaceEnElCorreo : frases.confirmada.guardaElEnlace}
+              </p>
+              {/* Sin correo, el enlace sólo existe en esta pantalla: copiarlo o mandárselo. */}
+              {!email.trim() && (
+                <GuardarEnlace
+                  className="mt-4"
+                  ruta={enlaceDeGestion}
+                  mensaje={(enlace) => frases.confirmada.mensajeParaGuardar(nombreNegocio, enlace)}
+                />
+              )}
+            </div>
           )}
+          {/* Para lo que el enlace no resuelve (fuera de plazo, una duda): escribirle o llamar al negocio. */}
+          <ContactarAlNegocio className="mt-6" contacto={contacto} nombreDelNegocio={nombreNegocio} />
         </Tarjeta>
         <InvitacionAEli />
       </motion.div>
@@ -914,12 +950,15 @@ export function FormularioReserva({
                   error={erroresDeDatos.apellido}
                   required
                 />
-                <CampoFormulario
-                  etiqueta="Cédula / Documento (opcional)"
-                  placeholder="Número de documento"
-                  value={cedula}
-                  onChange={(e) => setCedula(e.target.value)}
-                />
+                {/* El RUT sólo lo pide una clínica dental; en otro rubro no se muestra (y no se manda). */}
+                {frases.paso3.documento && (
+                  <CampoFormulario
+                    etiqueta={frases.paso3.documento}
+                    placeholder="12.345.678-9"
+                    value={cedula}
+                    onChange={(e) => setCedula(e.target.value)}
+                  />
+                )}
                 <CampoFormulario
                   etiqueta="Teléfono (opcional)"
                   type="tel"
@@ -937,7 +976,7 @@ export function FormularioReserva({
                       onChange={(e) => setWhatsapp(e.target.checked)}
                       className="size-4 shrink-0 accent-navy anillo-foco"
                     />
-                    Quiero recibir recordatorios por WhatsApp
+                    {CASILLA_DE_WHATSAPP}
                   </label>
                 )}
                 <div className="sm:col-span-2">
@@ -945,6 +984,7 @@ export function FormularioReserva({
                     ref={(campo) => {
                       camposDeDatos.current.email = campo
                     }}
+                    id={idDelCorreo}
                     etiqueta="Correo electrónico (opcional)"
                     type="email"
                     placeholder="tu@correo.com"
@@ -952,7 +992,14 @@ export function FormularioReserva({
                     value={email}
                     onChange={(e) => cambiarDato("email", e.target.value, setEmail)}
                     error={erroresDeDatos.email}
+                    // La ayuda y, si hay, el error del campo (`CampoFormulario` le pone `-error` a su id).
+                    aria-describedby={
+                      erroresDeDatos.email ? `${idDeLaAyudaDelCorreo} ${idDelCorreo}-error` : idDeLaAyudaDelCorreo
+                    }
                   />
+                  <p id={idDeLaAyudaDelCorreo} className="mt-2 text-sm text-texto-2">
+                    {AYUDA_DEL_CORREO}
+                  </p>
                 </div>
                 {/* Sólo con correo: el consentimiento es para esa casilla. Nada viene marcado. */}
                 {email.trim() && (
@@ -1208,7 +1255,7 @@ function PreguntaPrimeraVez({
   const { paso2 } = frasesDelFormulario(rubro)
   const respuestas = [
     { valor: true, texto: paso2.respuestaDePrimeraVez },
-    { valor: false, texto: "Ya me he atendido" },
+    { valor: false, texto: paso2.respuestaDeNoPrimeraVez },
   ]
   return (
     <fieldset className="mt-6">

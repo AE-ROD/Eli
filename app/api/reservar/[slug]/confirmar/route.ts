@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DATOS_INVALIDOS, MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_ERROR_INTERNO, MENSAJE_PEDIDO_ILEGIBLE } from "@/app/api/reservar/_mensajes"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
 import { z } from "zod"
 import { enviarConfirmacionCliente, enviarAvisoProfesional } from "@/lib/email"
+import { SELECCION_DEL_LUGAR_DEL_NEGOCIO, lugarParaElCorreo } from "@/lib/lugar-de-la-cita"
 import { dentroDelPlazo, plazoValido } from "@/lib/gestion-de-cita"
 import { reservaSchema } from "@/lib/validaciones"
 import {
@@ -347,7 +349,7 @@ export async function POST(
 ) {
   const { permitido } = await verificarLimite("reserva", obtenerIp(request))
   if (!permitido) {
-    return NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+    return NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
   }
 
   const { slug } = await params
@@ -365,6 +367,10 @@ export async function POST(
       invitadoPorId: true,
       referidoContabilizadoAt: true,
       user: { select: { email: true } },
+      // Lo público de su página, para el correo al cliente: la dirección
+      // ("Dónde" y "Cómo llegar" si la hora no tiene sede) y el WhatsApp.
+      whatsapp: true,
+      ...SELECCION_DEL_LUGAR_DEL_NEGOCIO,
     },
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
@@ -534,6 +540,10 @@ export async function POST(
       registrarError("armando el enlace de gestión de la reserva", error)
     }
 
+    // Dónde es, para el correo al cliente: la sede o, sin sede, la dirección
+    // del negocio (`lugarParaElCorreo`). El aviso al equipo sigue con la sede sola.
+    const lugarDelCorreo = lugarParaElCorreo(sede, negocio)
+
     // Enviar emails en paralelo (sin bloquear la respuesta si fallan)
     const emailsPromises: Promise<unknown>[] = []
 
@@ -559,8 +569,9 @@ export async function POST(
           precio: precios.total,
           precioNormal: precios.hayRebaja ? precios.totalNormal : null,
           precioIncompleto: resumen.precioIncompleto,
-          // Dónde es: sólo si la cita tiene sede (si no, el correo es el de siempre).
-          ...(lugar && { lugar }),
+          // Dónde es: la sede de la cita o, sin sede, la dirección del negocio.
+          ...(lugarDelCorreo && { lugar: lugarDelCorreo }),
+          whatsapp: negocio.whatsapp,
         }).catch(() => null)
       )
     }
@@ -608,11 +619,11 @@ export async function POST(
     if (error instanceof CuerpoDemasiadoGrande) return respuestaDeCuerpoDemasiadoGrande()
     if (error instanceof z.ZodError) {
       // Público: el primer mensaje, legible, y no los issues crudos de zod.
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Datos inválidos" }, { status: 400 })
+      return NextResponse.json({ error: error.errors[0]?.message ?? MENSAJE_DATOS_INVALIDOS }, { status: 400 })
     }
     // Un cuerpo que no es JSON: es un pedido mal hecho, no un error del servidor.
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: "El pedido no es un JSON válido" }, { status: 400 })
+      return NextResponse.json({ error: MENSAJE_PEDIDO_ILEGIBLE }, { status: 400 })
     }
     // Algo que la reserva ligaba (servicio, profesional) se borró entretanto.
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2025" || error.code === "P2003")) {
@@ -626,6 +637,6 @@ export async function POST(
     }
     // Sin volcar el error: uno de Prisma trae en `meta` los datos de quien reserva.
     registrarError("confirmando una reserva", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   }
 }

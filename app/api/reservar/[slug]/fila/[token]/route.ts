@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_ERROR_INTERNO } from "@/app/api/reservar/_mensajes"
 import { hashDelTokenDeFila, leerMiTurno, salirDeLaFila } from "@/lib/fila-virtual-servidor"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -20,7 +21,7 @@ import { registrarError } from "@/lib/registro-de-errores"
  */
 
 const NO_ENCONTRADO = () => NextResponse.json({ error: "No encontrado" }, { status: 404 })
-const DEMASIADAS = () => NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+const DEMASIADAS = () => NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
 
 type Contexto = { params: Promise<{ slug: string; token: string }> }
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest, { params }: Contexto) {
     return turno ? NextResponse.json(turno, { headers: { "Cache-Control": "no-store" } }) : NO_ENCONTRADO()
   } catch (error) {
     registrarError("leyendo un turno de la fila virtual", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   }
 }
 

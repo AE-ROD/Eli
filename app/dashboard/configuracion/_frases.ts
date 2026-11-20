@@ -24,7 +24,9 @@
  * la hora") se escriben de otra forma (`seLlamaHora`, de `../_frases`).
  */
 
-import { al, concordar, del, el, pronombreDe, un } from "@/lib/concordancia"
+import { al, concordar, del, el, este, pronombreDe, un } from "@/lib/concordancia"
+import { rebajar } from "@/lib/hora-valle"
+import { formatearPesos } from "@/lib/precios"
 import { conMayuscula, type PalabrasDelRubro, type Sustantivo } from "@/lib/vocabulario"
 import { elLocal, seLlamaHora } from "../_frases"
 import { frasesDeLasSedes } from "./_frases-de-sedes"
@@ -75,6 +77,14 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       atiendeEnElDelNegocio: `No tiene horario propio: atiende en el ${del(negocio)}, que es el que ves. Si lo cambias y guardas, pasa a tener el suyo.`,
       /** El aviso del horario sin guardar. */
       sinGuardar: `Tus ${cliente.plural} no ven horas hasta que lo guardes. Revisa los días y las horas, y toca “Guardar horario”.`,
+      /** El atajo del horario sin guardar: lo deja de lunes a viernes de 9 a 18 y lo guarda de una vez. */
+      usarSugerido: "Usar lunes a viernes de 9 a 18",
+      usarSugeridoAyuda: "Lo deja así y lo guarda de una vez. Después puedes cambiar cualquier día.",
+      /** El botón de cada día encendido: la parte visible; el lector de pantalla oye además el día. */
+      copiarATodos: "Copiar este horario a todos los días marcados",
+      /** Lo que se anuncia al copiar: "Lunes, de 09:00 a 18:00, copiado a los días marcados. Falta guardar." */
+      copiado: (dia: string, desde: string, hasta: string): string =>
+        `${dia}, de ${desde} a ${hasta}, copiado a los días marcados. Falta guardar.`,
     },
 
     /** El nombre del negocio, editable en el lugar (Tu negocio). */
@@ -112,6 +122,11 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
         cancelar: "No cambiar",
       },
       guardado: "Zona horaria guardada",
+      /** Lo que tranquiliza a casi todos: la de siempre ya sirve. */
+      soloSiEstas: "Sólo cámbiala si estás en Isla de Pascua o Magallanes.",
+      /** La zona del dispositivo, marcada de antemano cuando el negocio sigue con la de siempre. */
+      sugerida: (zona: string): string =>
+        `Marcamos ${zona} porque es la zona de este dispositivo. Si es la ${del(local)}, toca “Guardar”.`,
     },
 
     /** Tu página pública. */
@@ -124,6 +139,17 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       especialidad: `Especialidad de cada ${profesional.singular}`,
       /** La ayuda del enlace de reseñas; nombra la sección "Mensajes a clientes" / "Mensajes a pacientes". */
       ayudaDeLasResenas: `Lo copias desde tu Perfil de Empresa en Google, en «Pedir reseñas». Se usa en el correo que pide una reseña el día después de la visita, si lo activas en Mensajes a ${cliente.plural}.`,
+      /** La guía plegable de debajo del campo: de dónde se saca el enlace, paso a paso. */
+      guiaDeResenas: {
+        titulo: "¿Dónde encuentro el enlace de reseñas?",
+        pasos: [
+          `Abre Google Maps (o tu Perfil de Empresa en Google) con la cuenta de Google de tu ${negocio.singular}, y entra a tu perfil.`,
+          "Toca «Pedir reseñas».",
+          "Toca «Copiar enlace» y pégalo en el campo de arriba.",
+          "Toca «Guardar» al final de esta tarjeta.",
+        ],
+        nota: `Si no ves «Pedir reseñas», tu ${negocio.singular} todavía no tiene Perfil de Empresa en Google: se crea gratis en business.google.com.`,
+      },
     },
 
     /** Mi foto: quién la ve. */
@@ -140,29 +166,65 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
       subtitulo: `Para atender por orden de llegada sin que esperen en ${el(local)}`,
       descripcion: `Tus ${cliente.plural} se anotan desde su celular mientras ${el(local)} está ${concordar("abierto", local)}, ven cuántas personas tienen adelante y les avisamos por correo cuando ya casi es su turno.`,
       /** Sobre la pantalla del televisor. */
-      pantalla: `La pantalla usa la sesión de quien la abre: en el televisor o la tablet ${del(local)} queda abierto el panel de esa cuenta. Déjala en pantalla completa y no dejes el panel a mano ${del(cliente, "plural")} en ese equipo.`,
+      pantalla: `Abre esta pantalla en la tele o la tablet ${del(local)}. Muestra tu panel, así que no la dejes al alcance ${del(cliente, "plural")}.`,
+      /** El QR para imprimir: quien lo escanea llega al enlace de la fila. */
+      qr: {
+        titulo: "QR para anotarse en la fila",
+        ayuda: `Imprímelo y pégalo en la entrada: quien lo escanea se anota desde su celular, sin esperar en ${el(local)}.`,
+        nombre: (enlace: string): string => `Código QR que lleva a la fila virtual: ${enlace}`,
+        afiche: { titulo: "Anótate en la fila", subtitulo: "Escanea con la cámara de tu teléfono" },
+      },
     },
 
     /** El plazo para cancelar o reagendar. */
     plazoDeCambios: {
       subtitulo: `Tus ${cliente.plural} reciben un enlace en el correo de confirmación`,
-      /** "Hasta cuántas horas antes de la cita pueden hacerlo solos…"; en un salón, sin "de la hora": "horas antes de la hora" se lee como reloj. */
-      ayuda: `Hasta cuántas horas antes ${seLlamaHora(cita) ? "" : `${del(cita)} `}pueden hacerlo ${concordar("solo", cliente, "plural")}, de 0 a 72. Después, el enlace les pide que te contacten.`,
+      /** La etiqueta del selector. */
+      etiqueta: "Hasta cuándo pueden hacerlo",
+      /** "Hasta cuánto antes de la cita pueden hacerlo solos…"; en un salón, sin "de la hora": "antes de la hora" se lee como reloj. */
+      ayuda: `Hasta cuánto antes ${seLlamaHora(cita) ? "" : `${del(cita)} `}pueden hacerlo ${concordar("solo", cliente, "plural")}. Después, el enlace les pide que te contacten.`,
+      /** Cada opción del selector, por las horas que se guardan (0 es sin límite). */
+      opcion: (horas: number, recomendada: boolean): string =>
+        horas === 0
+          ? "Sin límite (hasta que empiece)"
+          : `${horas} ${horas === 1 ? "hora" : "horas"} antes${recomendada ? " (recomendado)" : ""}`,
     },
 
     /** Las faltas para pedir confirmación. */
     porConfirmar: {
-      /** "Cuentan las citas marcadas “No vino” con el mismo correo…" / "…las horas marcadas…" / "…“No asistió”…". */
-      ayuda: (minimo: number, maximo: number): string =>
-        `De ${minimo} a ${maximo}. Cuentan ${el(cita, "plural")} ${concordar("marcado", cita, "plural")} “${etiquetas.noVino}” con el mismo correo de quien reserva; el teléfono no cuenta, y una reserva sin correo nunca entra por confirmar.`,
+      /** El interruptor: "Pedir confirmación a quien faltó 2 veces". */
+      etiqueta: (faltas: number): string => `Pedir confirmación a quien faltó ${faltas} ${faltas === 1 ? "vez" : "veces"}`,
+      descripcion: "Su reserva por tu página queda “por confirmar” hasta que la confirmes o la canceles en la agenda.",
+      campo: "Cuántas faltas",
+      ayuda: (minimo: number, maximo: number): string => `De ${minimo} a ${maximo} faltas.`,
+      /** El detalle, plegado: qué cuenta como falta y qué ve quien reserva. */
+      detalle: {
+        titulo: "Cómo se cuentan las faltas",
+        /** "Cuentan las citas marcadas “No vino”…" / "…las horas marcadas…" / "…“No asistió”…". */
+        pasos: (dias: number): string[] => [
+          `Cuentan ${el(cita, "plural")} ${concordar("marcado", cita, "plural")} “${etiquetas.noVino}” del último año (${dias} días).`,
+          "Se reconoce a la persona por su correo: el teléfono no cuenta, y una reserva sin correo nunca queda por confirmar.",
+          "Tú o tu encargado la confirman o la cancelan desde la agenda.",
+          "A esa persona le avisamos por correo que confirmarás su reserva; la página no le muestra nada distinto.",
+        ],
+      },
     },
 
-    /** Los precios de hora valle (no existe en la clínica dental). */
+    /** El descuento en horas tranquilas, la "hora valle" (no existe en la clínica dental). */
     horaValle: {
+      titulo: "Descuento en horas tranquilas",
+      subtitulo: "Llena las horas en que tienes menos movimiento",
+      interruptor: "Dar descuento en horas tranquilas",
       /** Quién lo ve y qué cuenta; en un salón, "la hora en que empieza la hora" se evita. */
-      descripcion: `Quien reserva por tu página a una hora de estas franjas paga menos: lo ve en las horas y en el resumen. Cuenta ${seLlamaHora(cita) ? "la hora de inicio" : `la hora en que empieza ${el(cita)}`}. ${conMayuscula(el(cita, "plural"))} que anotas en la agenda no se rebajan ${concordar("solo", cita, "plural")}.`,
-      /** "Servicios sin rebaja" / "Prestaciones sin rebaja". */
-      sinRebaja: `${conMayuscula(servicio.plural)} sin rebaja`,
+      descripcion: `Quien reserva por tu página en uno de estos horarios paga menos: lo ve en las horas y en el resumen. Cuenta ${seLlamaHora(cita) ? "la hora de inicio" : `la hora en que empieza ${el(cita)}`}. ${conMayuscula(el(cita, "plural"))} que anotas en la agenda no se rebajan ${concordar("solo", cita, "plural")}.`,
+      porcentaje: "Descuento (%)",
+      /** El ejemplo en vivo bajo el %: "Un servicio de $10.000 queda en $8.500." Sin un % válido, nada. */
+      ejemplo: (porcentaje: number): string =>
+        Number.isFinite(porcentaje) && porcentaje > 0 && porcentaje < 100
+          ? `${conMayuscula(un(servicio))} de ${formatearPesos(10_000)} queda en ${formatearPesos(rebajar(10_000, porcentaje))}.`
+          : "",
+      /** "Servicios sin descuento" / "Prestaciones sin descuento". */
+      sinRebaja: `${conMayuscula(servicio.plural)} sin descuento`,
       /** "Los marcados cuestan lo mismo a cualquier hora." */
       sinRebajaAyuda: `${conMayuscula(losQueSon("marcado", servicio))} cuestan lo mismo a cualquier hora.`,
     },
@@ -191,6 +253,11 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
         crear: `Crear ${servicio.singular}`,
         /** "Cada cuántos días vuelve un cliente (opcional)". */
         frecuencia: `Cada cuántos días vuelve ${un(cliente)} (opcional)`,
+        /** La duración que no está entre las de siempre: de 15 en 15 minutos, hasta 8 horas (lo que acepta el servidor). */
+        otraDuracion: "Otra duración",
+        duracionExacta: "Elige la duración",
+        /** Lo que ve quien reserva con el precio vacío: la página de reservas no muestra ninguno. */
+        precioAyuda: `Si lo dejas vacío, tus ${cliente.plural} no ven ningún precio para ${este(servicio)} en tu página de reservas. Si escribes 0, ven $0.`,
         /** Sólo en una clínica dental: la casilla y lo que cambia al marcarla. */
         urgencia: "Es una urgencia",
         urgenciaAyuda: "En la reserva pública sólo ofrece horas de hoy.",
@@ -222,6 +289,9 @@ export function frasesDeConfiguracion(palabras: PalabrasDelRubro) {
         descripcion: `Un correo cuando a ${un(cliente)} ya le toca volver, según cada cuánto viene o la frecuencia de su ${servicio.singular}.`,
       },
       /** El aviso de arriba: a quiénes les llegan los mensajes promocionales. */
+      /** "Pedir reseña" sin enlace guardado: dónde se agrega, con el botón que lleva ahí. */
+      faltaElEnlace: "Antes, agrega tu enlace de reseñas en Página pública.",
+      irAPagina: "Ir a Página pública",
       soloConConsentimiento: `“${etiquetas.seguimiento}” y “Pedir reseña” sólo les llegan a quienes aceptaron recibir avisos y novedades de tu ${negocio.singular} por correo, y cada correo trae cómo darse de baja. La lista de espera le llega a quien se anotó.`,
     },
 

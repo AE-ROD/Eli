@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DATOS_INVALIDOS, MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_DEMASIADO_LARGO, MENSAJE_ERROR_INTERNO } from "@/app/api/reservar/_mensajes"
 import { prisma } from "@/lib/prisma"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { inscribirEnListaDeEspera } from "@/lib/lista-de-espera"
@@ -33,7 +34,7 @@ import { listaDeEsperaSchema } from "@/lib/validaciones"
  */
 
 const NO_ENCONTRADO = () => NextResponse.json({ error: "No encontrado" }, { status: 404 })
-const DEMASIADAS = () => NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+const DEMASIADAS = () => NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
 /** Lo que ve quien se inscribe, se haya creado la fila o no. */
 const LISTO = () =>
   NextResponse.json({ mensaje: "Listo. Si se libera una hora ese día, te escribimos por correo." }, { status: 201 })
@@ -47,10 +48,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { slug } = await params
   const leido = await cuerpoConTope(request, MAX_BYTES)
-  if (leido.excedido) return NextResponse.json({ error: "Datos inválidos" }, { status: 413 })
+  if (leido.excedido) return NextResponse.json({ error: MENSAJE_DEMASIADO_LARGO }, { status: 413 })
   const datos = listaDeEsperaSchema.safeParse(leido.cuerpo)
   if (!datos.success) {
-    return NextResponse.json({ error: datos.error.issues[0]?.message ?? "Datos inválidos" }, { status: 400 })
+    return NextResponse.json({ error: datos.error.issues[0]?.message ?? MENSAJE_DATOS_INVALIDOS }, { status: 400 })
   }
 
   const negocio = await prisma.business.findUnique({
@@ -87,6 +88,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   } catch (error) {
     registrarError("inscribiendo en la lista de espera", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   }
 }

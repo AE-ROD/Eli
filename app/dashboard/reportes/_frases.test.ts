@@ -115,6 +115,8 @@ describe("clínica dental", () => {
     )
     expect(f.llenarHoras.sinFicha(2)).toBe(" 2 atenciones sin ficha del paciente no entran en nuevos ni recurrentes.")
     expect(f.llenarHoras.sinCitasPasadas).toBe("No hubo citas pasadas en el período.")
+    expect(f.llenarHoras.lecturaDeInasistencia(0.1)).toBe("1 de cada 10 no asistió")
+    expect(f.llenarHoras.lecturaDeInasistencia(0.3)).toBe("3 de cada 10 no asistieron")
   })
 
   it("no queda un solo 'cliente' en ninguna frase", () => {
@@ -183,5 +185,24 @@ describe("la concordancia sigue al género y no a una terminación pegada", () =
     expect(f.llenarHoras.sinFicha(1)).toBe(" 1 atención sin ficha de la clienta no entra en nuevos ni recurrentes.")
     expect(f.llenarHoras.sinCitasPasadas).toBe("No hubo turnos pasados en el período.")
     expect(f.filtros.todosLosProfesionales).toBe("Todas")
+  })
+})
+
+describe("las tasas se leen como \"de cada 10\"", () => {
+  const f = frasesDeLosReportes(NEUTRAS).llenarHoras
+
+  it("la ocupación", () => {
+    expect(f.lecturaDeOcupacion(0.72)).toBe("7 de cada 10 horas del horario estuvieron ocupadas")
+    expect(f.lecturaDeOcupacion(0.02)).toBe("Menos de 1 de cada 10 horas del horario estuvieron ocupadas")
+    expect(f.lecturaDeOcupacion(1.2)).toBe("10 de cada 10 horas del horario estuvieron ocupadas")
+    expect(f.lecturaDeOcupacion(null)).toBeNull()
+  })
+
+  it("la inasistencia, con el verbo en singular o plural", () => {
+    expect(f.lecturaDeInasistencia(0.1)).toBe("1 de cada 10 no vino")
+    expect(f.lecturaDeInasistencia(0.04)).toBe("Menos de 1 de cada 10 no vino")
+    expect(f.lecturaDeInasistencia(0.25)).toBe("3 de cada 10 no vinieron")
+    expect(f.lecturaDeInasistencia(0)).toBe("Nadie faltó en el período")
+    expect(f.lecturaDeInasistencia(null)).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { MENSAJE_DATOS_INVALIDOS } from "@/app/api/reservar/_mensajes"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { asignarCandidatoLibre, candidatosDeLaReserva, candidatosQueOfrecen, tramoDeLaReserva } from "@/lib/agenda-publica"
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest, contexto: Params) {
   if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
   const datos = reagendarSchema.safeParse(recibido.cuerpo)
   if (!datos.success) {
-    return NextResponse.json({ error: datos.error.issues[0]?.message ?? "Datos inválidos" }, { status: 400 })
+    return NextResponse.json({ error: datos.error.issues[0]?.message ?? MENSAJE_DATOS_INVALIDOS }, { status: 400 })
   }
   const { fecha, hora } = datos.data
   const eleccion = leerProfesionalDelPedido(datos.data.profesionalId)

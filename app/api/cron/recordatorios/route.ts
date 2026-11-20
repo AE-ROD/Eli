@@ -11,6 +11,7 @@ import { generarToken } from "@/lib/tokens"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import {
   SELECCION_DE_LA_SEDE_DEL_CORREO,
+  SELECCION_DEL_LUGAR_DEL_NEGOCIO,
   lugarParaElCorreo,
 } from "@/lib/lugar-de-la-cita"
 import {
@@ -178,6 +179,10 @@ export async function GET(request: NextRequest) {
             timezone: true,
             cancelacionHorasAntes: true,
             type: true,
+            // Lo público de su página: la dirección ("Dónde" y "Cómo llegar"
+            // si la hora no tiene sede) y el WhatsApp ("Escribir por WhatsApp").
+            whatsapp: true,
+            ...SELECCION_DEL_LUGAR_DEL_NEGOCIO,
           },
         },
       },
@@ -225,8 +230,8 @@ export async function GET(request: NextRequest) {
           const sePuedeCambiar = dentroDelPlazo(cita.startTime, cita.business.cancelacionHorasAntes, ahora)
           enlaceNuevo = baseUrl ? await enlaceParaCitaSinToken(cita, sePuedeCambiar) : null
           const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
-          // Sólo si la hora tiene sede: en cualquier otro negocio el correo sale como siempre.
-          const lugar = lugarParaElCorreo(cita.sede)
+          // La sede de la hora o, sin sede, la dirección del negocio. Sin dirección, como siempre.
+          const lugar = lugarParaElCorreo(cita.sede, cita.business)
           // Desde acá el correo pudo salir aunque después algo falle.
           noSalio = false
           const resultado = await enviarRecordatorio({
@@ -245,6 +250,7 @@ export async function GET(request: NextRequest) {
               : {}),
             sePuedeCambiar,
             ...(lugar && { lugar }),
+            whatsapp: cita.business.whatsapp,
           })
           if (resultado?.error) {
             // Sólo el código de Resend: su mensaje puede repetir el destinatario.

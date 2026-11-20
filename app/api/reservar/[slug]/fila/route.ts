@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DATOS_INVALIDOS, MENSAJE_DEMASIADAS_SOLICITUDES, MENSAJE_DEMASIADO_LARGO, MENSAJE_ERROR_INTERNO } from "@/app/api/reservar/_mensajes"
 import { cuerpoConTope } from "@/lib/cuerpo-del-pedido"
 import { enlaceDelTurno } from "@/lib/fila-virtual"
 import { anotarseEnLaFila, negocioDeLaFila } from "@/lib/fila-virtual-servidor"
@@ -30,7 +31,7 @@ import { filaVirtualSchema } from "@/lib/validaciones"
  */
 
 const NO_ENCONTRADO = () => NextResponse.json({ error: "No encontrado" }, { status: 404 })
-const DEMASIADAS = () => NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+const DEMASIADAS = () => NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
 
 const MENSAJE_CERRADO = "El local no está atendiendo en este momento. La fila se abre en su horario de atención."
 const MENSAJE_LLENA = "La fila está llena por ahora. Intenta de nuevo en un rato."
@@ -44,10 +45,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { slug } = await params
   const leido = await cuerpoConTope(request, MAX_BYTES)
-  if (leido.excedido) return NextResponse.json({ error: "Datos inválidos" }, { status: 413 })
+  if (leido.excedido) return NextResponse.json({ error: MENSAJE_DEMASIADO_LARGO }, { status: 413 })
   const datos = filaVirtualSchema.safeParse(leido.cuerpo)
   if (!datos.success) {
-    return NextResponse.json({ error: datos.error.issues[0]?.message ?? "Datos inválidos" }, { status: 400 })
+    return NextResponse.json({ error: datos.error.issues[0]?.message ?? MENSAJE_DATOS_INVALIDOS }, { status: 400 })
   }
 
   const ahora = new Date()
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   } catch (error) {
     registrarError("anotando en la fila virtual", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json({ error: MENSAJE_ERROR_INTERNO }, { status: 500 })
   } finally {
     // Cerrada, llena o un error: no quedó anotada, el cupo vuelve al balde.
     if (!anotada) await devolverLimite("filaVirtualPorNegocio", negocio.id)

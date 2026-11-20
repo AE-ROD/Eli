@@ -35,6 +35,15 @@ export function noVinieron(etiqueta: string): string {
   return etiqueta
 }
 
+/**
+ * Una tasa (0,7) leída como "de cada 10": 7. Lo que no llega a 1 de cada 10
+ * pero no es cero se dice "menos de 1"; nunca pasa de 10.
+ */
+function deCadaDiez(tasa: number): string {
+  const cuantos = Math.min(10, Math.round(tasa * 10))
+  return cuantos === 0 && tasa > 0 ? "Menos de 1" : String(cuantos)
+}
+
 export function frasesDeLosReportes(palabras: PalabrasDelRubro) {
   const { cliente, profesional, servicio, cita, tablero, negocio, etiquetas } = palabras
   const noVino = etiquetas.noVino.toLocaleLowerCase("es")
@@ -109,6 +118,17 @@ export function frasesDeLosReportes(palabras: PalabrasDelRubro) {
       ocupacionPor: `Ocupación por ${profesional.singular}`,
       /** Qué cuenta la ocupación. */
       queCuentaLaOcupacion: `Minutos con ${citasAgendadas} dentro de su horario, sin bloqueos. Si no cargó horario propio, cuenta el ${del(negocio)}.`,
+      /** Debajo de la cifra de ocupación: "7 de cada 10 horas del horario estuvieron ocupadas". */
+      lecturaDeOcupacion: (tasa: number | null): string | null =>
+        tasa === null ? null : `${deCadaDiez(tasa)} de cada 10 horas del horario estuvieron ocupadas`,
+      /** Debajo de la cifra de inasistencia: "1 de cada 10 no vino" / "3 de cada 10 no asistieron". */
+      lecturaDeInasistencia: (tasa: number | null): string | null => {
+        if (tasa === null) return null
+        if (tasa === 0) return "Nadie faltó en el período"
+        const cuantos = deCadaDiez(tasa)
+        const verbo = cuantos === "1" || cuantos === "Menos de 1" ? noVino : noVinieron(etiquetas.noVino).toLocaleLowerCase("es")
+        return `${cuantos} de cada 10 ${verbo}`
+      },
       /** Qué cuenta la inasistencia. */
       queCuentaLaInasistencia: `${conMayuscula(cita.plural)} ${concordar("marcado", cita, "plural")} como “${noVino}”, sobre ${lasCitas} que ya empezaron y no se cancelaron.`,
       /**

@@ -205,6 +205,13 @@ export default function PaginaCrearCuenta() {
         )
       }
     >
+      {/* Lo más rápido primero: con Google no hay nada que escribir. */}
+      {pasoUno && (
+        <AccesoConGoogle arriba alElegir={registrarseConGoogle} cargando={cargandoGoogle}>
+          Registrarse con Google
+        </AccesoConGoogle>
+      )}
+
       <form className="flex flex-col gap-5" onSubmit={manejarEnvio}>
         {pasoUno ? (
           <>
@@ -296,11 +303,6 @@ export default function PaginaCrearCuenta() {
         </div>
       </form>
 
-      {pasoUno && (
-        <AccesoConGoogle alElegir={registrarseConGoogle} cargando={cargandoGoogle}>
-          Registrarse con Google
-        </AccesoConGoogle>
-      )}
     </MarcoDeAcceso>
   )
 }

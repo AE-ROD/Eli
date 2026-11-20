@@ -28,4 +28,26 @@ describe("lugarParaElCorreo", () => {
   it("una sede sin nada que decir no agrega un lugar vacío", () => {
     expect(lugarParaElCorreo({ nombre: " ", direccion: "", comuna: "" })).toBeUndefined()
   })
+
+  describe("sin sede, la dirección del negocio", () => {
+    const NEGOCIO = { address: " Av. Italia 1500 ", comuna: " Ñuñoa " }
+
+    it("dice la dirección y la comuna del negocio, sin nombre", () => {
+      expect(lugarParaElCorreo(null, NEGOCIO)).toEqual({ direccion: "Av. Italia 1500", comuna: "Ñuñoa" })
+    })
+
+    it("sin comuna, la dirección sola", () => {
+      expect(lugarParaElCorreo(undefined, { address: "Calle 1", comuna: null })).toEqual({ direccion: "Calle 1", comuna: null })
+    })
+
+    it("un negocio sin calle no tiene qué decir: la comuna sola no lleva a ningún lado", () => {
+      expect(lugarParaElCorreo(null, { address: "  ", comuna: "Ñuñoa" })).toBeUndefined()
+      expect(lugarParaElCorreo(null, { address: null, comuna: null })).toBeUndefined()
+      expect(lugarParaElCorreo(null, null)).toBeUndefined()
+    })
+
+    it("con sede, manda la sede aunque el negocio tenga dirección", () => {
+      expect(lugarParaElCorreo(SEDE, NEGOCIO)).toEqual(SEDE)
+    })
+  })
 })

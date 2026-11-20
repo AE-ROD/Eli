@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DEMASIADAS_SOLICITUDES } from "@/app/api/reservar/_mensajes"
 import { prisma } from "@/lib/prisma"
 import { diasConHorarioDelProfesional, filasDeQuienesAtienden, leerProfesionalesQueAtienden } from "@/lib/agenda-publica"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
@@ -20,7 +21,7 @@ import { WHERE_HORARIO_VIGENTE } from "@/lib/sedes"
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { permitido } = await verificarLimite("lecturaPublica", obtenerIp(request))
   if (!permitido) {
-    return NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+    return NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
   }
 
   const { slug } = await params

@@ -17,6 +17,8 @@ interface PropsDeCifra {
   icono: LucideIcon
   /** La cifra principal: el ícono va sobre el lima fuerte en vez del suave. */
   principal?: boolean
+  /** Una frase que dice cómo leer el número ("7 de cada 10 horas…"), debajo de él. */
+  lectura?: string | null
   className?: string
 }
 
@@ -24,7 +26,7 @@ interface PropsDeCifra {
  * Una cifra del resumen en su tarjeta: qué es, el número grande y el ícono en
  * el lima de reportes. Un monto largo baja de renglón antes que salirse.
  */
-export function Cifra({ titulo, valor, icono, principal = false, className }: PropsDeCifra) {
+export function Cifra({ titulo, valor, icono, principal = false, lectura, className }: PropsDeCifra) {
   return (
     <div className={cn(TARJETA_DEL_PANEL, "flex items-start justify-between gap-4 p-5 sm:p-6", className)}>
       <div className="min-w-0 space-y-2">
@@ -32,6 +34,7 @@ export function Cifra({ titulo, valor, icono, principal = false, className }: Pr
         <p className="text-[28px] leading-[1.1] font-medium tracking-[-1px] tabular-nums [overflow-wrap:anywhere] sm:text-[32px]">
           {valor}
         </p>
+        {lectura && <p className="text-sm text-pretty text-texto-2">{lectura}</p>}
       </div>
       <CuadroDeIcono icono={icono} color="lima" activo={principal} />
     </div>
@@ -144,7 +147,7 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         />
         <Cifra titulo={propio ? "Tus atenciones" : "Atenciones"} valor={String(resumen.cantidad)} icono={Receipt} />
         <Cifra
-          titulo={propio ? "Tu promedio por atención" : "Ticket promedio"}
+          titulo={propio ? "Tu promedio por atención" : "Promedio por atención"}
           valor={resumen.ticketPromedio === null ? "—" : formatearMonto(resumen.ticketPromedio)}
           icono={TrendingUp}
         />

@@ -12,10 +12,31 @@ interface PropsDeAccesoConGoogle {
    * no pasaba nada a la vista y se tocaba de nuevo.
    */
   cargando?: boolean
+  /**
+   * Arriba del formulario (crear cuenta): primero el botón y debajo la raya
+   * con "o con tu correo", para quien prefiere no escribir nada. Por defecto,
+   * debajo del formulario.
+   */
+  arriba?: boolean
 }
 
-/** La otra forma de entrar, debajo del formulario: una raya con una "o" y el botón de Google. */
-export function AccesoConGoogle({ children, alElegir, cargando = false }: PropsDeAccesoConGoogle) {
+/** La otra forma de entrar: una raya con una "o" y el botón de Google, debajo (o arriba) del formulario. */
+export function AccesoConGoogle({ children, alElegir, cargando = false, arriba = false }: PropsDeAccesoConGoogle) {
+  if (arriba) {
+    return (
+      <div className="mb-6">
+        <Boton variante="secundario" icono={<LogoDeGoogle />} onClick={alElegir} cargando={cargando} className="w-full">
+          {children}
+        </Boton>
+        <div className="mt-6 flex items-center gap-4 text-sm text-texto-2">
+          <span aria-hidden="true" className="h-px flex-1 bg-borde" />
+          <span>o con tu correo</span>
+          <span aria-hidden="true" className="h-px flex-1 bg-borde" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mt-6">
       <div className="flex items-center gap-4 text-sm text-texto-2">

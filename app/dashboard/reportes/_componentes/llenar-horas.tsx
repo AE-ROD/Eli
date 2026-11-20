@@ -200,6 +200,7 @@ export function LlenarHoras() {
               valor={formatearTasa(reporte.ocupacion.total.ocupacion)}
               icono={CalendarCheck}
               comparacion={textoDeComparacion(reporte.comparacion.ocupacion, "tasa")}
+              lectura={frases.lecturaDeOcupacion(reporte.ocupacion.total.ocupacion)}
               principal
             />
             <CifraConComparacion
@@ -219,6 +220,7 @@ export function LlenarHoras() {
               valor={formatearTasa(reporte.inasistencia.total.tasa)}
               icono={UserX}
               comparacion={textoDeComparacion(reporte.comparacion.inasistencia, "tasa")}
+              lectura={frases.lecturaDeInasistencia(reporte.inasistencia.total.tasa)}
             />
           </div>
 

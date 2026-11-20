@@ -6,6 +6,7 @@ import { enviarReservaConfirmadaPorElLocal } from "@/lib/email"
 import { fechaYHoraEnElNegocio } from "@/lib/recordatorios"
 import {
   SELECCION_DE_LA_SEDE_DEL_CORREO,
+  SELECCION_DEL_LUGAR_DEL_NEGOCIO,
   lugarParaElCorreo,
 } from "@/lib/lugar-de-la-cita"
 import { registrarError } from "@/lib/registro-de-errores"
@@ -51,14 +52,16 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
         // Etapa 9: si la hora tiene sede, el correo dice dónde queda. Sólo el
         // nombre, la dirección y la comuna de la sede.
         sede: { select: SELECCION_DE_LA_SEDE_DEL_CORREO },
-        business: { select: { name: true, timezone: true, type: true } },
+        // La dirección y el WhatsApp públicos del negocio (los de su página):
+        // "Dónde" sin sede, "Cómo llegar" y "Escribir por WhatsApp".
+        business: { select: { name: true, timezone: true, type: true, whatsapp: true, ...SELECCION_DEL_LUGAR_DEL_NEGOCIO } },
       },
     })
     if (!cita?.customer?.email) return false
 
     const { fecha, hora } = fechaYHoraEnElNegocio(cita.startTime, cita.business.timezone)
-    // Sólo si la hora tiene sede: en cualquier otro negocio el correo sale como siempre.
-    const lugar = lugarParaElCorreo(cita.sede)
+    // La sede de la hora o, sin sede, la dirección del negocio. Sin dirección, como siempre.
+    const lugar = lugarParaElCorreo(cita.sede, cita.business)
     const resultado = await enviarReservaConfirmadaPorElLocal({
       rubro: cita.business.type,
       emailCliente: cita.customer.email,
@@ -70,6 +73,7 @@ export async function enviarAvisoDeReservaConfirmada({ businessId, citaId }: Res
       profesional: cita.member?.user.name ?? null,
       precio: cita.price,
       ...(lugar && { lugar }),
+      whatsapp: cita.business.whatsapp,
     })
     if (resultado?.error) {
       // Sólo el código de Resend: su mensaje puede repetir el destinatario.

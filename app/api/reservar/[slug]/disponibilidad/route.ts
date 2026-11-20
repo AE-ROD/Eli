@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MENSAJE_DEMASIADAS_SOLICITUDES } from "@/app/api/reservar/_mensajes"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { candidatosDeLaReserva, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
@@ -88,7 +89,7 @@ export async function GET(
   // calendario es una consulta (`lecturaPublica` en `lib/rate-limit.ts`).
   const { permitido } = await verificarLimite("lecturaPublica", obtenerIp(request))
   if (!permitido) {
-    return NextResponse.json({ error: "Demasiadas solicitudes, intenta más tarde" }, { status: 429 })
+    return NextResponse.json({ error: MENSAJE_DEMASIADAS_SOLICITUDES }, { status: 429 })
   }
 
   const { slug } = await params
