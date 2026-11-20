@@ -462,7 +462,7 @@ describe("cargarServiciosEnLote", () => {
 
   it("sin mensaje del servidor, el del código, con las palabras del rubro", async () => {
     simularRespuesta(new Response("", { status: 401 }))
-    expect(await cargarServiciosEnLote(paraCargar(1), PRESTACIONES)).toMatchObject({ ok: false, error: expect.stringContaining("sesión terminó") })
+    expect(await cargarServiciosEnLote(paraCargar(1), PRESTACIONES)).toMatchObject({ ok: false, error: expect.stringContaining("sesión se cerró") })
     simularRespuesta(new Response("", { status: 502 }))
     expect(await cargarServiciosEnLote(paraCargar(1), PRESTACIONES)).toMatchObject({
       error: "No se pudieron agregar las prestaciones. Inténtalo de nuevo.",
@@ -560,7 +560,8 @@ describe("leerSugeridos y leerServicios", () => {
     simularRespuesta(json({ otra: 1 }))
     expect(await leerSugeridos()).toEqual({ ok: false, error: "No se pudieron cargar los servicios sugeridos. Inténtalo de nuevo." })
     simularRespuesta(json({ error: "No autorizado" }, 401))
-    expect(await leerSugeridos(PRESTACIONES)).toEqual({ ok: false, error: "No autorizado" })
+    // El 401 siempre con lo nuestro: "No autorizado" no dice qué hacer.
+    expect(await leerSugeridos(PRESTACIONES)).toEqual({ ok: false, error: "Tu sesión se cerró: vuelve a entrar e inténtalo de nuevo." })
   })
 
   it("leerServicios devuelve la lista del servidor", async () => {
@@ -627,7 +628,7 @@ describe("leerSedes", () => {
     simularRespuesta(json({ error: "No autorizado" }, 401))
     expect(await leerSedes()).toEqual({
       ok: false,
-      error: "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo.",
+      error: "Tu sesión se cerró: vuelve a entrar e inténtalo de nuevo.",
     })
     simularRespuesta(json({ error: "No encontrado" }, 404))
     expect(await leerSedes()).toEqual({ ok: false, error: "No se encontró lo que querías cambiar. Recarga la página e inténtalo de nuevo." })
@@ -734,7 +735,7 @@ describe("editarSede", () => {
     simularRespuesta(json({}, 409))
     expect(await editarSede("s1", { activo: true })).toEqual({
       ok: false,
-      error: "No se pudo activar la sede: su horario se pisaría con el de otra sede activa, o ya tienes 5 sedes activas.",
+      error: "No se pudo activar la sede: su horario se cruzaría con el de otra sede activa, o ya tienes 5 sedes activas.",
     })
   })
 
@@ -828,7 +829,7 @@ describe("guardarHorarioDeSede", () => {
     simularRespuesta(json({}, 409))
     expect(await guardarHorarioDeSede("s1", DIAS)).toEqual({
       ok: false,
-      error: "El horario de esta sede se pisa con el de otra sede el mismo día. Revisa los días y las horas.",
+      error: "El horario de esta sede se cruza con el de otra sede el mismo día. Revisa los días y las horas.",
       choques: [],
     })
   })

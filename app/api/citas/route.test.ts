@@ -119,9 +119,9 @@ describe("GET /api/citas", () => {
     const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
 
     expect(data).toEqual([
-      { id: "llego", businessId: "negocio-1", conAtencion: true },
-      { id: "anulada", businessId: "negocio-1", conAtencion: false },
-      { id: "sin-atencion", businessId: "negocio-1", conAtencion: false },
+      { id: "llego", businessId: "negocio-1", conAtencion: true, servicioIds: [] },
+      { id: "anulada", businessId: "negocio-1", conAtencion: false, servicioIds: [] },
+      { id: "sin-atencion", businessId: "negocio-1", conAtencion: false, servicioIds: [] },
     ])
     const where = prismaMock.appointment.findMany.mock.calls[0][0].where
     expect(coincideConWhere("appointment", { businessId: "otro-negocio", memberId: null }, where)).toBe(false)
@@ -139,6 +139,30 @@ describe("GET /api/citas", () => {
 
     expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({ canceladaPor: true, canceladaEn: true })
     expect(data[0]).toMatchObject({ canceladaPor: "cliente", canceladaEn: canceladaEn.toISOString() })
+  })
+
+  it("trae los ids de los servicios de cada cita, en orden, para \"Agendar otra hora\"", async () => {
+    const { GET } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionDueño)
+    prismaMock.appointment.findMany.mockResolvedValueOnce([
+      // Con filas: mandan ellas; la de un servicio borrado (sin id) no cuenta.
+      { id: "varios", businessId: "negocio-1", serviceId: "s1", servicios: [{ serviceId: "s1" }, { serviceId: null }, { serviceId: "s2" }], visit: null },
+      // De antes de varios servicios: su `serviceId`.
+      { id: "antigua", businessId: "negocio-1", serviceId: "s3", servicios: [], visit: null },
+      // Texto libre.
+      { id: "libre", businessId: "negocio-1", serviceId: null, servicios: [], visit: null },
+    ] as never)
+
+    const data = await (await GET(pedidoFalso("http://localhost/api/citas"))).json()
+
+    expect((prismaMock.appointment.findMany.mock.calls[0][0] as { select?: unknown }).select).toMatchObject({
+      serviceId: true,
+      servicios: { select: { serviceId: true }, orderBy: { orden: "asc" } },
+    })
+    expect(data.map((cita: { servicioIds: string[] }) => cita.servicioIds)).toEqual([["s1", "s2"], ["s3"], []])
+    // Las filas y el `serviceId` no salen tal cual.
+    expect(data[0]).not.toHaveProperty("servicios")
+    expect(data[0]).not.toHaveProperty("serviceId")
   })
 
   it("trae el comentario que el cliente dejó al reservar, para el detalle (#122)", async () => {

@@ -78,6 +78,21 @@ describe("GET /api/cron/recordatorios", () => {
     expect(select.business.select).toMatchObject({ type: true })
   })
 
+  it("sin sede, el recordatorio dice la dirección del negocio y lleva su WhatsApp; la consulta pide sólo eso", async () => {
+    prismaMock.appointment.findMany.mockResolvedValue([
+      { ...citaDeMañana, sede: null, business: { ...citaDeMañana.business, address: "Av. Italia 1500", comuna: "Ñuñoa", whatsapp: "+56912345678" } },
+    ])
+    const { GET } = await import("./route")
+
+    await GET(llamada({ authorization: `Bearer ${SECRETO}` }))
+
+    expect(mockEnviarRecordatorio).toHaveBeenCalledWith(
+      expect.objectContaining({ lugar: { direccion: "Av. Italia 1500", comuna: "Ñuñoa" }, whatsapp: "+56912345678" })
+    )
+    const { select } = prismaMock.appointment.findMany.mock.calls[0][0]
+    expect(select.business.select).toMatchObject({ address: true, comuna: true, whatsapp: true })
+  })
+
   it("con un Bearer incorrecto: 401", async () => {
     const { GET } = await import("./route")
 

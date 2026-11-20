@@ -40,6 +40,24 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     )
   })
 
+  it("el ejemplo en vivo del descuento, la guía de reseñas, la zona horaria y lo nuevo del horario", () => {
+    expect(f.horaValle.ejemplo(15)).toBe("Un servicio de $10.000 queda en $8.500.")
+    expect(f.horaValle.ejemplo(33)).toBe("Un servicio de $10.000 queda en $6.700.")
+    expect(f.horaValle.ejemplo(Number.NaN)).toBe("")
+    expect(f.paginaPublica.guiaDeResenas.titulo).toBe("¿Dónde encuentro el enlace de reseñas?")
+    expect(f.paginaPublica.guiaDeResenas.pasos[1]).toBe("Toca «Pedir reseñas».")
+    expect(f.mensajes.irAPagina).toBe("Ir a Página pública")
+    expect(f.zonaHoraria.soloSiEstas).toBe("Sólo cámbiala si estás en Isla de Pascua o Magallanes.")
+    expect(f.zonaHoraria.sugerida("Magallanes")).toBe(
+      "Marcamos Magallanes porque es la zona de este dispositivo. Si es la del local, toca “Guardar”."
+    )
+    expect(f.horario.usarSugerido).toBe("Usar lunes a viernes de 9 a 18")
+    expect(f.horario.copiarATodos).toBe("Copiar este horario a todos los días marcados")
+    expect(f.servicios.modal.precioAyuda).toBe(
+      "Si lo dejas vacío, tus clientes no ven ningún precio para este servicio en tu página de reservas. Si escribes 0, ven $0."
+    )
+  })
+
   it("la página pública y mi foto", () => {
     expect(f.paginaPublica.subtitulo).toBe("Lo que ven tus clientes al reservar.")
     expect(f.paginaPublica.whatsapp).toBe("WhatsApp del negocio")
@@ -60,22 +78,36 @@ describe("sin rubro: exactamente los textos de siempre", () => {
       "Tus clientes se anotan desde su celular mientras el local está abierto, ven cuántas personas tienen adelante y les avisamos por correo cuando ya casi es su turno."
     )
     expect(f.filaVirtual.pantalla).toBe(
-      "La pantalla usa la sesión de quien la abre: en el televisor o la tablet del local queda abierto el panel de esa cuenta. Déjala en pantalla completa y no dejes el panel a mano de los clientes en ese equipo."
+      "Abre esta pantalla en la tele o la tablet del local. Muestra tu panel, así que no la dejes al alcance de los clientes."
     )
+    // Sin hablar de "sesión": quien lo lee no sabe qué es.
+    expect(f.filaVirtual.pantalla).not.toContain("sesión")
+    expect(f.filaVirtual.qr.titulo).toBe("QR para anotarse en la fila")
   })
 
   it("el plazo, las faltas y la hora valle", () => {
     expect(f.plazoDeCambios.subtitulo).toBe("Tus clientes reciben un enlace en el correo de confirmación")
     expect(f.plazoDeCambios.ayuda).toBe(
-      "Hasta cuántas horas antes de la cita pueden hacerlo solos, de 0 a 72. Después, el enlace les pide que te contacten."
+      "Hasta cuánto antes de la cita pueden hacerlo solos. Después, el enlace les pide que te contacten."
     )
-    expect(f.porConfirmar.ayuda(1, 5)).toBe(
-      "De 1 a 5. Cuentan las citas marcadas “No vino” con el mismo correo de quien reserva; el teléfono no cuenta, y una reserva sin correo nunca entra por confirmar."
-    )
+    expect([0, 2, 12, 24, 48].map((horas) => f.plazoDeCambios.opcion(horas, horas === 24))).toEqual([
+      "Sin límite (hasta que empiece)",
+      "2 horas antes",
+      "12 horas antes",
+      "24 horas antes (recomendado)",
+      "48 horas antes",
+    ])
+    expect(f.plazoDeCambios.opcion(1, false)).toBe("1 hora antes")
+    expect(f.porConfirmar.etiqueta(2)).toBe("Pedir confirmación a quien faltó 2 veces")
+    expect(f.porConfirmar.etiqueta(1)).toBe("Pedir confirmación a quien faltó 1 vez")
+    expect(f.porConfirmar.ayuda(1, 5)).toBe("De 1 a 5 faltas.")
+    expect(f.porConfirmar.detalle.pasos(365)[0]).toBe("Cuentan las citas marcadas “No vino” del último año (365 días).")
+    expect(f.horaValle.titulo).toBe("Descuento en horas tranquilas")
+    expect(f.horaValle.porcentaje).toBe("Descuento (%)")
     expect(f.horaValle.descripcion).toBe(
-      "Quien reserva por tu página a una hora de estas franjas paga menos: lo ve en las horas y en el resumen. Cuenta la hora en que empieza la cita. Las citas que anotas en la agenda no se rebajan solas."
+      "Quien reserva por tu página en uno de estos horarios paga menos: lo ve en las horas y en el resumen. Cuenta la hora en que empieza la cita. Las citas que anotas en la agenda no se rebajan solas."
     )
-    expect(f.horaValle.sinRebaja).toBe("Servicios sin rebaja")
+    expect(f.horaValle.sinRebaja).toBe("Servicios sin descuento")
     expect(f.horaValle.sinRebajaAyuda).toBe("Los marcados cuestan lo mismo a cualquier hora.")
   })
 
@@ -173,12 +205,12 @@ describe("salón, barbería y salón de uñas: la reserva es una hora, sin choca
       const f = frasesDeConfiguracion(palabrasDe(rubro))
       // "horas antes de la hora" y "la hora en que empieza la hora" se leerían como reloj.
       expect(f.plazoDeCambios.ayuda).toBe(
-        "Hasta cuántas horas antes pueden hacerlo solos, de 0 a 72. Después, el enlace les pide que te contacten."
+        "Hasta cuánto antes pueden hacerlo solos. Después, el enlace les pide que te contacten."
       )
       expect(f.horaValle.descripcion).toBe(
-        "Quien reserva por tu página a una hora de estas franjas paga menos: lo ve en las horas y en el resumen. Cuenta la hora de inicio. Las horas que anotas en la agenda no se rebajan solas."
+        "Quien reserva por tu página en uno de estos horarios paga menos: lo ve en las horas y en el resumen. Cuenta la hora de inicio. Las horas que anotas en la agenda no se rebajan solas."
       )
-      expect(f.porConfirmar.ayuda(1, 5)).toContain("Cuentan las horas marcadas “No vino” con el mismo correo")
+      expect(f.porConfirmar.detalle.pasos(365)[0]).toContain("Cuentan las horas marcadas “No vino”")
       expect(f.servicios.titulo).toBe("Servicios")
       // Donde la reserva se llama hora no se repite la palabra: "las horas ya guardadas" se leería como reloj.
       expect(f.zonaHoraria.confirmar.descripcion).toBe(
@@ -199,7 +231,7 @@ describe("salón, barbería y salón de uñas: la reserva es una hora, sin choca
     expect(barberia.horario.negocioSinHorario).toContain("y la barbería todavía no guardó el suyo")
     expect(barberia.horario.atiendeEnElDelNegocio).toContain("atiende en el de la barbería")
     expect(barberia.filaVirtual.descripcion).toContain("mientras la barbería está abierta")
-    expect(barberia.filaVirtual.pantalla).toContain("la tablet de la barbería queda abierto el panel")
+    expect(barberia.filaVirtual.pantalla).toContain("la tablet de la barbería. Muestra tu panel")
     expect(barberia.paginaPublica.especialidad).toBe("Especialidad de cada barbero")
     expect(barberia.pagina.negocioSinNombre).toBe("La barbería")
 
@@ -250,9 +282,9 @@ describe("clínica dental: prestaciones, pacientes y sala de espera", () => {
 
   it("la reserva es una cita, el control se llama Control y la sala de espera lleva su artículo", () => {
     expect(f.plazoDeCambios.ayuda).toBe(
-      "Hasta cuántas horas antes de la cita pueden hacerlo solos, de 0 a 72. Después, el enlace les pide que te contacten."
+      "Hasta cuánto antes de la cita pueden hacerlo solos. Después, el enlace les pide que te contacten."
     )
-    expect(f.porConfirmar.ayuda(1, 5)).toContain("Cuentan las citas marcadas “No asistió” con el mismo correo")
+    expect(f.porConfirmar.detalle.pasos(365)[0]).toContain("Cuentan las citas marcadas “No asistió”")
     expect(f.mensajes.avisoDeVuelta.etiqueta).toBe("Control")
     expect(f.mensajes.soloConConsentimiento).toContain("“Control” y “Pedir reseña”")
     expect(f.mensajes.soloConConsentimiento).toContain("novedades de tu clínica por correo")
@@ -304,9 +336,10 @@ describe("la concordancia sale del género y no de las palabras de hoy: una labo
 
   it("\"del turno\", \"los turnos marcados\", \"solos\", \"el taller\", \"el mostrador\"", () => {
     expect(f.plazoDeCambios.ayuda).toBe(
-      "Hasta cuántas horas antes del turno pueden hacerlo solas, de 0 a 72. Después, el enlace les pide que te contacten."
+      "Hasta cuánto antes del turno pueden hacerlo solas. Después, el enlace les pide que te contacten."
     )
-    expect(f.porConfirmar.ayuda(1, 5)).toContain("Cuentan los turnos marcados “No vino”")
+    expect(f.porConfirmar.detalle.pasos(365)[0]).toContain("Cuentan los turnos marcados “No vino”")
+    expect(f.horaValle.ejemplo(15)).toBe("Una labor de $10.000 queda en $8.500.")
     expect(f.horaValle.descripcion).toContain("Cuenta la hora en que empieza el turno. Los turnos que anotas en la agenda no se rebajan solos.")
     expect(f.sillones.desactivados).toContain("para turnos nuevos, y los turnos que ya lo tienen lo conservan")
     expect(f.sillones.vacio).toContain("asignárselos a los turnos.")

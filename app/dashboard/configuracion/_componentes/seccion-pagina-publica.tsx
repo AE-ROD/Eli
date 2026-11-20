@@ -11,6 +11,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { GuiaPlegable } from "@/components/panel/guia-plegable"
 import { SelectorDeFoto } from "@/components/panel/selector-de-foto"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PALETA_DEL_LOCAL, colorDelNegocio, iniciales } from "@/lib/pagina-del-negocio"
@@ -229,6 +230,12 @@ export function SeccionPaginaPublica({
               tipo="url"
               ayuda={frases.ayudaDeLasResenas}
             />
+            {/* Sólo a quien lo puede escribir: a los demás no les sirve saber de dónde se copia. */}
+            {!soloLectura && (
+              <GuiaPlegable titulo={frases.guiaDeResenas.titulo} pasos={frases.guiaDeResenas.pasos} className="mt-2">
+                <p>{frases.guiaDeResenas.nota}</p>
+              </GuiaPlegable>
+            )}
           </div>
         </div>
 

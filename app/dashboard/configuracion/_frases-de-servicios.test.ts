@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import type { ResumenDeCarga } from "@/lib/carga-de-servicios"
+import { leerYRevisarTexto, type ResumenDeCarga } from "@/lib/carga-de-servicios"
 import { MOTIVO_REPETIDO_EN_EL_ARCHIVO, MOTIVO_REPETIDO_EN_EL_LOTE, MOTIVO_YA_EXISTE } from "@/lib/servicios-en-lote"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
-import { OMITIDOS_A_NOMBRAR, frasesDeLosServicios } from "./_frases-de-servicios"
+import { OMITIDOS_A_NOMBRAR, columnaQueFalta, frasesDeLosServicios } from "./_frases-de-servicios"
 
 const palabrasDe = (rubro: string | null): PalabrasDelRubro => vocabularioDe(rubro).palabras
 
@@ -76,6 +76,25 @@ describe("sin rubro: servicios", () => {
   it("las instrucciones de pegar son tres líneas", () => {
     expect(f.carga.pegar.instrucciones).toHaveLength(3)
   })
+
+  it("la pestaña de la planilla se llama «Desde una planilla» y dice cómo guardar un CSV en Excel y en Google Sheets", () => {
+    expect(f.carga.pestanas.pegar).toBe("Desde una planilla")
+    expect(f.carga.pegar.comoGuardarloComoCsv.pasos).toEqual([
+      "En Excel: Archivo › Guardar como › CSV.",
+      "En Google Sheets: Archivo › Descargar › CSV.",
+    ])
+    expect(f.carga.pegar.errorDelArchivo.excel).toContain("Archivo › Guardar como › CSV")
+    expect(f.carga.sugeridos.vacio.ayuda).toContain("“Desde una planilla”")
+    expect(f.carga.varios.filasLlenas(50)).toContain("“Desde una planilla”")
+  })
+
+  it("dice qué columna obligatoria falta, con un ejemplo", () => {
+    expect(f.carga.pegar.faltaColumna("duracion", "Corte")).toBe(
+      "A tu planilla le falta la columna «Duración», que es obligatoria. Agrégala con los minutos de cada servicio: por ejemplo, Corte con 45 en «Duración»."
+    )
+    expect(f.carga.pegar.faltaColumna("nombre", "Corte")).toContain("le falta la columna «Nombre»")
+    expect(f.carga.pegar.sinTitulos("Corte")).toContain("Por ejemplo: Corte; 45; 15000.")
+  })
 })
 
 describe("clínica dental: prestaciones, con su género", () => {
@@ -146,7 +165,11 @@ describe("errorDeLote: el mensaje según el código", () => {
   })
 
   it("sin mensaje, uno por código que se entienda", () => {
-    expect(errorDeLote(401, "", "agregar")).toMatch(/sesión terminó/)
+    expect(errorDeLote(401, "", "agregar")).toBe("Tu sesión se cerró: vuelve a entrar e inténtalo de nuevo.")
+    expect(errorDeLote(403, "", "agregar")).toBe("Esto lo cambia la dueña.")
+    // El "No autorizado" del servidor no dice qué hacer: el 401 y el 403 siempre con lo nuestro.
+    expect(errorDeLote(401, "No autorizado", "agregar")).toMatch(/sesión se cerró/)
+    expect(errorDeLote(403, "No autorizado", "agregar")).toBe("Esto lo cambia la dueña.")
     expect(errorDeLote(409, "", "agregar")).toMatch(/máximo de servicios/)
     expect(errorDeLote(429, "", "cambiar")).toMatch(/Espera un momento/)
     expect(errorDeLote(503, "", "agregar")).toMatch(/más tarde/)
@@ -226,5 +249,30 @@ describe("un rubro sin palabras propias habla como sin rubro", () => {
     expect(a.carga.pegar.motivo(MOTIVO_YA_EXISTE)).toBe(b.carga.pegar.motivo(MOTIVO_YA_EXISTE))
     expect(a.resumenDeCarga(resumen({ creados: 2 })).titulo).toBe(b.resumenDeCarga(resumen({ creados: 2 })).titulo)
     expect(a.errorDeLote(502, "", "agregar")).toBe(b.errorDeLote(502, "", "agregar"))
+  })
+})
+
+describe("columnaQueFalta: la columna obligatoria que no está en toda la planilla", () => {
+  const leer = (texto: string) => leerYRevisarTexto(texto, [], [])
+
+  it("con títulos y sin «Duración»: la duración", () => {
+    expect(columnaQueFalta(leer("Nombre\tPrecio\nCorte\t15000\nBarba\t8000"))).toBe("duracion")
+  })
+
+  it("con títulos y sin «Nombre»: el nombre", () => {
+    expect(columnaQueFalta(leer("Duración\tPrecio\n45\t15000\n30\t8000"))).toBe("nombre")
+  })
+
+  it("una sola columna de nombres, sin títulos: la duración", () => {
+    expect(columnaQueFalta(leer("Corte\nBarba"))).toBe("duracion")
+  })
+
+  it("si alguna fila está bien, no falta ninguna columna: es esa fila la que está mal", () => {
+    expect(columnaQueFalta(leer("Nombre\tDuración\nCorte\t45\nBarba\t"))).toBeNull()
+    expect(columnaQueFalta(leer("Nombre\tDuración\nCorte\t45"))).toBeNull()
+  })
+
+  it("sin filas, nada", () => {
+    expect(columnaQueFalta(leer(""))).toBeNull()
   })
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   MENSAJE_ENLACE_INVALIDO,
+  contactoDelNegocio,
   dentroDelPlazo,
   esGestionable,
   esTokenConForma,
@@ -113,6 +114,51 @@ describe("los mensajes del enlace que nombran el servicio y el lugar", () => {
     expect(mensajeServicioYaNoSeReserva("salon")).toBe("Este servicio ya no se reserva por acá. Contacta al salón.")
     expect(mensajeServicioYaNoSeReserva("odontologia")).toBe("Este motivo ya no se reserva por acá. Contacta a la clínica.")
     expect(mensajeSinHorasParaReagendar("barberia")).toBe("No hay horas para reagendar por acá. Contacta a la barbería.")
+  })
+})
+
+describe("los mensajes de 'contacta' dicen cómo, si el negocio tiene WhatsApp", () => {
+  it("con un número que se puede leer, lo dicen escrito para leerlo", () => {
+    expect(mensajeFueraDePlazo(24, "salon", "+56912345678")).toBe(
+      "Ya no se puede cambiar por acá: se puede hasta 24 horas antes. Contacta al salón por WhatsApp al +56 9 1234 5678."
+    )
+    expect(mensajeServicioYaNoSeReserva(null, "9 1234 5678")).toBe(
+      "Este servicio ya no se reserva por acá. Contacta al local por WhatsApp al +56 9 1234 5678."
+    )
+    expect(mensajeSinHorasParaReagendar("odontologia", "+56912345678")).toBe(
+      "No hay horas para reagendar por acá. Contacta a la clínica por WhatsApp al +56 9 1234 5678."
+    )
+  })
+
+  it("sin número, o con uno que no se puede leer, el mensaje de siempre", () => {
+    expect(mensajeFueraDePlazo(1, null, null)).toBe("Ya no se puede cambiar por acá: falta menos de 1 hora. Contacta al local.")
+    expect(mensajeSinHorasParaReagendar(null, "no es un número")).toBe("No hay horas para reagendar por acá. Contacta al local.")
+  })
+})
+
+describe("contactoDelNegocio: sólo lo que publica la página del negocio", () => {
+  it("el WhatsApp como enlace y para leer, la dirección y cómo llegar", () => {
+    expect(contactoDelNegocio({ whatsapp: "+56912345678", address: " Calle 1 ", comuna: " Ñuñoa " })).toEqual({
+      enlaceWhatsapp: "https://wa.me/56912345678",
+      whatsapp: "+56 9 1234 5678",
+      direccion: "Calle 1",
+      comuna: "Ñuñoa",
+      mapas: {
+        googleMaps: "https://www.google.com/maps/search/?api=1&query=Calle%201%2C%20%C3%91u%C3%B1oa",
+        waze: "https://waze.com/ul?q=Calle%201%2C%20%C3%91u%C3%B1oa",
+      },
+    })
+  })
+
+  it("sin datos, todo en null; con la comuna sola no hay cómo llegar", () => {
+    expect(contactoDelNegocio({ whatsapp: null, address: null, comuna: null })).toEqual({
+      enlaceWhatsapp: null,
+      whatsapp: null,
+      direccion: null,
+      comuna: null,
+      mapas: null,
+    })
+    expect(contactoDelNegocio({ whatsapp: "123", address: "", comuna: "Ñuñoa" })).toMatchObject({ enlaceWhatsapp: null, whatsapp: null, mapas: null })
   })
 })
 

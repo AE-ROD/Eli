@@ -356,6 +356,20 @@ describe("QA#22: la página pública dice \"correo\", no \"email\"", () => {
     expect(listaDeEsperaSchema.safeParse(contacto).success).toBe(false)
     expect(listaDeEsperaSchema.safeParse({ ...contacto, servicioIds: ["s1", "s1"] }).success).toBe(false)
 
+    // El apellido es opcional en la lista de espera: ausente, null, vacío o de espacios sale "".
+    const sinApellido = { servicioId: "s1", fecha: "2030-01-07", nombre: "Lucía", email: "lucia@correo.test" }
+    for (const apellido of [undefined, null, "", "   "]) {
+      expect(listaDeEsperaSchema.parse({ ...sinApellido, apellido }).apellido).toBe("")
+    }
+    expect(listaDeEsperaSchema.parse({ ...sinApellido, apellido: " Pérez " }).apellido).toBe("Pérez")
+    // Si se escribe, las reglas del nombre.
+    expect(listaDeEsperaSchema.safeParse({ ...sinApellido, apellido: "P" }).error?.issues[0].message).toBe(
+      "El apellido tiene que tener al menos 2 caracteres"
+    )
+    expect(listaDeEsperaSchema.safeParse({ ...sinApellido, apellido: 5 }).error?.issues[0].message).toBe("El apellido no es válido")
+    // En la reserva sigue siendo obligatorio.
+    expect(reservaSchema.safeParse({ ...reserva, apellido: "" }).success).toBe(false)
+
     const enFila = filaVirtualSchema.safeParse({ nombre: "Juan Pérez", email: "juan" })
     expect(enFila.error?.issues[0].message).toBe("El correo no es válido")
   })

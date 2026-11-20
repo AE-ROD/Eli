@@ -108,6 +108,15 @@ export function ModalCobro({
   // Las propinas (#66) arrancan vacías: son opcionales y van aparte del total.
   const [propinas, setPropinas] = useState<FilaDePropina[]>([])
 
+  // Lo de todos los días a la vista: un solo medio con el total ya puesto.
+  // Pagar con varios medios y la propina se despliegan con un botón; si ya
+  // hay más de un pago (o ninguno, con total cero) o alguna propina, se ven
+  // abiertos. Los montos se calculan igual en los dos casos.
+  const [variosMediosAbierto, setVariosMediosAbierto] = useState(false)
+  const [propinasAbiertas, setPropinasAbiertas] = useState(false)
+  const conVariosMedios = variosMediosAbierto || filas.length !== 1
+  const conPropinasAbiertas = propinasAbiertas || propinas.length > 0
+
   // Antes de cobrar (#118): qué líneas quedarían sin % de comisión. Se pide
   // al abrir y cada vez que cambian las líneas; se guarda con la firma que lo
   // pidió, para no mostrar lo de unas líneas que ya no son. Si no se puede
@@ -152,6 +161,8 @@ export function ModalCobro({
   // Al agregar, el foco va al monto nuevo, que es lo que se ajusta; al
   // quitar, al botón de agregar, porque el que se apretó desaparece.
   const agregar = () => {
+    // Desde que se agrega un pago, se ven todos los controles (también con total cero).
+    setVariosMediosAbierto(true)
     pagosAgregados += 1
     const clave = `pago-${pagosAgregados}`
     setFilas((previas) => [...previas, filaDePagoSugerida(mediosDePago, previas, totalCentavos, clave)])
@@ -176,6 +187,12 @@ export function ModalCobro({
     setPropinas((previas) => [...previas, filaDePropinaSugerida(atencion.lineas, profesionales, mediosDePago, clave)])
     onCambiarPagos()
     requestAnimationFrame(() => document.getElementById(`${idBase}-${clave}-monto`)?.focus())
+  }
+
+  // Despliega las propinas con la primera ya agregada: el foco va a su monto.
+  const abrirPropinas = () => {
+    setPropinasAbiertas(true)
+    agregarPropina()
   }
 
   const quitarPropina = (clave: string) => {
@@ -261,7 +278,10 @@ export function ModalCobro({
                   key={fila.clave}
                   role="group"
                   aria-label={`Pago ${numero}`}
-                  className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-2 sm:gap-3"
+                  className={cn(
+                    "grid items-start gap-2 sm:gap-3",
+                    conVariosMedios ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" : "grid-cols-2"
+                  )}
                 >
                   <div>
                     <label htmlFor={`${idBase}-${fila.clave}-medio`} className={ETIQUETA}>
@@ -310,31 +330,46 @@ export function ModalCobro({
                       </p>
                     )}
                   </div>
-                  {/* A la altura del campo: baja lo que mide la etiqueta y mide lo mismo que él, 44 px. */}
-                  <Boton
-                    variante="fantasma"
-                    onClick={() => quitar(fila.clave)}
-                    disabled={guardando}
-                    aria-label={`Quitar el pago ${numero}: ${nombreDeMedio(fila.medio)}`}
-                    title="Quitar"
-                    className="mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error"
-                  >
-                    <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
-                  </Boton>
+                  {/* A la altura del campo: baja lo que mide la etiqueta y mide lo mismo que él, 44 px. Con un solo medio no se quita. */}
+                  {conVariosMedios && (
+                    <Boton
+                      variante="fantasma"
+                      onClick={() => quitar(fila.clave)}
+                      disabled={guardando}
+                      aria-label={`Quitar el pago ${numero}: ${nombreDeMedio(fila.medio)}`}
+                      title="Quitar"
+                      className="mt-6.5 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error"
+                    >
+                      <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
+                    </Boton>
+                  )}
                 </div>
               )
             })}
 
-            <Boton
-              ref={botonAgregar}
-              variante="secundario"
-              tamano="sm"
-              onClick={agregar}
-              disabled={guardando || filas.length >= MAXIMO_DE_PAGOS || mediosDePago.length === 0}
-            >
-              <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
-              Agregar medio de pago
-            </Boton>
+            {conVariosMedios ? (
+              <Boton
+                ref={botonAgregar}
+                variante="secundario"
+                tamano="sm"
+                onClick={agregar}
+                disabled={guardando || filas.length >= MAXIMO_DE_PAGOS || mediosDePago.length === 0}
+              >
+                <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
+                Agregar medio de pago
+              </Boton>
+            ) : (
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                // Despliega los pagos con varios medios y agrega el segundo: el foco va a su monto.
+                onClick={agregar}
+                disabled={guardando || mediosDePago.length === 0}
+              >
+                <Plus aria-hidden="true" className="size-4" strokeWidth={2} />
+                Pagó con más de un medio
+              </Boton>
+            )}
           </fieldset>
 
           {/*
@@ -343,7 +378,21 @@ export function ModalCobro({
             Una clínica dental no trabaja con propinas (`puedeRegistrarPropina`):
             ahí el bloque no existe, y el servidor tampoco las acepta.
           */}
-          {conPropinas && (
+          {conPropinas && !conPropinasAbiertas && (
+            <div>
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                onClick={abrirPropinas}
+                disabled={guardando || mediosDePago.length === 0}
+              >
+                <HandCoins aria-hidden="true" className="size-4" strokeWidth={2} />
+                Dejó propina
+              </Boton>
+            </div>
+          )}
+
+          {conPropinas && conPropinasAbiertas && (
             <fieldset className="space-y-3">
               <legend className="mb-1 text-sm font-semibold">Propinas</legend>
               <p className="text-[13px] text-texto-2">Opcional. No suman al total: van completas a quien las recibe.</p>

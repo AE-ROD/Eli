@@ -248,3 +248,20 @@ describe("la concordancia sigue al género y no a una terminación pegada", () =
     expect(masculino.editor.linea(false).quitar(1)).toBe("Quitar el trabajo 1")
   })
 })
+
+describe("cobrar desde la agenda", () => {
+  it("sin rubro", () => {
+    const f = frasesDelTablero(NEUTRAS).cobrarDesdeLaAgenda
+    expect(f.titulo("Ana Pérez")).toBe("¿Cobrar a Ana Pérez?")
+    expect(f.avanzar).toBe("Su tarjeta pasa a «Por cobrar» y se abre el cobro. Todavía no se registra ningún pago.")
+    expect(f.confirmar).toBe("Ir a cobrar")
+    expect(f.cobrada("Ana")).toBe("El cobro de Ana ya está registrado: su tarjeta está en «Finalizado».")
+    expect(f.noEsta).toBe("Eso no está en el tablero de hoy: aquí se cobra sólo lo del día.")
+  })
+
+  it("en una clínica dental, la sala de espera", () => {
+    expect(frasesDelTablero(palabrasDe("odontologia")).cobrarDesdeLaAgenda.noEsta).toBe(
+      "Eso no está en la sala de espera de hoy: aquí se cobra sólo lo del día."
+    )
+  })
+})

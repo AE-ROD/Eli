@@ -293,3 +293,47 @@ describe("las sedes (etapa 9, plan Independiente)", () => {
     }
   })
 })
+
+describe("los atajos y las confirmaciones con consecuencia", () => {
+  it("sin rubro", () => {
+    const f = frasesDeLaAgenda(NEUTRAS)
+    expect(f.cobrar).toBe("Cobrar")
+    expect(f.agendarOtra).toBe("Agendar otra cita")
+    expect(f.completar.titulo).toBe("¿Marcar completada sin cobrar?")
+    expect(f.completar.preguntaCobrar).toBe("Esto no registra el pago. ¿Quieres cobrar?")
+    expect(f.completar.cobroEnElTablero).toBe("Esto no registra el pago. Los cobros se hacen en el tablero, el mismo día.")
+    expect(f.consecuenciaDeCancelar).toBe(
+      "Su horario queda libre para otra reserva y, si alguien lo espera en la lista de espera, le avisamos. El cliente no recibe ningún aviso: avísale tú si hace falta."
+    )
+    expect(f.consecuenciaDeReactivar("cancelada")).toBe(
+      "Vuelve a confirmada y ocupa otra vez su horario en la agenda. El cliente no recibe ningún aviso."
+    )
+    expect(f.consecuenciaDeReactivar("completada")).toBe(
+      "Vuelve a confirmada, como si todavía no se hubiera atendido. El cliente no recibe ningún aviso."
+    )
+    expect(f.corregirConAjuste.registraLo).toContain("Liquidaciones")
+  })
+
+  it("en un salón la reserva es una hora", () => {
+    const f = frasesDeLaAgenda(palabrasDe("salon"))
+    expect(f.agendarOtra).toBe("Agendar otra hora")
+    expect(f.completar.titulo).toBe("¿Marcar completada sin cobrar?")
+  })
+
+  it("en una clínica dental: el paciente y la sala de espera", () => {
+    const f = frasesDeLaAgenda(palabrasDe("odontologia"))
+    expect(f.agendarOtra).toBe("Agendar otra cita")
+    expect(f.consecuenciaDeCancelar).toContain("El paciente no recibe ningún aviso")
+    expect(f.completar.cobroEnElTablero).toContain("en la sala de espera")
+  })
+
+  it("con otros géneros, concuerda", () => {
+    const f = frasesDeLaAgenda(AL_REVES)
+    expect(f.agendarOtra).toBe("Agendar otro turno")
+    expect(f.completar.titulo).toBe("¿Marcar completado sin cobrar?")
+    expect(f.consecuenciaDeCancelar).toContain("La clienta no recibe ningún aviso")
+    expect(f.consecuenciaDeReactivar("no-asistio")).toBe(
+      "Vuelve a confirmado y ocupa otra vez su horario en la agenda. La clienta no recibe ningún aviso."
+    )
+  })
+})

@@ -21,8 +21,9 @@ vi.mock("@/lib/rate-limit", () => ({
 
 const correos = vi.hoisted(() => ({
   aviso: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ data: { id: "correo" }, error: null })),
+  turno: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ data: { id: "correo" }, error: null })),
 }))
-vi.mock("@/lib/email", () => ({ enviarAvisoFilaVirtual: correos.aviso }))
+vi.mock("@/lib/email", () => ({ enviarAvisoFilaVirtual: correos.aviso, enviarTurnoEnLaFila: correos.turno }))
 
 // `after` guarda la tarea: el test la corre cuando quiere, como Next después de responder.
 const tareas = vi.hoisted(() => [] as Array<() => unknown>)
@@ -125,6 +126,7 @@ beforeEach(() => {
   mockVerificarLimite.mockResolvedValue({ permitido: true })
   mockDevolverLimite.mockResolvedValue(undefined)
   correos.aviso.mockResolvedValue({ data: { id: "correo" }, error: null })
+  correos.turno.mockResolvedValue({ data: { id: "correo" }, error: null })
   escenario()
 })
 
@@ -161,6 +163,38 @@ describe("POST /api/reservar/[slug]/fila: anotarse", () => {
   it("el correo es opcional; vacío es sin correo", async () => {
     expect((await anotarse({ nombre: "Beto", email: "" })).status).toBe(201)
     expect(deLaFila()[0].filaEmail).toBeNull()
+    // Sin correo, no hay "Tu lugar en la fila".
+    expect(correos.turno).not.toHaveBeenCalled()
+  })
+
+  it("con correo, le llega 'Tu lugar en la fila' con su número, el enlace a su turno y el WhatsApp del negocio", async () => {
+    escenario({ negocio: { whatsapp: "+56912345678" } })
+    const { status, cuerpo } = await anotarse({ nombre: "Juan Pérez", email: "juan@correo.test" })
+    expect(status).toBe(201)
+    expect(correos.turno).toHaveBeenCalledTimes(1)
+    expect(correos.turno.mock.calls[0][0]).toEqual({
+      rubro: expect.any(String),
+      emailCliente: "juan@correo.test",
+      nombreCliente: "Juan",
+      nombreNegocio: expect.any(String),
+      numero: 1,
+      enlaceTurno: `http://localhost:3000${cuerpo.enlace}`,
+      whatsapp: "+56912345678",
+    })
+  })
+
+  it("si el correo del turno falla, igual queda anotada y no se devuelve el cupo", async () => {
+    correos.turno.mockRejectedValueOnce(new Error("Resend caído"))
+    const { status } = await anotarse({ nombre: "Juan", email: "juan@correo.test" })
+    expect(status).toBe(201)
+    expect(deLaFila()).toHaveLength(1)
+    expect(mockDevolverLimite).not.toHaveBeenCalled()
+  })
+
+  it("rechazada (cerrada), no se manda el correo del turno", async () => {
+    vi.setSystemTime(DE_NOCHE)
+    expect((await anotarse({ nombre: "Juan", email: "juan@correo.test" })).status).toBe(409)
+    expect(correos.turno).not.toHaveBeenCalled()
   })
 
   it.each([[{}], [{ nombre: "J" }], [{ nombre: "Juan", email: "no-es-correo" }], [null], ["texto"]])(

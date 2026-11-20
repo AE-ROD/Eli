@@ -18,7 +18,10 @@ vi.mock("@/lib/rate-limit", () => ({
   devolverLimite: (...args: unknown[]) => mockDevolverLimite(...args),
 }))
 
-vi.mock("@/lib/email", () => ({ enviarAvisoFilaVirtual: vi.fn(async () => ({ data: { id: "correo" }, error: null })) }))
+vi.mock("@/lib/email", () => ({
+  enviarAvisoFilaVirtual: vi.fn(async () => ({ data: { id: "correo" }, error: null })),
+  enviarTurnoEnLaFila: vi.fn(async () => ({ data: { id: "correo" }, error: null })),
+}))
 
 // Sin pedido de Next no hay "después de responder": la tarea del aviso no corre en estas pruebas.
 vi.mock("next/server", async (original) => ({

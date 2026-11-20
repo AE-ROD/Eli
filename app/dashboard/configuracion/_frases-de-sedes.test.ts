@@ -23,6 +23,11 @@ describe("las frases de las sedes, sin rubro", () => {
     expect(f.titulo).toBe("Sedes y horarios")
     expect(f.subtitulo).toBe("Tus clientes eligen la sede al reservar y ven qué días y a qué horas estás en cada una.")
     expect(f.regla).toContain("no puedes estar en dos lugares a la vez")
+    // Palabras de todos los días: "tramos" que "se cruzan", no "franjas" que "se pisan".
+    expect(f.regla).toContain("tramos que se crucen")
+    expect(f.editor.choques.titulo(1)).toBe("Este horario se cruza con el de otra sede")
+    expect(f.editor.agregarFranjaVisible).toBe("Otro tramo")
+    expect(f.fila).not.toHaveProperty("lugar")
     expect(f.borrar.descripcion).toBe(
       "Se borra la sede con su horario y no se puede deshacer. Si alguna vez tuvo citas, no se puede borrar: desactívala y queda guardada."
     )
@@ -89,10 +94,13 @@ describe("error: el mensaje por código", () => {
     "leer", "agregar", "convertir", "editar", "activar", "desactivar", "ordenar", "borrar", "guardar-horario", "cambiar-de-plan",
   ]
 
-  it("401: la sesión terminó, aunque el servidor diga «No autorizado»", () => {
-    expect(f.error(401, "No autorizado", "agregar")).toBe(
-      "Tu sesión terminó o no tienes permiso para hacer este cambio. Vuelve a entrar e inténtalo de nuevo."
-    )
+  it("401: la sesión se cerró, aunque el servidor diga «No autorizado»", () => {
+    expect(f.error(401, "No autorizado", "agregar")).toBe("Tu sesión se cerró: vuelve a entrar e inténtalo de nuevo.")
+  })
+
+  it("403: la sesión sigue, pero el cambio es de la dueña", () => {
+    expect(f.error(403, "Prohibido", "agregar")).toBe("Esto lo cambia la dueña.")
+    expect(f.error(403, "", "guardar-horario")).not.toContain("sesión")
   })
 
   it("404: no se encontró; 429: muchos cambios seguidos; 503: más tarde", () => {
@@ -109,7 +117,7 @@ describe("error: el mensaje por código", () => {
     expect(f.error(409, "", "borrar")).toBe("Esta sede ya tuvo citas, así que no se puede borrar. Desactívala y deja de ofrecerse.")
     expect(f.error(409, "", "desactivar")).toBe("Esta sede tiene citas agendadas por delante. Muévelas o cancélalas antes de desactivarla.")
     expect(f.error(409, "", "activar")).toContain("ya tienes 5 sedes activas")
-    expect(f.error(409, "", "guardar-horario")).toContain("se pisa con el de otra sede")
+    expect(f.error(409, "", "guardar-horario")).toContain("se cruza con el de otra sede")
     expect(frasesDeLasSedes(DE_UN_SALON).error(409, "", "desactivar")).toContain("horas agendadas por delante")
   })
 

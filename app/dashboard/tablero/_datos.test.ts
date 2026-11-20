@@ -6,6 +6,9 @@ import {
   anularAtencion,
   aplicarSondeo,
   buscarClientes,
+  cobroPedidoEnLaDireccion,
+  destinoDelCobro,
+  direccionParaCobrar,
   guardarServicios,
   leerAtencionesDelDia,
   leerLineasSinPorcentaje,
@@ -279,5 +282,55 @@ describe("los mensajes de un pedido que falla sin decir por qué hablan con las 
   it("el mensaje que manda el servidor sigue ganando sobre el del rubro", async () => {
     simularRespuesta(json({ error: "La atención ya cambió" }, 409))
     expect(await guardarServicios("v1", [], clinica)).toEqual({ ok: false, error: "La atención ya cambió", motivo: "desactualizada" })
+  })
+})
+
+describe("cobrar desde la agenda", () => {
+  it("la dirección lleva el id de la cita, codificado", () => {
+    expect(direccionParaCobrar("cita-1")).toBe("/dashboard/tablero?cobrar=cita-1")
+  })
+
+  it("lee el id de la dirección y la deja limpia, sin tocar lo demás", () => {
+    expect(cobroPedidoEnLaDireccion("?cobrar=ck123abc&vista=hoy")).toEqual({ citaId: "ck123abc", resto: "vista=hoy", habia: true })
+    expect(cobroPedidoEnLaDireccion("")).toEqual({ citaId: null, resto: "", habia: false })
+  })
+
+  it("descarta lo que no tiene forma de id, pero igual lo saca de la dirección", () => {
+    expect(cobroPedidoEnLaDireccion("?cobrar=../api/x")).toEqual({ citaId: null, resto: "", habia: true })
+    expect(cobroPedidoEnLaDireccion("?cobrar=")).toEqual({ citaId: null, resto: "", habia: true })
+    expect(cobroPedidoEnLaDireccion(`?cobrar=${"a".repeat(65)}`).citaId).toBeNull()
+  })
+
+  describe("dónde está la cita en el tablero", () => {
+    const atencion = (id: string, citaId: string | null, estado: string) => ({ id, citaId, estado }) as Atencion
+    const reserva = (id: string) => ({ id }) as Reserva
+    const tablero = {
+      reservas: [reserva("cita-sin-llegar")],
+      atenciones: [
+        atencion("a1", "cita-por-cobrar", "por-cobrar"),
+        atencion("a2", "cita-en-espera", "en-espera"),
+        atencion("a3", "cita-en-atencion", "en-atencion"),
+        atencion("a4", "cita-cobrada", "finalizada"),
+        atencion("a5", null, "por-cobrar"),
+      ],
+    }
+
+    it("por cobrar: se abre el cobro", () => {
+      expect(destinoDelCobro(tablero, "cita-por-cobrar")).toEqual({ tipo: "cobrar", atencion: tablero.atenciones[0] })
+    })
+
+    it("en espera o en atención: hay que avanzarla", () => {
+      expect(destinoDelCobro(tablero, "cita-en-espera").tipo).toBe("avanzar")
+      expect(destinoDelCobro(tablero, "cita-en-atencion").tipo).toBe("avanzar")
+    })
+
+    it("todavía es una reserva: falta su llegada", () => {
+      expect(destinoDelCobro(tablero, "cita-sin-llegar")).toEqual({ tipo: "llegada", reserva: tablero.reservas[0] })
+    })
+
+    it("ya cobrada, o no está en el tablero de hoy", () => {
+      expect(destinoDelCobro(tablero, "cita-cobrada").tipo).toBe("cobrada")
+      expect(destinoDelCobro(tablero, "de-otro-dia")).toEqual({ tipo: "no-esta" })
+    })
   })
 })

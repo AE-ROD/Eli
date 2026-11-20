@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useState } from "react"
-import { MailCheck } from "lucide-react"
+import { ArrowRight, MailCheck } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
@@ -124,10 +124,8 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
 
       <ul className="mt-5 divide-y divide-borde">
         {mensajes.map((mensaje) => {
-          const descripcion =
-            mensaje.campo === "pideResenas" && !inicial.tieneEnlaceDeResenas
-              ? `${mensaje.descripcion} Antes, agrega tu enlace de reseñas en "Tu página pública".`
-              : mensaje.descripcion
+          const faltaElEnlace = mensaje.campo === "pideResenas" && !inicial.tieneEnlaceDeResenas
+          const descripcion = faltaElEnlace ? `${mensaje.descripcion} ${frases.faltaElEnlace}` : mensaje.descripcion
           return (
             <li key={mensaje.campo} className="py-4 first:pt-0 last:pb-0">
               {inicial.puedeCambiar ? (
@@ -147,6 +145,20 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
                     {interruptores[mensaje.campo] ? "Encendido" : "Apagado"}
                   </Insignia>
                 </div>
+              )}
+              {/* Lleva a la sección (y abre su grupo): el ancla la atiende `GruposDeConfiguracion`. */}
+              {faltaElEnlace && (
+                <a
+                  href="#pagina"
+                  // Con el ancla ya en la URL el navegador no avisa del cambio: se avisa a mano para que vuelva a abrir y bajar.
+                  onClick={() => {
+                    if (window.location.hash === "#pagina") window.dispatchEvent(new HashChangeEvent("hashchange"))
+                  }}
+                  className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-boton text-sm font-medium text-navy underline-offset-4 hover:underline anillo-foco"
+                >
+                  {frases.irAPagina}
+                  <ArrowRight aria-hidden="true" className="size-4" strokeWidth={2} />
+                </a>
               )}
             </li>
           )

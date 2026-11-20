@@ -102,6 +102,23 @@ describe("POST /api/reservar/[slug]/confirmar: la hora tiene que caer en el hora
     })
   })
 
+  it("el correo al cliente dice la dirección del negocio (sin sede) y lleva su WhatsApp; el aviso al equipo no cambia", async () => {
+    escenario([franja({ startTime: "09:00", endTime: "13:00" })])
+    await base.prisma.business.updateMany({
+      where: { id: NEGOCIO },
+      data: { address: "Av. Italia 1500", comuna: "Ñuñoa", whatsapp: "+56912345678" },
+    })
+    const { POST } = await import("./route")
+    const res = await POST(pedidoFalso({ ...reserva("12:00"), email: "lucia@correo.test" }), conSlug)
+
+    expect(res.status).toBe(201)
+    expect(vi.mocked(enviarConfirmacionCliente)).toHaveBeenCalledWith(
+      expect.objectContaining({ lugar: { direccion: "Av. Italia 1500", comuna: "Ñuñoa" }, whatsapp: "+56912345678" })
+    )
+    // La respuesta sigue diciendo la sede sólo si la hay.
+    expect(await res.json()).not.toHaveProperty("sede")
+  })
+
   it("la hora con que decide sale de la base, no del reloj de esta instancia (#152)", async () => {
     escenario([franja({ startTime: "09:00", endTime: "13:00" })])
 

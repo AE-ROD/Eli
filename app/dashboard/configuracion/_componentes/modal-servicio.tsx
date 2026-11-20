@@ -1,6 +1,6 @@
 "use client"
 
-import { useId } from "react"
+import { useId, useState } from "react"
 import { CalendarClock, Scissors, Tag } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -10,6 +10,7 @@ import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPO, ETIQUETA } from "@/components/panel/estilos"
 import { ejemplosDe, textoDeEjemplo } from "@/lib/ejemplos-por-rubro"
+import { formatearDuracionDeServicio } from "@/lib/fechas"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { ayudaDeLaFrecuencia } from "@/lib/frecuencia-de-visitas"
@@ -25,6 +26,20 @@ const DURACIONES = [
   { valor: 120, etiqueta: "2 horas" },
   { valor: 180, etiqueta: "3 horas" },
 ]
+
+/**
+ * "Otra duración": de 15 en 15 minutos, de 15 minutos a 8 horas. Es el mismo
+ * rango que acepta el servidor (`duracion()` de `lib/campos-del-panel.ts`: de
+ * 15 a 480 minutos); por eso no se ofrece nada que lo pase.
+ */
+const DURACION_MINIMA = 15
+const DURACION_MAXIMA = 480
+const PASO_DE_DURACION = 15
+const OTRAS_DURACIONES = Array.from(
+  { length: (DURACION_MAXIMA - DURACION_MINIMA) / PASO_DE_DURACION + 1 },
+  (_, i) => DURACION_MINIMA + i * PASO_DE_DURACION
+)
+const esDeLasDeSiempre = (minutos: number) => DURACIONES.some(({ valor }) => valor === minutos)
 
 /** El radio no se ve: el anillo del foco lo dibuja la opción entera cuando el radio de adentro lo tiene. */
 const ANILLO_DE_LA_OPCION =
@@ -84,6 +99,15 @@ export function ModalServicio({
   const idDeAyudaDeFrecuencia = useId()
   const idDeLasCategorias = useId()
   const nombreDeLaDuracion = useId()
+  const idDeOtraDuracion = useId()
+  const idDeLaAyudaDelPrecio = useId()
+  // Una duración guardada que no es de las de siempre (75 minutos) abre con "Otra duración" elegida.
+  const [otraDuracion, setOtraDuracion] = useState(() => !esDeLasDeSiempre(form.duration))
+  // Las de 15 en 15, más la guardada si es de antes y no cae en el paso (50 minutos): no se pierde al abrir.
+  const opcionesDeOtra =
+    OTRAS_DURACIONES.includes(form.duration) || form.duration < DURACION_MINIMA || form.duration > DURACION_MAXIMA
+      ? OTRAS_DURACIONES
+      : [...OTRAS_DURACIONES, form.duration].sort((a, b) => a - b)
 
   return (
     <MarcoDeModal
@@ -141,7 +165,7 @@ export function ModalServicio({
           <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>Duración</legend>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {DURACIONES.map(({ valor, etiqueta }) => {
-              const elegida = form.duration === valor
+              const elegida = !otraDuracion && form.duration === valor
               return (
                 <label
                   key={valor}
@@ -156,29 +180,75 @@ export function ModalServicio({
                     name={nombreDeLaDuracion}
                     value={valor}
                     checked={elegida}
-                    onChange={() => onCambiarCampo("duration", valor)}
+                    onChange={() => {
+                      setOtraDuracion(false)
+                      onCambiarCampo("duration", valor)
+                    }}
                     className="sr-only"
                   />
                   {etiqueta}
                 </label>
               )
             })}
+            <label
+              className={cn(
+                "relative grid h-11 cursor-pointer place-items-center rounded-campo border px-2 text-center text-sm font-medium squircle transition-[border-color,background-color,color] duration-150 ease-suave",
+                ANILLO_DE_LA_OPCION,
+                otraDuracion ? "border-navy bg-navy text-white" : "border-texto-2 bg-tarjeta text-navy hover:border-navy"
+              )}
+            >
+              <input
+                type="radio"
+                name={nombreDeLaDuracion}
+                value="otra"
+                checked={otraDuracion}
+                onChange={() => setOtraDuracion(true)}
+                className="sr-only"
+              />
+              {frases.otraDuracion}
+            </label>
           </div>
+          {otraDuracion && (
+            <div className="mt-3">
+              <label htmlFor={idDeOtraDuracion} className={ETIQUETA}>
+                {frases.duracionExacta}
+              </label>
+              <select
+                id={idDeOtraDuracion}
+                value={form.duration}
+                onChange={(e) => onCambiarCampo("duration", Number(e.target.value))}
+                className={cn(CAMPO, "w-auto min-w-48")}
+              >
+                {opcionesDeOtra.map((minutos) => (
+                  <option key={minutos} value={minutos}>
+                    {formatearDuracionDeServicio(minutos)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </fieldset>
 
-        <CampoFormulario
-          etiqueta="Precio (opcional)"
-          // Texto y no número, como el precio del tablero: en un `type="number"`
-          // "8.000" llegaba como 8. Lo escrito lo lee `leerMonto`.
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="0"
-          value={form.price}
-          onChange={(e) => onCambiarCampo("price", e.target.value)}
-          icono={<span className="text-sm" aria-hidden="true">$</span>}
-          className="tabular-nums"
-        />
+        <div className="space-y-1.5">
+          <CampoFormulario
+            etiqueta="Precio (opcional)"
+            // Texto y no número, como el precio del tablero: en un `type="number"`
+            // "8.000" llegaba como 8. Lo escrito lo lee `leerMonto`.
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="Ej.: 15.000"
+            value={form.price}
+            onChange={(e) => onCambiarCampo("price", e.target.value)}
+            icono={<span className="text-sm" aria-hidden="true">$</span>}
+            aria-describedby={idDeLaAyudaDelPrecio}
+            className="tabular-nums"
+          />
+          {/* Lo que pasa en la página de reservas con el precio vacío: no se muestra ninguno. */}
+          <p id={idDeLaAyudaDelPrecio} className="text-sm text-texto-2">
+            {frases.precioAyuda}
+          </p>
+        </div>
 
         {onCambiarFrecuencia && (
           <div className="space-y-1.5">

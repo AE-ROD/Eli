@@ -13,12 +13,15 @@ import { ETIQUETA } from "@/components/panel/estilos"
 import { vocabularioDe } from "@/lib/vocabulario"
 import {
   bloqueoEnBlanco,
+  bloqueoEstaTarde,
+  bloqueoTodoElDia,
   crearBloqueo,
   leerProfesionales,
   type DatosDeNuevoBloqueo,
   type Profesional,
 } from "../_datos"
 import { frasesDeLaAgenda } from "../_frases"
+import { hoyEn } from "../_hora-del-negocio"
 import { useZonaDelNegocio } from "./zona-del-negocio"
 
 interface PropsDeModalBloquearHorario {
@@ -78,6 +81,12 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
     setError("")
   }
 
+  // Los atajos llenan los campos de abajo, que se pueden seguir cambiando.
+  const usarAtajo = (atajo: (previo: DatosDeNuevoBloqueo) => DatosDeNuevoBloqueo) => {
+    setForm(atajo)
+    setError("")
+  }
+
   const guardar = async (evento: React.SyntheticEvent<HTMLFormElement>) => {
     evento.preventDefault()
     setError("")
@@ -110,6 +119,16 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
         ) : (
           <p className="text-sm text-texto-2">Se bloquea tu agenda.</p>
         )}
+
+        {/* Atajos para lo más común: llenan las fechas y las horas de abajo. */}
+        <div role="group" aria-label="Atajos" className="flex flex-wrap gap-2">
+          <Boton type="button" variante="secundario" tamano="sm" onClick={() => usarAtajo(bloqueoTodoElDia)}>
+            Todo el día
+          </Boton>
+          <Boton type="button" variante="secundario" tamano="sm" onClick={() => usarAtajo((previo) => bloqueoEstaTarde(previo, hoyEn(zona)))}>
+            Esta tarde
+          </Boton>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <CampoFormulario

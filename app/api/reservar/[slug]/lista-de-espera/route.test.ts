@@ -170,6 +170,12 @@ describe("inscribirse", () => {
     expect(mockVerificarLimite).toHaveBeenCalledWith("listaDeEspera", `${NEGOCIO}:${hashDeToken("lucia@correo.test")}`)
   })
 
+  it("el apellido es opcional: sin él se anota igual y se guarda vacío", async () => {
+    const { status } = await inscribirse({ apellido: undefined })
+    expect(status).toBe(201)
+    expect(filas()).toEqual([expect.objectContaining({ nombre: "Lucía", apellido: "", estado: "activa" })])
+  })
+
   it("QA#26: un día bloqueado entero no admite lista de espera (ninguna cancelación le abre una hora)", async () => {
     base.reiniciar({
       ...base.volcado(),

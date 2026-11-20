@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { json, simularRespuesta } from "@/pruebas/respuestas"
 import { vocabularioDe } from "@/lib/vocabulario"
-import { aQuienBloquea, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerCatalogoDeLaCita, leerCitas, buscarClientes, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
+import { aQuienBloquea, bloqueoEstaTarde, bloqueoTodoElDia, borradorParaAgendarOtra, asignarProfesional, cambiarEstadoDeCita, citaPorConfirmar, conEstadoNuevo, precioDeLosServicios, crearBloqueo, crearCita, destacaSinProfesional, hayProfesionales, moverCita, nombreDelProfesional, opcionesDeProfesional, precioDeLaCita, quienCancelo, serviciosParaElProfesional, idsDeServiciosElegidos, quitarBloqueo, reactivarCita, leerCatalogoDeLaCita, leerCitas, buscarClientes, leerClienteParaLaCita, llegadaALaAgenda, type Bloqueo, type Cita, type DatosDeNuevaCita } from "./_datos"
 
 /** El cuerpo JSON con que se llamó a `fetch`. */
 const cuerpoEnviado = (fetchFalso: ReturnType<typeof simularRespuesta>) =>
@@ -535,5 +535,59 @@ describe("con las palabras del rubro", () => {
   it("el mensaje que manda el servidor sigue ganando sobre el del rubro", async () => {
     simularRespuesta(json({ error: "Ese horario ya pasó" }, 400))
     expect(await crearCita(CITA, ZONA, { confirmar: false }, salon)).toEqual({ tipo: "error", error: "Ese horario ya pasó" })
+  })
+})
+
+describe("agendar otra hora con lo mismo", () => {
+  const cita: Cita = {
+    id: "c1",
+    title: "Corte, Brushing",
+    startTime: "2026-11-10T13:00:00.000Z",
+    endTime: "2026-11-10T14:30:00.000Z",
+    status: "completada",
+    notes: "Trae foto",
+    price: 18000,
+    customerId: "cl1",
+    customer: { id: "cl1", name: "Ana", lastName: "Pérez", email: null, phone: null },
+    memberId: "m1",
+    servicioIds: ["s1", "s2"],
+  }
+
+  it("mismo cliente, mismos servicios, mismo profesional y precio; la fecha vacía y la misma duración", () => {
+    expect(borradorParaAgendarOtra(cita)).toMatchObject({
+      clienteId: "cl1",
+      clienteNombre: "Ana Pérez",
+      servicioIds: "s1,s2",
+      servicio: "",
+      fecha: "",
+      horaInicio: "09:00",
+      horaFin: "10:30",
+      precio: "18000",
+      memberId: "m1",
+      notas: "",
+    })
+  })
+
+  it("sin servicios del catálogo, el mismo texto", () => {
+    const borrador = borradorParaAgendarOtra({ ...cita, servicioIds: [], price: null, memberId: null })
+    expect(borrador).toMatchObject({ servicio: "Corte, Brushing", servicioIds: "", precio: "", memberId: "" })
+  })
+})
+
+describe("atajos de bloquear horario", () => {
+  const base = { memberId: "m1", fechaDesde: "2026-11-10", horaDesde: "13:00", fechaHasta: "2026-11-12", horaHasta: "14:00", motivo: "Viaje" }
+
+  it("Todo el día: del primer al último minuto, con las mismas fechas", () => {
+    expect(bloqueoTodoElDia(base)).toEqual({ ...base, horaDesde: "00:00", horaHasta: "23:59" })
+  })
+
+  it("Esta tarde: hoy, desde las 14:00 hasta el final del día", () => {
+    expect(bloqueoEstaTarde(base, new Date(2026, 10, 20))).toEqual({
+      ...base,
+      fechaDesde: "2026-11-20",
+      horaDesde: "14:00",
+      fechaHasta: "2026-11-20",
+      horaHasta: "23:59",
+    })
   })
 })
