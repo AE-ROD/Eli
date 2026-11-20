@@ -29,7 +29,9 @@ import { respuestaDeErrorDeSedes, tomarCandadoDePlanYSedes } from "@/lib/sedes-s
  */
 export async function PATCH(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
-  if (!actor || !puedeCambiarDePlan(actor)) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  // Con sesión pero sin permiso: 403, para que la pantalla diga quién lo cambia.
+  if (!puedeCambiarDePlan(actor)) return NextResponse.json({ error: "El plan lo cambia la dueña." }, { status: 403 })
 
   const recibido = await cuerpoConTope(request)
   if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()

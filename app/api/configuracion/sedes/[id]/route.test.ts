@@ -137,7 +137,7 @@ describe("PUT /api/configuracion/sedes/[id]", () => {
     })
   })
 
-  describe("sin permiso: 401 y no se escribe nada", () => {
+  describe("sin permiso: 403 y no se escribe nada", () => {
     it.each([
       ["el encargado", sesionesDeSedes.encargado],
       ["una profesional", sesionesDeSedes.profesional],
@@ -149,7 +149,7 @@ describe("PUT /api/configuracion/sedes/[id]", () => {
 
       const res = await editar(sesion, "a", { nombre: "Otra" })
 
-      expect(res.status).toBe(401)
+      expect(res.status).toBe(sesion ? 403 : 401)
       expect(base.volcado()).toEqual(antes)
     })
   })
@@ -372,7 +372,7 @@ describe("PUT /api/configuracion/sedes/[id]", () => {
       const res = await editar(sesionesDeSedes.dueña, "v", { activo: true })
 
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toContain("se pisa")
+      expect((await res.json()).error).toContain("se cruza")
       expect(fila("v").activo).toBe(false)
     })
   })
@@ -482,10 +482,10 @@ describe("DELETE /api/configuracion/sedes/[id]", () => {
     ["una profesional", sesionesDeSedes.profesional],
     ["la dueña de un negocio Equipo", sesionesDeSedes.dueñaEquipo],
     ["nadie con sesión", null],
-  ])("sin permiso (%s): 401 y no se borra nada", async (_quien, sesion) => {
+  ])("sin permiso (%s): 403 y no se borra nada", async (_quien, sesion) => {
     const antes = base.volcado()
 
-    expect((await borrar(sesion, "a")).status).toBe(401)
+    expect((await borrar(sesion, "a")).status).toBe(sesion ? 403 : 401)
     expect(base.volcado()).toEqual(antes)
   })
 

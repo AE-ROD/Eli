@@ -247,7 +247,7 @@ export function mensajeDeRechazoDeLaBase(error: unknown): string {
   const texto = error instanceof Error ? error.message : ""
   if (/hasta 5 sedes activas/.test(texto)) return `Un negocio tiene hasta ${MAX_SEDES} sedes activas. Desactiva una antes`
   if (/sólo el plan Independiente tiene sedes/.test(texto)) return MENSAJE_PLAN_SIN_SEDES
-  if (/se pisa con la de la sede/.test(texto)) return "El horario se pisa con el de otra sede el mismo día. Una sola persona no puede estar en dos sedes a la vez"
+  if (/se pisa con la de la sede/.test(texto)) return "El horario se cruza con el de otra sede el mismo día. Una sola persona no puede estar en dos sedes a la vez"
   if (/no pasa al plan Equipo con sedes activas/.test(texto)) return "Todavía hay sedes activas. Desactívalas antes de pasar al plan Equipo"
   if (/no pasa al plan Independiente con integrantes/.test(texto)) return "Tu negocio tiene integrantes o invitaciones pendientes. Quítalos antes de pasar al plan Independiente"
   if (/horarios_laborales_sede_horas_check/.test(texto)) return "Las horas van como HH:MM, de 00:00 a 23:59, y el inicio antes del fin"

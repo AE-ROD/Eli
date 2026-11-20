@@ -89,7 +89,7 @@ describe("GET /api/citas en una clínica dental", () => {
     expect(ajeno).toEqual([])
   })
 
-  it("en un salón cada cita trae exactamente las claves de antes de la clínica dental, más la sede (etapa 9)", async () => {
+  it("en un salón cada cita trae exactamente las claves de antes de la clínica dental, más la sede (etapa 9) y sus servicios", async () => {
     const citas = await (await listar(sesiones.dueña)).json()
 
     expect(citas.length).toBeGreaterThan(0)
@@ -110,6 +110,8 @@ describe("GET /api/citas en una clínica dental", () => {
         "price",
         // Etapa 9: `{ id, nombre }` o `null` (sin sedes).
         "sede",
+        // Los servicios de la cita, para "Agendar otra hora" con los mismos.
+        "servicioIds",
         "startTime",
         "status",
         "title",

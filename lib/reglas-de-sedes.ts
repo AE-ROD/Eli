@@ -145,7 +145,7 @@ export function choquesDeLaSede(
 /** El mensaje de un horario (o una reactivación) que se pisa con otra sede. */
 export function mensajeDeChoques(choques: readonly ChoqueParaMostrar[]): string {
   const renglones = choques.map((choque) => `el ${nombreDelDia(choque.dayOfWeek)} con ${choque.conSede}`)
-  return `El horario se pisa con otra sede: ${enumerar(renglones)}. Una sola persona no puede estar en dos sedes a la vez`
+  return `El horario se cruza con otra sede: ${enumerar(renglones)}. Una sola persona no puede estar en dos sedes a la vez`
 }
 
 /**

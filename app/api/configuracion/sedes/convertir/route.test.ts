@@ -236,7 +236,7 @@ describe("POST /api/configuracion/sedes/convertir", () => {
     })
   })
 
-  describe("sin permiso: 401 y no se escribe nada", () => {
+  describe("sin permiso: 403 y no se escribe nada", () => {
     it.each([
       ["el encargado", sesionesDeSedes.encargado],
       ["una profesional", sesionesDeSedes.profesional],
@@ -247,7 +247,7 @@ describe("POST /api/configuracion/sedes/convertir", () => {
 
       const res = await convertir(sesion, { principal, nueva })
 
-      expect(res.status).toBe(401)
+      expect(res.status).toBe(sesion ? 403 : 401)
       expect(base.volcado()).toEqual(antes)
     })
   })

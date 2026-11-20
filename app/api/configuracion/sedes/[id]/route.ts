@@ -34,7 +34,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const existente = await prisma.sede.findFirst({ where: whereDeSedes(actor, { id }), select: { id: true } })
   if (!existente) return noEncontrada()
-  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  // Con sesión pero sin permiso: 403, para que la pantalla diga "esto lo cambia la dueña" y no "tu sesión se cerró".
+  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "Las sedes las cambia la dueña." }, { status: 403 })
 
   const recibido = await cuerpoConTope(request)
   if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
@@ -64,7 +65,8 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   const { id } = await params
   const existente = await prisma.sede.findFirst({ where: whereDeSedes(actor, { id }), select: { id: true } })
   if (!existente) return noEncontrada()
-  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  // Con sesión pero sin permiso: 403, para que la pantalla diga "esto lo cambia la dueña" y no "tu sesión se cerró".
+  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "Las sedes las cambia la dueña." }, { status: 403 })
 
   try {
     await prisma.$transaction(async (tx) => {

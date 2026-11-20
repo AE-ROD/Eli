@@ -208,7 +208,7 @@ describe("PUT /api/configuracion/sedes/[id]/horarios", () => {
       const res = await guardar(sesionesDeSedes.dueña, "a", { dias: [dia(1, ["09:00", "15:00"])] })
 
       expect(res.status).toBe(409)
-      expect((await res.json()).error).toContain("se pisa")
+      expect((await res.json()).error).toContain("se cruza")
       expect(base.volcado()).toEqual(antes)
     })
   })
@@ -225,7 +225,7 @@ describe("PUT /api/configuracion/sedes/[id]/horarios", () => {
       ["franjas que se pisan dentro de la sede", { dias: [dia(1, ["09:00", "13:00"], ["12:00", "15:00"])] }, MENSAJE_DE_FRANJAS_PISADAS],
       ["un día repetido", { dias: [dia(1, ["09:00", "10:00"]), dia(1, ["11:00", "12:00"])] }, MENSAJE_DE_DIA_REPETIDO],
       ["un día 7", { dias: [dia(7, ["09:00", "10:00"])] }, "El día de la semana tiene que ser un número entero del 0 al 6"],
-      ["más de 4 franjas en un día", { dias: [dia(1, ["06:00", "07:00"], ["08:00", "09:00"], ["10:00", "11:00"], ["12:00", "13:00"], ["14:00", "15:00"])] }, "Un día no puede tener más de 4 franjas"],
+      ["más de 4 franjas en un día", { dias: [dia(1, ["06:00", "07:00"], ["08:00", "09:00"], ["10:00", "11:00"], ["12:00", "13:00"], ["14:00", "15:00"])] }, "Un día no puede tener más de 4 tramos"],
     ])("%s", async (_caso, cuerpo, mensaje) => {
       const antes = base.volcado()
 
@@ -265,7 +265,7 @@ describe("PUT /api/configuracion/sedes/[id]/horarios", () => {
     })
   })
 
-  describe("sin permiso: 401 y no se escribe nada", () => {
+  describe("sin permiso: 403 y no se escribe nada", () => {
     it.each([
       ["el encargado", sesionesDeSedes.encargado],
       ["una profesional", sesionesDeSedes.profesional],
@@ -274,7 +274,7 @@ describe("PUT /api/configuracion/sedes/[id]/horarios", () => {
     ])("%s", async (_quien, sesion) => {
       const antes = base.volcado()
 
-      expect((await guardar(sesion, "a", { dias: [] })).status).toBe(401)
+      expect((await guardar(sesion, "a", { dias: [] })).status).toBe(sesion ? 403 : 401)
       expect(base.volcado()).toEqual(antes)
     })
   })

@@ -200,7 +200,7 @@ describe("POST /api/configuracion/sedes", () => {
     expect(base.transaccion.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(base.prisma.sede.findMany.mock.invocationCallOrder.at(-1)!)
   })
 
-  describe("sin permiso: 401 y no se escribe nada", () => {
+  describe("sin permiso: 403 y no se escribe nada", () => {
     it.each([
       ["el encargado", sesionesDeSedes.encargado],
       ["una profesional", sesionesDeSedes.profesional],
@@ -212,7 +212,7 @@ describe("POST /api/configuracion/sedes", () => {
 
       const res = await crear(sesion, nueva)
 
-      expect(res.status).toBe(401)
+      expect(res.status).toBe(sesion ? 403 : 401)
       expect(base.volcado()).toEqual(antes)
     })
   })

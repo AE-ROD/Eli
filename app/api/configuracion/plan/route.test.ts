@@ -79,12 +79,12 @@ describe("PATCH /api/configuracion/plan: quién puede", () => {
     ["el encargado", sesionesDeSedes.encargado],
     ["una profesional", sesionesDeSedes.profesional],
     ["nadie con sesión", null],
-  ])("%s no: 401 y no se escribe nada", async (_quien, sesion) => {
+  ])("%s no: 403 y no se escribe nada", async (_quien, sesion) => {
     const antes = base.volcado()
 
     const res = await cambiar(sesion, { plan: "equipo", sedeQueSeQueda: "a" })
 
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(sesion ? 403 : 401)
     expect(base.volcado()).toEqual(antes)
   })
 

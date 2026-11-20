@@ -50,7 +50,7 @@ describe("grillaDeSedeSchema", () => {
     [
       "más franjas que el tope",
       dia(1, ["06:00", "07:00"], ["08:00", "09:00"], ["10:00", "11:00"], ["12:00", "13:00"], ["14:00", "15:00"]),
-      `Un día no puede tener más de ${FRANJAS_MAXIMAS_POR_DIA} franjas`,
+      `Un día no puede tener más de ${FRANJAS_MAXIMAS_POR_DIA} tramos`,
     ],
   ])("rechaza %s con un mensaje legible", (_caso, unDia, mensaje) => {
     expect(primerError({ dias: [unDia] })).toBe(mensaje)

@@ -99,7 +99,7 @@ export function MaquetaPeriodo({ className }: { className?: string }) {
       </p>
       <div className="mt-3.5 grid grid-cols-2 gap-2">
         <Cifra titulo="Atenciones" valor={String(ATENCIONES)} />
-        <Cifra titulo="Ticket promedio" valor={formatearPesos(TICKET_PROMEDIO)} />
+        <Cifra titulo="Promedio por atención" valor={formatearPesos(TICKET_PROMEDIO)} />
       </div>
     </MarcoDeMaqueta>
   )

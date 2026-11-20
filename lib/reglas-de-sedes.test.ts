@@ -120,7 +120,7 @@ describe("choquesParaMostrar y choquesDeLaSede", () => {
         { dayOfWeek: 1, conSede: "Maipú" },
         { dayOfWeek: 0, conSede: "Providencia" },
       ])
-    ).toBe("El horario se pisa con otra sede: el lunes con Maipú y el domingo con Providencia. Una sola persona no puede estar en dos sedes a la vez")
+    ).toBe("El horario se cruza con otra sede: el lunes con Maipú y el domingo con Providencia. Una sola persona no puede estar en dos sedes a la vez")
   })
 })
 

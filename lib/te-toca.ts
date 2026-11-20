@@ -51,7 +51,7 @@ export async function ejecutarTeToca(contexto: ContextoDeCorrida): Promise<Resum
 
   const negocios = await prisma.business.findMany({
     where: { avisoDeVueltaActivo: true },
-    select: { id: true, name: true, slug: true, timezone: true, type: true },
+    select: { id: true, name: true, slug: true, timezone: true, type: true, whatsapp: true },
     orderBy: { id: "asc" },
   })
 
@@ -83,6 +83,8 @@ interface Negocio {
   timezone: string | null
   /** El rubro: pone las palabras del correo (`lib/vocabulario.ts`). */
   type: string | null
+  /** El WhatsApp público del negocio: el correo ofrece escribirle. Puede faltar. */
+  whatsapp?: string | null
 }
 
 async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, resumen: ResumenDeTrabajo): Promise<Corte> {
@@ -177,6 +179,8 @@ async function teTocaEnElNegocio(negocio: Negocio, contexto: ContextoDeCorrida, 
           emailCliente: cliente.email,
           nombreCliente: cliente.name,
           nombreNegocio: negocio.name,
+            // El WhatsApp público del negocio: el correo ofrece escribirle.
+            whatsapp: negocio.whatsapp,
           servicio: frecuencia.ultimoServicio,
           // `urlBase` lanza en producción sin NEXTAUTH_URL: adentro de `enviar`,
           // `enviarAClientes` lo registra, lo cuenta como fallido y suelta el

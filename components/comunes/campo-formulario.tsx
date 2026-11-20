@@ -58,6 +58,7 @@ export const CampoFormulario = forwardRef<HTMLInputElement, PropsDeCampoFormular
               onClick={() => setMostrarContrasena(!mostrarContrasena)}
               // Sin nombre, el lector de pantalla anunciaba "botón" a secas.
               aria-label={mostrarContrasena ? "Ocultar contraseña" : "Mostrar contraseña"}
+              aria-pressed={mostrarContrasena}
               className="absolute right-0.5 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-[12px] text-texto-2 squircle anillo-foco transition-colors duration-150 ease-suave hover:text-navy"
             >
               {mostrarContrasena ? <EyeOff className="size-4" /> : <Eye className="size-4" />}

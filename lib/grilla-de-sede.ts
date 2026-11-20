@@ -61,8 +61,8 @@ const franjaSchema = z
 const diaSchema = z.object({
   dayOfWeek: diaDeLaSemana(),
   franjas: z
-    .array(franjaSchema, { invalid_type_error: "Las franjas de un día van en una lista" })
-    .max(FRANJAS_MAXIMAS_POR_DIA, `Un día no puede tener más de ${FRANJAS_MAXIMAS_POR_DIA} franjas`),
+    .array(franjaSchema, { invalid_type_error: "Los tramos de un día van en una lista" })
+    .max(FRANJAS_MAXIMAS_POR_DIA, `Un día no puede tener más de ${FRANJAS_MAXIMAS_POR_DIA} tramos`),
 })
 
 /** Si dos franjas de la lista se pisan (inicio < fin del otro y fin > inicio del otro). Tocarse no es pisarse. */
@@ -81,7 +81,7 @@ export function franjasSePisan(franjas: readonly FranjaDeLaGrilla[]): boolean {
 }
 
 export const MENSAJE_DE_DIA_REPETIDO = "Cada día de la semana aparece una sola vez"
-export const MENSAJE_DE_FRANJAS_PISADAS = "Las franjas de un mismo día no pueden pisarse"
+export const MENSAJE_DE_FRANJAS_PISADAS = "Los tramos de un mismo día no pueden cruzarse"
 
 export const grillaDeSedeSchema = z
   .object(

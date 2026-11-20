@@ -27,7 +27,8 @@ import {
 export async function POST(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
   if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  // Con sesión pero sin permiso: 403, para que la pantalla diga "esto lo cambia la dueña" y no "tu sesión se cerró".
+  if (!puedeGestionarSedes(actor)) return NextResponse.json({ error: "Las sedes las cambia la dueña." }, { status: 403 })
 
   const recibido = await cuerpoConTope(request)
   if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()

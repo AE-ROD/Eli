@@ -59,7 +59,7 @@ export async function ejecutarResenas(contexto: ContextoDeCorrida): Promise<Resu
 
   const negocios = await prisma.business.findMany({
     where: { pideResenas: true, enlaceResenas: { not: null } },
-    select: { id: true, name: true, timezone: true, enlaceResenas: true, type: true },
+    select: { id: true, name: true, timezone: true, enlaceResenas: true, type: true, whatsapp: true },
     orderBy: { id: "asc" },
   })
 
@@ -153,6 +153,8 @@ export async function ejecutarResenas(contexto: ContextoDeCorrida): Promise<Resu
             emailCliente: candidato.email,
             nombreCliente: candidato.nombre,
             nombreNegocio: negocio.name,
+            // El WhatsApp público del negocio: el correo ofrece escribirle.
+            whatsapp: negocio.whatsapp,
             enlaceResenas,
             enlaceDeBaja: enlacesDeBaja.enlaceDeBaja,
             enlaceDeBajaEnUnClic: enlacesDeBaja.enlaceDeBajaEnUnClic,
