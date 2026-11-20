@@ -1,31 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { candidatosDeLaReserva, horasLibresDelDia, horasPosiblesEnElNegocio } from "@/lib/agenda-publica"
-import { horasConRebaja, leerHoraValle } from "@/lib/hora-valle"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
-import {
-  MENSAJE_FECHA_MUY_LEJANA,
-  MENSAJE_FECHA_PASADA,
-  MENSAJE_URGENCIA_SIN_HORAS,
-  MENSAJE_URGENCIA_SOLO_HOY,
-  duracionDeLaReserva,
-  esHoyEn,
-  esReservaDeUrgencia,
-  fechaNoReservable,
-  mensajeProfesionalNoDisponible,
-  mensajeServicioNoEncontrado,
-} from "@/lib/reserva-publica"
-import { esRubroDental } from "@/lib/rubros"
-import {
-  MENSAJE_SEDE_NO_VALIDA,
-  leerSedeDelPedido,
-  leerSedesDeLaReserva,
-  resolverSedeDeLaReserva,
-} from "@/lib/sede-de-la-reserva"
-import { leerServiciosDeLaReserva, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
+import { leerSedeDelPedido } from "@/lib/sede-de-la-reserva"
+import { horasLibres } from "@/lib/reserva-del-negocio"
 import { servicioIdsSchema } from "@/lib/validaciones"
-import { esFechaCalendario, zonaDelNegocio } from "@/lib/zona-horaria"
+import { esFechaCalendario } from "@/lib/zona-horaria"
 
 const FALTA_LA_FECHA = "Falta la fecha (AAAA-MM-DD)"
 const FALTA_EL_SERVICIO = "Falta el servicio (servicioId)"
@@ -116,101 +96,20 @@ export async function GET(
   })
   if (!negocio) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 })
 
-  // La sede, revalidada contra las sedes activas de ESTE negocio: el id del
-  // navegador no se usa tal cual. Con varias sedes, el horario que se mira es el
-  // de la elegida; si no, el vigente de siempre.
-  const eleccionDeSede = resolverSedeDeLaReserva(
-    await leerSedesDeLaReserva(prisma, negocio.id),
-    leerSedeDelPedido(searchParams.get("sedeId"))
-  )
-  if (eleccionDeSede.tipo === "no-valida") return NextResponse.json({ error: MENSAJE_SEDE_NO_VALIDA }, { status: 400 })
-  const sedeId = eleccionDeSede.sedeDelHorario
-
-  // Todos del negocio y activos, o el mismo 404 sin decir cuál falló.
-  const servicios = await leerServiciosDeLaReserva(prisma, negocio.id, servicioIds)
-  if (!servicios) return NextResponse.json({ error: mensajeServicioNoEncontrado(negocio.type) }, { status: 404 })
-  // Clínica dental: la primera vez suma 15 minutos, con la misma cuenta que
-  // `confirmar` (`duracionDeLaReserva`). En otro rubro, la suma de siempre.
-  const clinicaDental = esRubroDental(negocio.type)
-  const duracion = duracionDeLaReserva(resumenDeLaReserva(servicios).duracion, {
-    clinicaDental,
-    primeraVez: parametros.data.primeraVez === true,
-  })
-  const urgencia = esReservaDeUrgencia(clinicaDental, servicios)
-
-  // El día, las horas y "hoy" son los del negocio (`Business.timezone`), no
-  // los del servidor: `new Date("AAAA-MM-DD").getDay()` daba el día anterior
-  // al oeste de UTC, y en Vercel (UTC) las horas quedaban corridas.
-  const zona = zonaDelNegocio(negocio.timezone)
-  const ahora = new Date()
-
-  // Ni días pasados ni a más de `DIAS_MAXIMOS_DE_ANTICIPACION` de hoy en el
-  // reloj del negocio (`lib/reserva-publica.ts`, la misma regla que
-  // `confirmar`). La fecha es válida, sólo que no se reserva: sin horas y con
-  // el motivo, como un día sin atención.
-  const noReservable = fechaNoReservable(fecha, ahora, zona)
-  if (noReservable) {
-    return NextResponse.json({
-      slots: [],
-      mensaje: noReservable === "pasada" ? MENSAJE_FECHA_PASADA : MENSAJE_FECHA_MUY_LEJANA,
-      sinListaDeEspera: true,
-    })
-  }
-
-  // Urgencia dental: sólo horas de hoy, en el reloj de la clínica. Otro día
-  // responde sin horas y con el motivo; `confirmar` lo rechaza igual.
-  if (urgencia && !esHoyEn(fecha, ahora, zona)) {
-    return NextResponse.json({ slots: [], mensaje: MENSAJE_URGENCIA_SOLO_HOY, sinListaDeEspera: true })
-  }
-
-  // Quién puede atender y en qué franjas (`lib/agenda-publica.ts`): la misma
-  // regla con la que `confirmar` acepta y asigna.
-  const reserva = await candidatosDeLaReserva(prisma, {
-    businessId: negocio.id,
-    serviceIds: servicios.map((servicio) => servicio.id),
-    profesionalId,
-    fecha,
-    sedeId,
-  })
-  if (reserva.tipo === "profesional-no-disponible") {
-    return NextResponse.json({ error: mensajeProfesionalNoDisponible(negocio.type) }, { status: 404 })
-  }
-
-  const candidatos = reserva.candidatos.filter((candidato) => candidato.franjas.length > 0)
-  const consultaDelDia = { businessId: negocio.id, zona, fecha, duracion, candidatos, ahora }
-  const slots = candidatos.length > 0 ? await horasLibresDelDia(prisma, consultaDelDia) : []
-
-  // `sinListaDeEspera`: el día no tiene ninguna hora que se pueda liberar
-  // (cerrado, bloqueado entero o ya pasado), así que la página no ofrece
-  // "Avísame si se libera una hora" (QA#26). La inscripción lo vuelve a
-  // comprobar (`inscribirEnListaDeEspera`). Se mira a nivel del negocio y no
-  // del profesional elegido: si no, un día bloqueado sólo para esa persona
-  // se distinguía de uno lleno (`horasPosiblesEnElNegocio`). Así, con
-  // profesional, un día sin horas suyas responde igual sea cual sea el motivo.
-  if (slots.length === 0) {
-    const delNegocio = await horasPosiblesEnElNegocio(prisma, {
-      businessId: negocio.id,
-      serviceIds: servicios.map((servicio) => servicio.id),
+  // Las reglas (sedes, rubro, urgencias, hora valle) están en
+  // `lib/reserva-del-negocio.ts`, las mismas con que `confirmar` acepta.
+  const horas = await horasLibres(
+    negocio,
+    {
       fecha,
-      zona,
-      duracion,
-      ahora,
-      sedeId,
-    })
-    // Una urgencia sin horas hoy lo dice claro, con o sin lista de espera.
-    const sinHorasDeUrgencia = urgencia ? { mensaje: MENSAJE_URGENCIA_SIN_HORAS } : {}
-    if (delNegocio === "con-horas-posibles") return NextResponse.json({ slots, ...sinHorasDeUrgencia })
-    return NextResponse.json(
-      delNegocio === "sin-atencion"
-        ? { slots, mensaje: "No hay atención ese día", sinListaDeEspera: true, ...sinHorasDeUrgencia }
-        : { slots, sinListaDeEspera: true, ...sinHorasDeUrgencia }
-    )
-  }
-
-  // Hora valle (#89c): `slots` sigue siendo la lista de horas, como siempre
-  // (la página de antes sólo lee eso). Sólo si el negocio la encendió y
-  // alguna hora cuesta menos, va además `valle`: esas horas con su precio
-  // total rebajado y el normal. El precio lo vuelve a calcular `confirmar`.
-  const valle = horasConRebaja(servicios, fecha, slots, zona, await leerHoraValle(prisma, negocio.id))
-  return NextResponse.json(valle.length > 0 ? { slots, valle } : { slots })
+      servicioIds,
+      profesionalId,
+      primeraVez: parametros.data.primeraVez === true,
+      sedePedida: leerSedeDelPedido(searchParams.get("sedeId")),
+    },
+    new Date()
+  )
+  if (horas.tipo === "rechazada") return NextResponse.json({ error: horas.error }, { status: horas.status })
+  const { tipo: _tipo, ...respuesta } = horas
+  return NextResponse.json(respuesta)
 }

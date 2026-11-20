@@ -264,10 +264,11 @@ export function avisoDeUrgencia(
 
 /**
  * De dónde viene una cita (`Appointment.source`): la crea el equipo en el
- * panel o el cliente en la página pública. La base los limita a estos dos
- * con una CHECK (migración `origen_de_las_citas`).
+ * panel, el cliente en la página pública o la Secretaria Eli por WhatsApp. La
+ * base los limita a estos con una CHECK (migraciones `origen_de_las_citas` y
+ * `secretaria_eli`).
  */
-export const ORIGENES_DE_CITA = ["panel", "reserva-publica"] as const
+export const ORIGENES_DE_CITA = ["panel", "reserva-publica", "whatsapp"] as const
 export type OrigenDeCita = (typeof ORIGENES_DE_CITA)[number]
 
 /** Cuántas reservas futuras no canceladas puede tener un mismo email o teléfono en un negocio. */
@@ -343,10 +344,20 @@ export function mensajeFueraDeLaAtencion(rubro?: string | null): string {
 }
 
 /** El origen con que `confirmar` crea las citas. */
-export const ORIGEN_RESERVA_PUBLICA: OrigenDeCita = "reserva-publica"
+export const ORIGEN_RESERVA_PUBLICA = "reserva-publica" satisfies OrigenDeCita
 
 /** El filtro de cita que identifica una reserva pública (ver arriba). */
 export const WHERE_RESERVA_PUBLICA = { source: ORIGEN_RESERVA_PUBLICA }
+
+/** El origen de las citas que agenda la Secretaria Eli por WhatsApp. */
+export const ORIGEN_WHATSAPP = "whatsapp" satisfies OrigenDeCita
+
+/**
+ * Las reservas que entran sin el local (página pública y WhatsApp): las que
+ * cuentan los topes anti-abuso. Comparten los topes para que abrir el
+ * WhatsApp no duplique el cupo diario ni el de reservas por contacto.
+ */
+export const WHERE_RESERVAS_SIN_EL_LOCAL = { source: { in: [ORIGEN_RESERVA_PUBLICA, ORIGEN_WHATSAPP] } }
 
 /** El email para comparar: sin espacios alrededor y en minúsculas. Vacío → `null`. */
 export function normalizarEmail(email: string | null | undefined): string | null {
