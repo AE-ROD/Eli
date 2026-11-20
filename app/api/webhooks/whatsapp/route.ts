@@ -58,10 +58,11 @@ export async function POST(request: NextRequest) {
     for (const mensaje of mensajesDelPayload(cuerpo)) {
       const canal = await prisma.canalDeWhatsapp.findUnique({
         where: { phoneNumberId: mensaje.phoneNumberId },
-        select: { id: true, businessId: true, activo: true },
+        select: { id: true, businessId: true, activo: true, wabaId: true },
       })
-      // Un número que no es de ningún negocio (o está desactivado) se ignora sin decir nada.
-      if (!canal?.activo) continue
+      // Un número que no es de ningún negocio (o está desactivado), o que llega
+      // desde otra cuenta de WhatsApp Business que la conectada, se ignora sin decir nada.
+      if (!canal?.activo || canal.wabaId !== mensaje.wabaId) continue
       const guardado = await guardarMensajeEntrante({
         negocioId: canal.businessId,
         canalId: canal.id,

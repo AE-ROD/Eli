@@ -43,6 +43,8 @@ CREATE TABLE "conversaciones_de_secretaria" (
     "derivadaAMemberId" TEXT,
     "derivadaAt" TIMESTAMP(3),
     "ultimoMensajeAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "mensajesEntrantes" INTEGER NOT NULL DEFAULT 0,
+    "respondiendoHasta" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -59,6 +61,7 @@ CREATE TABLE "mensajes_de_secretaria" (
     "tokensEntrada" INTEGER NOT NULL DEFAULT 0,
     "tokensSalida" INTEGER NOT NULL DEFAULT 0,
     "waMessageId" TEXT,
+    "orden" SERIAL NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "mensajes_de_secretaria_pkey" PRIMARY KEY ("id")
@@ -69,8 +72,8 @@ CREATE TABLE "consumo_de_secretaria" (
     "id" TEXT NOT NULL,
     "businessId" TEXT NOT NULL,
     "periodo" TEXT NOT NULL,
-    "tokensEntrada" INTEGER NOT NULL DEFAULT 0,
-    "tokensSalida" INTEGER NOT NULL DEFAULT 0,
+    "tokensEntrada" BIGINT NOT NULL DEFAULT 0,
+    "tokensSalida" BIGINT NOT NULL DEFAULT 0,
     "costoMicrodolares" INTEGER NOT NULL DEFAULT 0,
     "mensajesWhatsappEnviados" INTEGER NOT NULL DEFAULT 0,
     "alerta80At" TIMESTAMP(3),
@@ -121,7 +124,7 @@ CREATE UNIQUE INDEX "conversaciones_de_secretaria_businessId_telefono_simulacion
 CREATE UNIQUE INDEX "mensajes_de_secretaria_waMessageId_key" ON "mensajes_de_secretaria"("waMessageId");
 
 -- CreateIndex
-CREATE INDEX "mensajes_de_secretaria_conversacionId_createdAt_idx" ON "mensajes_de_secretaria"("conversacionId", "createdAt");
+CREATE INDEX "mensajes_de_secretaria_conversacionId_orden_idx" ON "mensajes_de_secretaria"("conversacionId", "orden");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "consumo_de_secretaria_businessId_periodo_key" ON "consumo_de_secretaria"("businessId", "periodo");
@@ -161,7 +164,7 @@ ALTER TABLE "avisos_del_panel" ADD CONSTRAINT "avisos_del_panel_businessId_fkey"
 ALTER TABLE "conversaciones_de_secretaria" ADD CONSTRAINT "conversaciones_de_secretaria_estado_check" CHECK ("estado" IN ('bot', 'human', 'closed'));
 ALTER TABLE "conversaciones_de_secretaria" ADD CONSTRAINT "conversaciones_de_secretaria_turnos_check" CHECK ("turnos" >= 0);
 ALTER TABLE "mensajes_de_secretaria" ADD CONSTRAINT "mensajes_de_secretaria_rol_check" CHECK ("rol" IN ('user', 'assistant'));
-ALTER TABLE "ajustes_de_secretaria" ADD CONSTRAINT "ajustes_de_secretaria_topes_check" CHECK ("maxTurnos" BETWEEN 1 AND 50 AND "maxTokens" BETWEEN 50 AND 2000 AND "presupuestoMensualCentavos" >= 0);
+ALTER TABLE "ajustes_de_secretaria" ADD CONSTRAINT "ajustes_de_secretaria_topes_check" CHECK ("maxTurnos" BETWEEN 1 AND 50 AND "maxTokens" BETWEEN 50 AND 2000 AND "presupuestoMensualCentavos" BETWEEN 0 AND 100000);
 ALTER TABLE "consumo_de_secretaria" ADD CONSTRAINT "consumo_de_secretaria_periodo_check" CHECK ("periodo" ~ '^[0-9]{4}-[0-9]{2}$');
 ALTER TABLE "avisos_del_panel" ADD CONSTRAINT "avisos_del_panel_tipo_check" CHECK ("tipo" IN ('derivacion', 'presupuesto-80', 'presupuesto-100'));
 

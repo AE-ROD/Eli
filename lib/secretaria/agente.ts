@@ -84,8 +84,9 @@ export async function guardarMensajeEntrante(
           telefono: mensaje.telefono,
           simulacion: mensaje.simulacion,
           ultimoMensajeAt: mensaje.ahora,
+          mensajesEntrantes: 1,
         },
-        update: { ultimoMensajeAt: mensaje.ahora },
+        update: { ultimoMensajeAt: mensaje.ahora, mensajesEntrantes: { increment: 1 } },
         select: { id: true },
       })
       await tx.mensajeDeSecretaria.create({
@@ -113,7 +114,7 @@ export interface Respuesta {
   estado: EstadoDeConversacion
   derivada: boolean
   /** Por qué no respondió, si no lo hizo. */
-  sinRespuesta?: "humana" | "apagada" | "error"
+  sinRespuesta?: "humana" | "apagada" | "error" | "ocupada"
 }
 
 interface Conversacion {
@@ -138,10 +139,67 @@ interface Negocio {
 type Enviar = (texto: string) => Promise<void>
 
 /**
+ * Cuánto dura el candado de una conversación que se está respondiendo. Si el
+ * proceso muere a la mitad, queda libre solo después de esto.
+ */
+const DURACION_DEL_CANDADO_MS = 5 * 60_000
+/** Rondas seguidas como máximo: la clienta que manda varios mensajes mientras se le responde. */
+const MAX_RONDAS = 3
+
+/** Cuántos mensajes escribió la clienta (no cuenta los resultados de herramientas, que también van como "user"). */
+const mensajesDeLaClienta = async (negocioId: string, conversacionId: string) =>
+  (
+    await prisma.conversacionDeSecretaria.findFirst({
+      where: { id: conversacionId, businessId: negocioId },
+      select: { mensajesEntrantes: true },
+    })
+  )?.mensajesEntrantes ?? 0
+
+/**
  * Responde lo último que escribió la clienta en la conversación
  * `conversacionId` del negocio `negocioId`.
+ *
+ * Una conversación se responde de a una vez: en WhatsApp es normal mandar
+ * dos mensajes seguidos, y dos respuestas en paralelo dejarían el historial
+ * con una llamada a herramienta sin su resultado. Quien toma el candado
+ * responde; si mientras tanto entró otro mensaje, da otra ronda con todo. El
+ * pedido que no lo toma no responde nada (`sinRespuesta: "ocupada"`).
  */
 export async function responder(negocioId: string, conversacionId: string, ahora: Date): Promise<Respuesta> {
+  const tomada = await prisma.conversacionDeSecretaria.updateMany({
+    where: {
+      id: conversacionId,
+      businessId: negocioId,
+      OR: [{ respondiendoHasta: null }, { respondiendoHasta: { lt: ahora } }],
+    },
+    data: { respondiendoHasta: new Date(ahora.getTime() + DURACION_DEL_CANDADO_MS) },
+  })
+  if (tomada.count === 0) return { respuestas: [], estado: "bot", derivada: false, sinRespuesta: "ocupada" }
+
+  const respuestas: string[] = []
+  try {
+    let instante = ahora
+    for (let ronda = 1; ; ronda++) {
+      const antes = await mensajesDeLaClienta(negocioId, conversacionId)
+      const respuesta = await responderUnaVez(negocioId, conversacionId, instante)
+      respuestas.push(...respuesta.respuestas)
+      const sigue =
+        ronda < MAX_RONDAS &&
+        respuesta.estado === "bot" &&
+        !respuesta.sinRespuesta &&
+        (await mensajesDeLaClienta(negocioId, conversacionId)) > antes
+      if (!sigue) return { ...respuesta, respuestas }
+      instante = new Date()
+    }
+  } finally {
+    await prisma.conversacionDeSecretaria.updateMany({
+      where: { id: conversacionId, businessId: negocioId },
+      data: { respondiendoHasta: null },
+    })
+  }
+}
+
+async function responderUnaVez(negocioId: string, conversacionId: string, ahora: Date): Promise<Respuesta> {
   const [conversacion, negocio, guardados] = await Promise.all([
     prisma.conversacionDeSecretaria.findFirst({
       where: { id: conversacionId, businessId: negocioId },
@@ -226,6 +284,17 @@ export async function responder(negocioId: string, conversacionId: string, ahora
     return { respuestas, estado: "bot", derivada: false }
   } catch (error) {
     registrarError("respondiendo con la Secretaria Eli", error)
+    // Por WhatsApp, la clienta no se queda sin respuesta: pasa a una persona.
+    // En el simulador se muestra el error, para que quien prueba lo vea.
+    if (!conversacion.simulacion && conversacion.estado === "bot") {
+      try {
+        const motivo = "La Secretaria tuvo un problema técnico y no pudo responder."
+        await derivar(negocio, conversacion, { motivo, memberId: null }, enviar, ahora)
+        return { respuestas, estado: "human", derivada: true }
+      } catch (otro) {
+        registrarError("derivando tras un error de la Secretaria Eli", otro)
+      }
+    }
     return { respuestas, estado: conversacion.estado as EstadoDeConversacion, derivada: false, sinRespuesta: "error" }
   } finally {
     await registrarConsumo(negocio, ajustes.presupuestoMensualCentavos, periodo, tokens, respuestas.length, conversacion.simulacion, ahora)
@@ -261,10 +330,12 @@ type FinDeLaConversacion = { tipo: "texto"; texto: string } | { tipo: "derivar";
 export function historialParaElModelo(
   filas: { rol: string; contenido: Prisma.JsonValue }[]
 ): Anthropic.MessageParam[] {
-  const mensajes = filas.map((fila) => ({
-    role: fila.rol === "assistant" ? ("assistant" as const) : ("user" as const),
-    content: fila.contenido as unknown as Anthropic.ContentBlockParam[],
-  }))
+  const mensajes = emparejarHerramientas(
+    filas.map((fila) => ({
+      role: fila.rol === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: fila.contenido as unknown as Anthropic.ContentBlockParam[],
+    }))
+  )
   // Un recorte puede dejar al principio una respuesta o un resultado de
   // herramienta sin la llamada que lo pidió: la API los rechaza.
   const inicio = mensajes.findIndex(
@@ -274,6 +345,49 @@ export function historialParaElModelo(
       mensaje.content.every((bloque) => bloque.type === "text")
   )
   return inicio === -1 ? [] : mensajes.slice(inicio)
+}
+
+type MensajeGuardado = { role: "user" | "assistant"; content: Anthropic.ContentBlockParam[] }
+
+const idsDeLlamadas = (bloques: Anthropic.ContentBlockParam[]) =>
+  bloques.flatMap((bloque) => (bloque.type === "tool_use" ? [bloque.id] : []))
+const idsDeResultados = (bloques: Anthropic.ContentBlockParam[]) =>
+  bloques.flatMap((bloque) => (bloque.type === "tool_result" ? [bloque.tool_use_id] : []))
+const soloTexto = (bloques: Anthropic.ContentBlockParam[]) => bloques.filter((bloque) => bloque.type === "text")
+
+/**
+ * La API exige que cada llamada a una herramienta vaya seguida de su
+ * resultado, y cada resultado, de su llamada. Un historial que quedó roto
+ * (un proceso que murió a la mitad, un mensaje que entró en el medio) se
+ * arregla quitando las llamadas y resultados sueltos y dejando el texto. Los
+ * mensajes seguidos del mismo rol se juntan, con los resultados primero.
+ */
+function emparejarHerramientas(mensajes: MensajeGuardado[]): MensajeGuardado[] {
+  const limpios: MensajeGuardado[] = []
+  mensajes.forEach((mensaje, i) => {
+    const bloques = Array.isArray(mensaje.content) ? mensaje.content : []
+    let quedan = bloques
+    if (mensaje.role === "assistant") {
+      const llamadas = idsDeLlamadas(bloques)
+      const siguiente = mensajes[i + 1]
+      const respondidas = new Set(siguiente?.role === "user" && Array.isArray(siguiente.content) ? idsDeResultados(siguiente.content) : [])
+      if (llamadas.some((id) => !respondidas.has(id))) quedan = soloTexto(bloques)
+    } else {
+      const resultados = idsDeResultados(bloques)
+      const anterior = limpios[limpios.length - 1]
+      const pedidas = new Set(anterior?.role === "assistant" ? idsDeLlamadas(anterior.content) : [])
+      if (resultados.some((id) => !pedidas.has(id))) quedan = soloTexto(bloques)
+    }
+    if (quedan.length === 0) return
+    const anterior = limpios[limpios.length - 1]
+    if (anterior?.role === mensaje.role) {
+      const juntos = [...anterior.content, ...quedan]
+      anterior.content = [...juntos.filter((bloque) => bloque.type === "tool_result"), ...juntos.filter((bloque) => bloque.type !== "tool_result")]
+    } else {
+      limpios.push({ role: mensaje.role, content: [...quedan] })
+    }
+  })
+  return limpios
 }
 
 async function conversar(
@@ -288,7 +402,7 @@ async function conversar(
     promptDelNegocio(negocio.id, ajustes.reglas),
     prisma.mensajeDeSecretaria.findMany({
       where: { conversacionId: conversacion.id, businessId: negocio.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: { orden: "desc" },
       take: MENSAJES_DE_HISTORIAL,
       select: { rol: true, contenido: true },
     }),
@@ -390,7 +504,7 @@ const TEXTO_DE_MENSAJES_EN_EL_RESUMEN = 6
 async function resumenDeLaConversacion(negocioId: string, conversacionId: string): Promise<string> {
   const filas = await prisma.mensajeDeSecretaria.findMany({
     where: { conversacionId, businessId: negocioId },
-    orderBy: { createdAt: "desc" },
+    orderBy: { orden: "desc" },
     take: 20,
     select: { rol: true, contenido: true },
   })

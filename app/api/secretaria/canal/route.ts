@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeConfigurarSecretaria } from "@/lib/permisos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
-import { LlaveDeCifradoInvalida, cifrarToken } from "@/lib/secretaria/cifrado"
+import { LlaveDeCifradoInvalida, cifrarToken, descifrarToken } from "@/lib/secretaria/cifrado"
+import { numeroEsDeLaCuenta } from "@/lib/secretaria/whatsapp"
 
 /**
  * El número de WhatsApp Cloud API del negocio de la sesión (sin Embedded
@@ -32,10 +33,25 @@ export async function PUT(request: NextRequest) {
     const datos = canalSchema.parse(await leerJsonConTope(request))
     const existente = await prisma.canalDeWhatsapp.findUnique({
       where: { businessId: actor.businessId },
-      select: { id: true },
+      select: { id: true, accessTokenCifrado: true },
     })
     if (!existente && !datos.accessToken) {
       return NextResponse.json({ error: "Falta el token de acceso" }, { status: 400 })
+    }
+    // Que el número sea de verdad de esa cuenta, y el token, de quien la maneja.
+    const accessToken = datos.accessToken || descifrarToken(existente!.accessTokenCifrado)
+    let propio: boolean
+    try {
+      propio = await numeroEsDeLaCuenta({ wabaId: datos.wabaId, phoneNumberId: datos.phoneNumberId, accessToken })
+    } catch (error) {
+      registrarError("comprobando el WhatsApp de la Secretaria con Meta", error)
+      return NextResponse.json({ error: "No pudimos comprobar el número con Meta. Intenta de nuevo en un rato." }, { status: 502 })
+    }
+    if (!propio) {
+      return NextResponse.json(
+        { error: "Meta no confirma que ese número sea de esa cuenta con ese token. Revisa los datos." },
+        { status: 400 }
+      )
     }
     const token = datos.accessToken ? { accessTokenCifrado: cifrarToken(datos.accessToken) } : {}
     const canal = existente

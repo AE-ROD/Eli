@@ -42,6 +42,9 @@ export type { NombreDeModelo, Tablas, TablasCompletas } from "./consultas-falsas
  * valor, que Prisma rechaza) lanza en vez de ignorarse.
  */
 
+/** La secuencia de `mensajes_de_secretaria.orden`. */
+let ordenDeMensajes = 0
+
 /** Los defaults del esquema: todo campo existe en el registro, aunque sea en null. */
 const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   user: () => ({
@@ -349,10 +352,13 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     derivadaAMemberId: null,
     derivadaAt: null,
     ultimoMensajeAt: new Date(),
+    mensajesEntrantes: 0,
+    respondiendoHasta: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
-  mensajeDeSecretaria: () => ({ tokensEntrada: 0, tokensSalida: 0, waMessageId: null, createdAt: new Date() }),
+  // `orden` es SERIAL: cada fila nueva, uno más que la anterior.
+  mensajeDeSecretaria: () => ({ tokensEntrada: 0, tokensSalida: 0, waMessageId: null, orden: ++ordenDeMensajes, createdAt: new Date() }),
   consumoDeSecretaria: () => ({
     tokensEntrada: 0,
     tokensSalida: 0,

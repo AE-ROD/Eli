@@ -1948,6 +1948,10 @@ model ConversacionDeSecretaria {
   derivadaAMemberId String?
   derivadaAt        DateTime?
   ultimoMensajeAt   DateTime         @default(now())
+  /// Mensajes que escribió la clienta: si sube mientras se le responde, hay otra ronda.
+  mensajesEntrantes Int              @default(0)
+  /// Candado: hasta cuándo la está respondiendo un proceso (`responder` en lib/secretaria/agente.ts). Null = libre.
+  respondiendoHasta DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -1974,9 +1978,12 @@ model MensajeDeSecretaria {
   tokensSalida   Int                      @default(0)
   /// El id del mensaje entrante en WhatsApp: hace idempotente el webhook.
   waMessageId    String?                  @unique
+  /// El orden en que se guardaron: dos mensajes del mismo milisegundo (una
+  /// llamada a herramienta y su resultado) no se desordenan, como con `createdAt`.
+  orden          Int                      @default(autoincrement())
   createdAt      DateTime                 @default(now())
 
-  @@index([conversacionId, createdAt])
+  @@index([conversacionId, orden])
   @@map("mensajes_de_secretaria")
 }
 
@@ -1988,8 +1995,10 @@ model ConsumoDeSecretaria {
   businessId               String
   business                 Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   periodo                  String
-  tokensEntrada            Int       @default(0)
-  tokensSalida             Int       @default(0)
+  /// BigInt: un mes con mucho caché pasa los 2.100 millones de tokens antes que el presupuesto.
+  tokensEntrada            BigInt    @default(0)
+  tokensSalida             BigInt    @default(0)
+  /// Int alcanza: el presupuesto tiene tope de US$1.000 (10⁹ microdólares) y al llegar se pausa.
   costoMicrodolares        Int       @default(0)
   mensajesWhatsappEnviados Int       @default(0)
   alerta80At               DateTime?

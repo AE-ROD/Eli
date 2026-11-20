@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
@@ -43,9 +43,19 @@ function escenario() {
 
 const como = (sesion: unknown) => mockGetServerSession.mockResolvedValue(sesion)
 
+/** Lo que responde Meta al preguntar los números de una cuenta: por defecto, el del pedido es suyo. */
+const metaFalsa = vi.fn(async (_url: string, _opciones?: RequestInit) =>
+  Response.json({ data: [{ id: "1234567890" }] })
+)
+
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubGlobal("fetch", metaFalsa)
   escenario()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe("ajustes y canal: sólo la dueña", () => {
@@ -84,6 +94,18 @@ describe("ajustes y canal: sólo la dueña", () => {
     const { accessToken: _sinToken, ...sinToken } = CANAL
     expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", { ...sinToken, activo: false }))).status).toBe(200)
     expect(base.buscar("canalDeWhatsapp")[0]).toMatchObject({ activo: false, accessTokenCifrado: guardado.accessTokenCifrado })
+  })
+
+  it("si Meta no confirma que el número es de esa cuenta con ese token, no se conecta", async () => {
+    como(sesiones.dueña)
+    metaFalsa.mockResolvedValueOnce(Response.json({ data: [{ id: "5555555555" }] }))
+    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))).status).toBe(400)
+    metaFalsa.mockResolvedValueOnce(Response.json({ error: { message: "sin permiso" } }, { status: 403 }))
+    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))).status).toBe(400)
+    expect(base.buscar("canalDeWhatsapp")).toHaveLength(0)
+    const [url, opciones] = metaFalsa.mock.calls[0]
+    expect(url).toContain("/9876543210/phone_numbers")
+    expect(new Headers(opciones?.headers).get("authorization")).toBe("Bearer EAAG-secreto")
   })
 
   it("un número ya conectado a otro negocio no se puede tomar", async () => {

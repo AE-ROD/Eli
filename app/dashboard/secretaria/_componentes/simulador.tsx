@@ -41,6 +41,9 @@ function notaDeLaRespuesta(respuesta: RespuestaDelSimulador): Nota {
   if (respuesta.sinRespuesta === "apagada") {
     return { tono: "info", texto: "Eli está apagada y no respondió." }
   }
+  if (respuesta.sinRespuesta === "ocupada") {
+    return { tono: "info", texto: "Eli todavía está respondiendo el mensaje anterior. Espera un momento y escribe otra vez." }
+  }
   if (respuesta.sinRespuesta === "error") {
     return { tono: "atencion", texto: "Eli tuvo un problema para responder. Intenta de nuevo en un momento." }
   }

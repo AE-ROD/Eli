@@ -35,6 +35,7 @@ const payloadSchema = z.object({
   entry: z
     .array(
       z.object({
+        id: z.string().min(1).max(64),
         changes: z
           .array(
             z.object({
@@ -60,6 +61,8 @@ const payloadSchema = z.object({
 })
 
 export interface MensajeEntrante {
+  /** La cuenta de WhatsApp Business (`entry[].id`): tiene que ser la del canal. */
+  wabaId: string
   phoneNumberId: string
   waMessageId: string
   /** En E.164, con "+". */
@@ -81,6 +84,7 @@ export function mensajesDelPayload(cuerpo: unknown): MensajeEntrante[] {
         const digitos = mensaje.from.replace(/\D/g, "")
         if (!digitos) continue
         mensajes.push({
+          wabaId: entrada.id,
           phoneNumberId,
           waMessageId: mensaje.id,
           telefono: `+${digitos}`,
@@ -118,4 +122,22 @@ export async function enviarTextoPorWhatsapp(canal: {
     signal: AbortSignal.timeout(10_000),
   })
   if (!respuesta.ok) throw new EnvioDeWhatsappFallido(respuesta.status)
+}
+
+/**
+ * Si Meta confirma que el número `phoneNumberId` es de la cuenta `wabaId`,
+ * preguntando con el token que entregó el negocio: así un negocio no puede
+ * conectar el número de otro sabiendo sólo su id. Un token sin acceso a esa
+ * cuenta es `false`; si Meta no contesta, lanza.
+ */
+export async function numeroEsDeLaCuenta(canal: { wabaId: string; phoneNumberId: string; accessToken: string }): Promise<boolean> {
+  const url = `https://graph.facebook.com/${versionDeGraph()}/${encodeURIComponent(canal.wabaId)}/phone_numbers?fields=id&limit=100`
+  const respuesta = await fetch(url, {
+    headers: { Authorization: `Bearer ${canal.accessToken}` },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (respuesta.status >= 500) throw new EnvioDeWhatsappFallido(respuesta.status)
+  if (!respuesta.ok) return false
+  const cuerpo = (await respuesta.json().catch(() => null)) as { data?: { id?: unknown }[] } | null
+  return Array.isArray(cuerpo?.data) && cuerpo.data.some((numero) => numero?.id === canal.phoneNumberId)
 }

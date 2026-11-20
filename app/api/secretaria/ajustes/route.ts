@@ -17,7 +17,7 @@ const ajustesSchema = z.object({
   maxTurnos: z.number().int().min(1).max(50),
   maxTokens: z.number().int().min(50).max(2000),
   /** En dólares, con hasta dos decimales. */
-  presupuestoMensualUsd: z.number().min(0).max(10_000),
+  presupuestoMensualUsd: z.number().min(0).max(1_000, "El presupuesto mensual puede ser de hasta US$1.000"),
   reglas: z.string().trim().max(2000).nullable(),
 })
 

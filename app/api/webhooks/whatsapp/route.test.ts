@@ -89,12 +89,15 @@ const CANAL = "1111111111"
 const CANAL_AJENO = "2222222222"
 let siguienteMensaje = 1
 
-function payload(phoneNumberId: string, de: string, cuerpo: string, id = `wamid.${siguienteMensaje++}`) {
+/** La cuenta de WhatsApp Business de cada número de prueba: la que Meta manda en `entry[].id`. */
+const CUENTA: Record<string, string> = { [CANAL]: "111000", [CANAL_AJENO]: "222000" }
+
+function payload(phoneNumberId: string, de: string, cuerpo: string, id = `wamid.${siguienteMensaje++}`, cuenta = CUENTA[phoneNumberId] ?? "999000") {
   return {
     object: "whatsapp_business_account",
     entry: [
       {
-        id: "waba",
+        id: cuenta,
         changes: [
           {
             field: "messages",
@@ -155,8 +158,8 @@ function escenario(extra: { ajustes?: Record<string, unknown>; consumo?: Record<
       { id: `h-ajeno-${dayOfWeek}`, businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek, startTime: "09:00", endTime: "18:00" },
     ]),
     canalDeWhatsapp: [
-      { id: "canal-1", businessId: NEGOCIO, phoneNumberId: CANAL, wabaId: "waba-1", accessTokenCifrado: cifrarToken("token-uno") },
-      { id: "canal-2", businessId: OTRO_NEGOCIO, phoneNumberId: CANAL_AJENO, wabaId: "waba-2", accessTokenCifrado: cifrarToken("token-dos") },
+      { id: "canal-1", businessId: NEGOCIO, phoneNumberId: CANAL, wabaId: "111000", accessTokenCifrado: cifrarToken("token-uno") },
+      { id: "canal-2", businessId: OTRO_NEGOCIO, phoneNumberId: CANAL_AJENO, wabaId: "222000", accessTokenCifrado: cifrarToken("token-dos") },
     ],
     ajustesDeSecretaria: [
       { id: "aj-1", businessId: NEGOCIO, activa: true, ...extra.ajustes },
@@ -367,11 +370,78 @@ describe("Secretaria Eli: aislamiento entre negocios", () => {
     expect(base.buscar("customer", { phone: "+56933333333" })[0]).toMatchObject({ businessId: OTRO_NEGOCIO })
   })
 
+  it("un mensaje con el número del negocio 1 pero desde otra cuenta de WhatsApp Business se ignora", async () => {
+    escenario()
+    const { POST } = await import("./route")
+    const respuesta = await POST(pedidoFirmado(payload(CANAL, "56911111111", "hola", "wamid.otra-cuenta", "222000")))
+    await Promise.all(pendientes.splice(0))
+    expect(respuesta.status).toBe(200)
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
+    expect(crearMensaje).not.toHaveBeenCalled()
+  })
+
   it("un número que no es de ningún negocio se ignora", async () => {
     escenario()
     const respuesta = await escribe("56911111111", "hola", "9999999999")
     expect(respuesta.status).toBe(200)
     expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
     expect(crearMensaje).not.toHaveBeenCalled()
+  })
+})
+
+describe("Secretaria Eli: mensajes seguidos y fallas", () => {
+  it("dos mensajes seguidos: se responde de a uno, y la segunda ronda ve los dos", async () => {
+    escenario()
+    const { POST } = await import("./route")
+    // El modelo de la primera ronda tarda: mientras, llega el segundo mensaje.
+    let soltar: () => void = () => {}
+    const espera = new Promise<void>((resolver) => (soltar = resolver))
+    crearMensaje
+      .mockImplementationOnce(async () => {
+        await espera
+        return texto("¡Hola! ¿Qué día te acomoda?")
+      })
+      .mockResolvedValueOnce(texto("Perfecto, el lunes. ¿A qué hora?"))
+
+    await POST(pedidoFirmado(payload(CANAL, "56911111111", "Hola")))
+    await new Promise((resolver) => setTimeout(resolver, 0))
+    await POST(pedidoFirmado(payload(CANAL, "56911111111", "Quiero un corte el lunes")))
+    soltar()
+    await Promise.all(pendientes.splice(0))
+
+    expect(crearMensaje).toHaveBeenCalledTimes(2)
+    const segunda = vistos[1].messages
+    expect(JSON.stringify(segunda)).toContain("Quiero un corte el lunes")
+    expect(enviados().map((envio) => envio.texto)).toEqual(["¡Hola! ¿Qué día te acomoda?", "Perfecto, el lunes. ¿A qué hora?"])
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ respondiendoHasta: null, turnos: 2 })
+  })
+
+  it("un historial con una llamada a herramienta sin su resultado se arregla antes de mandarlo", async () => {
+    escenario()
+    base.reiniciar({
+      ...base.volcado(),
+      conversacionDeSecretaria: [{ id: "conv-rota", businessId: NEGOCIO, canalId: "canal-1", telefono: "+56911111111" }],
+      mensajeDeSecretaria: [
+        { id: "m1", businessId: NEGOCIO, conversacionId: "conv-rota", rol: "user", contenido: [{ type: "text", text: "Hola" }], createdAt: new Date("2030-01-06T14:00:00Z") },
+        { id: "m2", businessId: NEGOCIO, conversacionId: "conv-rota", rol: "assistant", contenido: [{ type: "tool_use", id: "toolu_x", name: "buscar_cliente", input: {} }], createdAt: new Date("2030-01-06T14:00:01Z") },
+        { id: "m3", businessId: NEGOCIO, conversacionId: "conv-rota", rol: "user", contenido: [{ type: "text", text: "¿Hay hora?" }], createdAt: new Date("2030-01-06T14:00:02Z") },
+      ],
+    })
+    crearMensaje.mockResolvedValueOnce(texto("Sí, ¿para qué servicio?"))
+    await escribe("56911111111", "¿Me ayudas?")
+
+    const mandados = vistos[0].messages
+    expect(JSON.stringify(mandados)).not.toContain("toolu_x")
+    expect(mandados.every((mensaje) => mensaje.role === "user")).toBe(true)
+    expect(mandados).toHaveLength(1)
+  })
+
+  it("si el modelo falla, la clienta no queda sin respuesta: pasa a una persona", async () => {
+    escenario()
+    crearMensaje.mockRejectedValueOnce(new Error("API caída"))
+    await escribe("56911111111", "hola")
+
+    expect(enviados().map((envio) => envio.texto)).toEqual(["Le paso tu consulta a Ana, te responde pronto 🙌"])
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human", respondiendoHasta: null })
   })
 })

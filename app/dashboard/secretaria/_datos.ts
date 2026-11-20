@@ -17,7 +17,7 @@ export interface RespuestaDelSimulador {
   estado: EstadoDeLaConversacion
   derivada: boolean
   /** Por qué no respondió: la conversación ya está con una persona, la Secretaria está apagada o falló. */
-  sinRespuesta?: "humana" | "apagada" | "error"
+  sinRespuesta?: "humana" | "apagada" | "error" | "ocupada"
 }
 
 export interface AjustesParaGuardar {

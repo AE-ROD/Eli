@@ -44,11 +44,11 @@ export function fechaCorta(iso: string, zona: string): string {
 /**
  * Lee el presupuesto que escribió la dueña ("5", "5,50", "US$ 7.5") como
  * dólares. `null` si no es un monto válido (vacío, negativo, más de dos
- * decimales o más de 10.000, el tope del servidor).
+ * decimales o más de 1.000, el tope del servidor).
  */
 export function leerPresupuestoUsd(texto: string): number | null {
   const limpio = texto.replace(/us\$|\$|\s/gi, "").replace(",", ".")
   if (!/^\d+(\.\d{1,2})?$/.test(limpio)) return null
   const valor = Number(limpio)
-  return valor <= 10_000 ? valor : null
+  return valor <= 1_000 ? valor : null
 }

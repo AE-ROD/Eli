@@ -743,3 +743,78 @@ Con la v1 congelada, el dueño revisó estas preguntas abiertas y decidió no ca
 - **La reserva pública no completa el teléfono ni el consentimiento de un cliente que ya existía** (#109, #115): lo dado queda en la nota interna de la cita (sección 6).
 - **La lista de espera con un profesional que no atiende ese día** queda con "cualquiera" (#166).
 - **Importar clientes es todo o nada:** si algo falla, no queda ninguno a medias (sección 6, Clientes).
+
+---
+
+## 11. Secretaria Eli
+
+La **Secretaria Eli** atiende el WhatsApp de cada negocio con IA (modelo `claude-haiku-5-5` de Anthropic): conversa con la clienta, la reconoce o la registra, le ofrece horarios y le deja la hora en la agenda. Lo que no puede resolver se lo pasa a una persona. Cada negocio tiene la suya, con su número, sus ajustes y su presupuesto; nada se comparte entre negocios.
+
+**Cómo atiende.** Habla en español neutro, tutea y responde en dos frases como máximo, sin menús numerados. Todo lo que sabe del negocio sale de su base (nombre, rubro, servicios activos con duración y precio, quiénes atienden, horario publicado y las reglas propias que escriba la dueña): nunca inventa precios, horarios ni servicios.
+
+1. **Reconoce a la clienta por su número.** Busca entre los clientes del negocio (no eliminados) uno con el mismo teléfono que escribe. Si no hay, le pide nombre y apellido y la registra con ese número (la ficha nace con la nota "Registrada por la Secretaria Eli (WhatsApp)"). Si al registrarla ya existía una con ese número, usa esa: no abre una ficha duplicada.
+2. **Pregunta servicio y día, y ofrece hasta 3 horarios** libres, repartidos en el día (el primero, uno del medio y el último), con un profesional elegido o con cualquiera.
+3. **Confirma y reserva.** Con el sí de la clienta crea la cita en la agenda con origen **"whatsapp"** y le manda el resumen: servicio, fecha, hora y precio. La reserva pasa por las mismas reglas que la reserva pública (horario, choques, topes), con la duración y el precio que calcula el servidor.
+
+Lo que no es texto (audio, foto, sticker, archivo) le llega como "un mensaje que no es texto"; los mensajes largos se cortan a 1.000 caracteres. Recuerda los últimos 10 mensajes de la conversación.
+
+**Cuándo deriva a una persona.**
+- Preguntan por algo que no está en la lista de servicios.
+- Temas de salud, médicos o técnicos del servicio.
+- Reclamos o molestia.
+- Negociar el precio o pedir descuentos.
+- La clienta pide hablar con una persona, o la conversación se alarga sin avanzar.
+- **La conversación llegó al tope de respuestas** ("Respuestas antes de pasarte la conversación", 8 por defecto): el mensaje siguiente se deriva solo.
+- **El presupuesto del mes se agotó** (ver abajo).
+- El modelo rechaza la consulta, no sabe qué responder o no la resuelve en 4 pasos de herramientas.
+
+Al derivar: la clienta recibe **"Le paso tu consulta a [nombre], te responde pronto 🙌"** (el primer nombre del profesional con quien conversaba la reserva, o el de la dueña; si no hay, "el equipo"); a quien atiende le llega un **correo** con la clienta (o "Sin registrar"), su teléfono, el motivo y los últimos mensajes (si fue a un profesional, a su correo; si no, al de la dueña); y queda un **aviso en el panel**. Desde ese momento **la Secretaria deja de responder esa conversación** (lo que escriba la clienta se guarda) hasta que alguien la **"devuelve a Eli"** desde el panel: entonces vuelve a atenderla desde el próximo mensaje, con el contador de respuestas en cero. La persona le responde desde su propio WhatsApp.
+
+**Presupuesto mensual.** Cada negocio tiene un presupuesto en **dólares (USD)** por mes calendario en su zona horaria (USD 5 por defecto, de 0 a 1.000). Cada respuesta suma su costo según los tokens usados. Al **80 %** la dueña recibe un correo y un aviso en el panel; al **100 %**, otro correo y otro aviso, y **la Secretaria se pausa**: hasta el mes siguiente cada consulta nueva se deriva a una persona. Cada aviso sale una sola vez por mes. Las pruebas del simulador también cuentan: son llamadas pagadas.
+
+**La sección del panel "Secretaria Eli".**
+- **Simulador.** Se elige el teléfono de una clienta de prueba y se le escribe como si fuera ella, sin pasar por Meta: misma lógica que el WhatsApp real. Funciona aunque la Secretaria esté apagada. **Sus reservas son reales** (quedan en la agenda) y la clienta que registre queda en Clientes. Al derivar en el simulador no se manda correo ni aviso. "Empezar de nuevo" borra la conversación de prueba de ese número (las reservas y la clienta quedan). Tope: 60 mensajes por hora por negocio.
+- **Consumo del mes.** Si está encendida, apagada o en pausa por presupuesto, cuánto se gastó del presupuesto y los últimos avisos.
+- **Con una persona.** Las conversaciones derivadas (hasta 50, la más reciente primero), con la clienta, el teléfono, el motivo y "Devolver a Eli".
+- **Ajustes.** Encendida o apagada (viene apagada: apagada, las clientas no reciben respuesta automática), presupuesto mensual, respuestas antes de derivar (1 a 50) y reglas del negocio en texto libre (hasta 2.000 caracteres, p. ej. "no agendar alisados los sábados").
+- **Número de WhatsApp.** Se conecta **sin Embedded Signup**: la dueña copia del panel de Meta el identificador del número (`phone_number_id`), el de la cuenta (WABA) y el token de acceso, y pega en Meta la dirección del webhook que le muestra la pantalla. El token se guarda protegido y no se vuelve a mostrar; dejarlo vacío conserva el que había. El número se puede poner en pausa. Al guardar, Eli le pregunta a Meta, con ese token, si el número es de esa cuenta: si Meta no lo confirma, no se conecta (así nadie conecta el número de otro negocio sabiendo sólo su id). Un número ya conectado a otro negocio se rechaza sin decir a cuál.
+
+Por WhatsApp responde sólo con la Secretaria encendida **y** el número activo; si no, el mensaje se guarda y no se contesta.
+
+| | Dueño | Encargado | Profesional |
+|---|---|---|---|
+| Ver la sección, usar el simulador, ver el consumo y las derivadas | ✅ | ✅ | ❌ |
+| Devolver a Eli una conversación derivada | ✅ | ✅ | ❌ |
+| Cambiar los ajustes (encenderla, presupuesto, tope, reglas) | ✅ | Sólo los ve | ❌ |
+| Conectar el número de WhatsApp | ✅ | ❌ (no ve esa parte) | ❌ |
+| Recibir el correo de una derivación | Si va a ella | ❌ | Si va a él |
+
+El servidor lo aplica con `puedeUsarSecretaria` (dueño y encargado) y `puedeConfigurarSecretaria` (sólo dueño) de `lib/permisos.ts`; sin permiso, 404.
+
+**Seguridad.**
+- **Firma de Meta.** El webhook es público, pero sólo acepta lo que trae la firma `X-Hub-Signature-256` válida con el secreto de la app; sin secreto configurado rechaza todo. Lleva su límite por IP. Un mensaje repetido por Meta no se procesa dos veces.
+- **Aislamiento por negocio.** El negocio de cada mensaje sale del `phone_number_id` del número conectado (y la cuenta que manda Meta tiene que ser la conectada), nunca del texto ni del modelo. Toda lectura y escritura filtra por ese negocio.
+- **Las herramientas no aceptan teléfono ni id de clienta del modelo:** siempre usan el número que escribe. Lo único que el modelo elige es servicio, día, hora y profesional, y todo se revalida contra la base de ese negocio. Así un "reserva a nombre de otra" o "busca el número +569…" no tiene por dónde pasar.
+- **Token cifrado.** El token de acceso de WhatsApp se guarda cifrado (AES-256-GCM) y nunca vuelve al navegador. Sin la llave configurada no se puede conectar un número.
+- Las llaves de Anthropic y Meta viven sólo en el servidor.
+
+**Variables de entorno nuevas** (en `eli.env` del servidor):
+
+| Variable | Para qué |
+|---|---|
+| `ANTHROPIC_API_KEY` | La llave de la API de Anthropic. |
+| `WHATSAPP_VERIFY_TOKEN` | El token que se pone en Meta al registrar el webhook. |
+| `WHATSAPP_APP_SECRET` | El secreto de la app de Meta, para verificar la firma. |
+| `WHATSAPP_GRAPH_VERSION` | Opcional: la versión de la Graph API (`v21.0` por defecto). |
+| `WHATSAPP_TOKEN_KEY` | 32 bytes en base64 para cifrar los tokens de acceso. |
+
+**Migración.** `prisma/migrations/20261120120000_secretaria_eli` crea seis tablas nuevas (canal de WhatsApp, ajustes, conversaciones, mensajes, consumo mensual y avisos del panel) y amplía los orígenes válidos de una cita con "whatsapp". No toca datos existentes. **La aplica el dueño**; hasta entonces la sección no funciona.
+
+**Fuera de alcance / pendiente.**
+- **Reportes mensuales** de la Secretaria (hoy sólo el consumo del mes en curso) y **cobro de excedentes** sobre el presupuesto.
+- **Embedded Signup** de Meta: hoy los datos del número se copian a mano.
+- **Reintento** si falla la respuesta: no se vuelve a intentar. Por WhatsApp, la conversación pasa a una persona (con el aviso de siempre) para que la clienta no quede sin respuesta; en el simulador se muestra el error.
+- **Mensajes seguidos:** una conversación se responde de a una vez. Si la clienta escribe mientras Eli le responde, al terminar Eli da otra vuelta con todo lo nuevo (hasta 3 seguidas).
+- **Negocios con varias sedes** (dos o más activas): la Secretaria no elige sede, así que no puede ofrecer horarios ni reservar (el servidor se lo rechaza) y lo esperable es que derive. No hay una derivación automática para este caso.
+- **Los topes de reservas** (cupo diario y por contacto) son los mismos que los de la reserva pública y se comparten con ella: abrir el WhatsApp no duplica el cupo.
+- **El precio de la lectura de caché es estimado** (0,1 veces la entrada, conservador): si la tabla oficial cobra menos, el presupuesto se agota un poco antes de lo real, nunca después.
