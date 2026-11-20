@@ -22,7 +22,10 @@ export function frasesDeMiPlata(palabras: PalabrasDelRubro) {
      * Lo cobrado que todavía no tiene % de comisión, dicho a quien atiende:
      * "1 servicio espera su porcentaje…" / "3 prestaciones esperan su porcentaje…".
      */
-    esperanSuPorcentaje: (cantidad: number): string =>
-      `${cantidadDe(cantidad, servicio)} ${numeroDe(cantidad) === "singular" ? "espera" : "esperan"} su porcentaje de comisión: avísale a la dueña.`,
+    esperanSuPorcentaje: (cantidad: number, puedeConfigurarlo = false): string =>
+      `${cantidadDe(cantidad, servicio)} ${numeroDe(cantidad) === "singular" ? "espera" : "esperan"} su porcentaje de comisión: ${
+        // Quien atiende no puede ponerlo; una dueña que también atiende, sí (y la página le pone el enlace).
+        puedeConfigurarlo ? "ponlo en Comisiones, en tu tarjeta." : "avísale a la dueña."
+      }`,
   }
 }

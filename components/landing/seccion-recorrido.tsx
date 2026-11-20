@@ -108,7 +108,7 @@ const PASOS: readonly Paso[] = [
     tinte: { ...TINTES_DE_PASO[3], texto: "text-navy", relleno: "bg-navy" },
     titulo: "Lo cobrado, cuadrado",
     texto:
-      "El pago se divide entre los medios que haga falta y cuadra al centavo. Al cerrar sabes cuánto entró, cómo y quién lo generó.",
+      "El pago se divide entre los medios que haga falta y la caja cuadra sola. Al cerrar sabes cuánto entró, cómo y quién lo generó.",
     puntos: [
       "Efectivo, débito, crédito, transferencia o billetera digital",
       "Por profesional, servicio o medio de pago",
@@ -116,7 +116,7 @@ const PASOS: readonly Paso[] = [
     ],
     maqueta: (activa) => <MaquetaCobro activa={activa} />,
     etiquetas: [
-      { texto: "Cuadra al centavo", icono: Check, lugar: "left-[3%] top-[12%] -rotate-[3deg]" },
+      { texto: "La caja cuadra sola", icono: Check, lugar: "left-[3%] top-[12%] -rotate-[3deg]" },
       { texto: "Lo anulado queda registrado", icono: ChartColumn, lugar: "right-[6%] top-[71%] rotate-[3deg]" },
     ],
   },

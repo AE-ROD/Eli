@@ -2,6 +2,7 @@ import { Resend } from "resend"
 import { al, concordar, el, ese, un } from "@/lib/concordancia"
 import { formatearMonto } from "@/lib/dinero"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
+import { enlaceDeWhatsapp, enlacesDeMapa } from "@/lib/pagina-del-negocio"
 import {
   DIAS_DE_PRUEBA,
   PERSONAS_INCLUIDAS_EQUIPO,
@@ -14,6 +15,32 @@ import type { DatosAcuseDeSoporte, DatosAvisoASoporte } from "@/lib/soporte"
 import { conMayuscula, vocabularioDe, type Genero, type Sustantivo } from "@/lib/vocabulario"
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "Eli <no-reply@eli.app>"
+
+/** La dirección de envío de `FROM`, sin el nombre visible: `no-reply@eli.app`. */
+function direccionDeEnvio(): string {
+  return /<([^<>]+)>\s*$/.exec(FROM)?.[1]?.trim() ?? FROM.trim()
+}
+
+/** Largo máximo del nombre del negocio en el remitente: los clientes de correo lo cortan igual. */
+const LARGO_MAXIMO_DEL_REMITENTE = 60
+
+/**
+ * El remitente visible de un correo a un cliente: `"Salón Ana vía Eli"
+ * <no-reply@eli.app>`. Sólo cambia el nombre visible; la dirección de envío es
+ * siempre la de `FROM`. El nombre del negocio lo escribió una persona y va a
+ * un encabezado: se le sacan los saltos de línea, los caracteres de control y
+ * todo lo que podría cerrar las comillas o abrir otra dirección (`"`, `\`,
+ * `<`, `>`). Si no queda nada, el remitente de siempre.
+ */
+export function remitenteDelNegocio(nombreNegocio: string | null | undefined): string {
+  const nombre = limpiarAsunto(nombreNegocio ?? "")
+    .replace(/["\\<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LARGO_MAXIMO_DEL_REMITENTE)
+    .trim()
+  return nombre ? `"${nombre} vía Eli" <${direccionDeEnvio()}>` : FROM
+}
 
 let cliente: Resend | null = null
 
@@ -111,6 +138,7 @@ type TipoCorreo =
   | "pedir-resena"
   | "reserva-confirmada-por-el-local"
   | "aviso-fila-virtual"
+  | "turno-en-la-fila"
   | TipoCorreoDePrueba
 
 /**
@@ -152,6 +180,15 @@ interface Correo {
   bajaEnUnClic?: string
   /** Reply-To: a quién le llega si se responde el correo. */
   responderA?: string
+  /**
+   * El nombre del negocio, en los correos a sus CLIENTES: va en el encabezado
+   * en vez de "Eli", el remitente visible es "<Negocio> vía Eli" y el pie no
+   * vende Eli ("Agenda y cobros para tu negocio" es para dueños y equipos).
+   * Sin él, el correo es de Eli al dueño o al equipo.
+   */
+  negocio?: string
+  /** Enlaces secundarios bajo el botón ("Cómo llegar", "Escribir por WhatsApp"). Textos fijos; los enlaces los arma el servidor. */
+  enlaces?: Array<{ texto: string; enlace: string }>
 }
 
 /*
@@ -176,7 +213,7 @@ const FUENTE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica
 const FUENTE_TITULAR = "Georgia, 'Times New Roman', Times, serif"
 
 /** El HTML completo del correo. Todo lo que no es fijo llega escapado o como `HtmlSeguro`. */
-function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destacado, boton, cierre, enlaceDeBaja, textoDeBaja }: Correo): string {
+function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destacado, boton, enlaces, cierre, enlaceDeBaja, textoDeBaja, negocio }: Correo): string {
   const parrafo = `margin: 0; font-family: ${FUENTE}; font-size: 16px; line-height: 1.55; color: ${COLOR.texto2};`
 
   const bloquePasos = pasos?.length
@@ -218,6 +255,15 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
       </table>`
     : ""
 
+  const bloqueEnlaces = enlaces?.length
+    ? `<p style="margin: 16px 0 0; font-family: ${FUENTE}; font-size: 15px; line-height: 1.5; color: ${COLOR.navy};">${enlaces
+        .map(
+          ({ texto, enlace }) =>
+            `<a href="${escaparHtml(enlace)}" style="color: ${COLOR.navy}; font-weight: 600; text-decoration: underline;">${escaparHtml(texto)}</a>`,
+        )
+        .join(" &nbsp;·&nbsp; ")}</p>`
+    : ""
+
   const bloqueCierre = cierre ? `<p style="${parrafo} font-size: 15px; margin-top: 24px;">${cierre.valor}</p>` : ""
 
   const bloqueBaja = enlaceDeBaja
@@ -237,17 +283,18 @@ function armarHtml({ asunto: asuntoSeguro, titulo, intro, pasos, detalle, destac
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: ${COLOR.crema};">
   <tr><td align="center" style="padding: 32px 12px 40px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px;">
-      <tr><td style="padding: 0 12px 20px; font-family: ${FUENTE_TITULAR}; font-size: 30px; line-height: 1; font-weight: 500; letter-spacing: -0.5px; color: ${COLOR.navy};">Eli</td></tr>
+      <tr><td style="padding: 0 12px 20px; font-family: ${FUENTE_TITULAR}; font-size: 30px; line-height: 1; font-weight: 500; letter-spacing: -0.5px; color: ${COLOR.navy};">${escaparHtml(negocio?.trim() || "Eli")}</td></tr>
       <tr><td style="background: ${COLOR.tarjeta}; border: 1px solid ${COLOR.borde}; border-radius: 32px; padding: 40px 32px;">
         <h1 style="margin: 0 0 12px; font-family: ${FUENTE_TITULAR}; font-size: 28px; line-height: 1.2; font-weight: 500; letter-spacing: -0.5px; color: ${COLOR.navy};">${escaparHtml(titulo)}</h1>
         <p style="${parrafo} margin-bottom: 28px;">${intro.valor}</p>
         ${bloquePasos}
         ${bloqueDetalle}
         ${bloqueBoton}
+        ${bloqueEnlaces}
         ${bloqueCierre}
       </td></tr>
       <tr><td style="padding: 24px 12px 0;">
-        <p style="margin: 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};">Enviado por Eli · Agenda y cobros para tu negocio</p>
+        <p style="margin: 0; font-family: ${FUENTE}; font-size: 12px; line-height: 1.5; color: ${COLOR.texto2};">${negocio ? "Enviado por Eli" : "Enviado por Eli · Agenda y cobros para tu negocio"}</p>
         ${bloqueBaja}
       </td></tr>
     </table>
@@ -286,7 +333,7 @@ async function enviar(correo: Correo): Promise<ResultadoDeEnvio> {
   }
 
   return api.emails.send({
-    from: FROM,
+    from: correo.negocio ? remitenteDelNegocio(correo.negocio) : FROM,
     to: correo.para,
     subject: correo.asunto.valor,
     html: armarHtml(correo),
@@ -423,11 +470,10 @@ function laHoraDeSuCita(cita: Sustantivo): string {
  */
 
 /**
- * Dónde queda una hora concreta (etapa 9, plan Independiente con varias sedes):
- * lo que devuelve `direccionDeLaCita` (`lib/sedes.ts`) de la sede de la cita.
- * Sólo se pasa cuando el negocio tiene varias sedes activas y la hora lleva la
- * suya: es lo que le dice al cliente a cuál ir. Sin `lugar`, el correo sale
- * exactamente como siempre.
+ * Dónde queda una hora concreta (`lugarParaElCorreo`, `lib/lugar-de-la-cita.ts`):
+ * la sede de la cita (plan Independiente, con su nombre) o, si la hora no
+ * tiene sede, la dirección y la comuna del negocio, sin nombre. Sin `lugar`
+ * (un negocio sin dirección), el correo sale exactamente como siempre.
  */
 export interface LugarEnElCorreo {
   /** El nombre de la sede. */
@@ -455,6 +501,44 @@ function filaDeLugar(lugar: LugarEnElCorreo | null | undefined): [string, string
 function conLugar(detalle: Array<[string, string]>, lugar: LugarEnElCorreo | null | undefined): void {
   const fila = filaDeLugar(lugar)
   if (fila) detalle.push(fila)
+}
+
+/**
+ * Los enlaces de ayuda bajo el botón de un correo a un cliente: "Cómo llegar"
+ * (Google Maps, sólo si el lugar tiene calle: la comuna sola lleva al centro
+ * de la comuna) y "Escribir por WhatsApp" (sólo si el negocio tiene un número
+ * que se puede leer). Sin nada, `undefined`: el correo no suma la línea.
+ */
+function enlacesParaElCliente({
+  lugar,
+  whatsapp,
+}: {
+  lugar?: LugarEnElCorreo | null
+  whatsapp?: string | null
+}): Array<{ texto: string; enlace: string }> | undefined {
+  const enlaces: Array<{ texto: string; enlace: string }> = []
+  const mapa = lugar ? enlacesDeMapa(lugar.direccion, lugar.comuna) : null
+  if (mapa) enlaces.push({ texto: "Cómo llegar", enlace: mapa.googleMaps })
+  const chat = enlaceDeWhatsapp(whatsapp)
+  if (chat) enlaces.push({ texto: "Escribir por WhatsApp", enlace: chat })
+  return enlaces.length ? enlaces : undefined
+}
+
+/**
+ * "jue 15 de nov" de una fecha calendario "AAAA-MM-DD", para el asunto: corto,
+ * para que quepa en la bandeja junto a la hora. Se lee en UTC, como
+ * `fechaLegible`.
+ */
+function fechaCorta(fechaISO: string): string {
+  const partes = new Intl.DateTimeFormat("es-CL", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).formatToParts(new Date(fechaISO))
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) =>
+    (partes.find((p) => p.type === tipo)?.value ?? "").replace(/\.$/, "")
+  return `${parte("weekday")} ${parte("day")} de ${parte("month")}`
 }
 
 export interface DatosConfirmacionCliente {
@@ -497,8 +581,17 @@ export interface DatosConfirmacionCliente {
   precioNormal?: number | null
   /** Algún servicio no tiene precio: el total suma los que sí y dice "+ a consultar". */
   precioIncompleto?: boolean
-  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /**
+   * Dónde queda la hora (`lugarParaElCorreo`): la sede de la hora o, sin sede,
+   * la dirección del negocio. Sin él, el correo no lo dice. Con calle, suma
+   * "Cómo llegar".
+   */
   lugar?: LugarEnElCorreo | null
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 /**
@@ -528,14 +621,16 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
   return enviar({
     tipo: "confirmacion-cliente",
     para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
     ...(datos.porConfirmar
       ? {
-          asunto: asunto`Reserva recibida — ${datos.nombreNegocio}`,
+          asunto: asunto`Recibimos tu solicitud — ${datos.nombreNegocio}`,
           titulo: "Recibimos tu reserva",
           intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmará tu reserva y te avisaremos por correo cuando lo haga.`,
         }
       : {
-          asunto: asunto`${conParticipio("confirmado", cita)} — ${datos.nombreNegocio}`,
+          asunto: asunto`${conMayuscula(concordar("confirmado", cita))}: ${fechaCorta(datos.fecha)}, ${datos.hora} — ${datos.nombreNegocio}`,
           titulo: `¡Tu ${cita.singular} está ${concordar("confirmado", cita)}!`,
           intro: html`Hola <strong>${datos.nombreCliente}</strong>, te esperamos en <strong>${datos.nombreNegocio}</strong>.`,
         }),
@@ -552,7 +647,7 @@ export function enviarConfirmacionCliente(datos: DatosConfirmacionCliente) {
               ? html`Puedes cancelar o cambiar tu ${cita.singular} con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente ${alLocal}.`
               : html`Puedes cancelar o cambiar tu ${cita.singular} con el botón ${hastaLaHoraDe(cita)}.`,
         }
-      : { cierre: html`Si necesitas cancelar o cambiar tu ${cita.singular}, contáctanos con anticipación.` }),
+      : { cierre: html`Si necesitas cancelar o cambiar tu ${cita.singular}, contacta ${alLocal} con anticipación.` }),
   })
 }
 
@@ -616,8 +711,13 @@ export interface DatosReservaConfirmadaPorElLocal {
   profesional?: string | null
   /** El precio guardado en la cita: el rebajado, si se reservó en hora valle (#138). */
   precio?: number | null
-  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora (`lugarParaElCorreo`). Sin él, el correo no lo dice. Con calle, suma "Cómo llegar". */
   lugar?: LugarEnElCorreo | null
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 /** Al cliente: el local confirmó la reserva que había entrado por confirmar (#84). */
@@ -632,10 +732,12 @@ export function enviarReservaConfirmadaPorElLocal(datos: DatosReservaConfirmadaP
   return enviar({
     tipo: "reserva-confirmada-por-el-local",
     para: datos.emailCliente,
-    asunto: asunto`Reserva confirmada — ${datos.nombreNegocio}`,
+    negocio: datos.nombreNegocio,
+    asunto: asunto`${conMayuscula(concordar("confirmado", palabras.cita))}: ${fechaCorta(datos.fecha)}, ${datos.hora} — ${datos.nombreNegocio}`,
     titulo: "¡Tu reserva está confirmada!",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, <strong>${datos.nombreNegocio}</strong> confirmó tu reserva. Te esperamos.`,
     detalle,
+    enlaces: enlacesParaElCliente(datos),
     cierre: html`Si necesitas cancelar o cambiar tu ${palabras.cita.singular}, usa el enlace del correo de tu reserva o contacta ${al(palabras.local)}.`,
   })
 }
@@ -732,8 +834,13 @@ export interface DatosRecordatorio {
    * como en la confirmación (#164).
    */
   sePuedeCambiar?: boolean
-  /** Dónde queda la hora: si la hora tiene sede (`LugarEnElCorreo`). Sin él, el correo no lo dice. */
+  /** Dónde queda la hora (`lugarParaElCorreo`). Sin él, el correo no lo dice. Con calle, suma "Cómo llegar". */
   lugar?: LugarEnElCorreo | null
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 export function enviarRecordatorio(datos: DatosRecordatorio) {
@@ -749,7 +856,9 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
   return enviar({
     tipo: "recordatorio",
     para: datos.emailCliente,
-    asunto: asunto`Recordatorio — tu ${cita.singular} es mañana`,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
+    asunto: asunto`Mañana ${datos.hora} en ${datos.nombreNegocio}`,
     titulo: `Tu ${cita.singular} es mañana`,
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, te recordamos que tienes ${un(cita)} mañana en <strong>${datos.nombreNegocio}</strong>.`,
     detalle,
@@ -763,7 +872,7 @@ export function enviarRecordatorio(datos: DatosRecordatorio) {
               ? html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu ${cita.singular} con el botón hasta ${datos.plazoHoras} ${datos.plazoHoras === 1 ? "hora" : "horas"} antes. Después, contacta directamente ${alLocal}.`
               : html`¡Te esperamos! Si no puedes asistir, cancela o cambia tu ${cita.singular} con el botón ${hastaLaHoraDe(cita)}.`,
         }
-      : { cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísanos con anticipación.` }),
+      : { cierre: html`¡Te esperamos! Si no puedes asistir, por favor avísale ${alLocal} con anticipación.` }),
   })
 }
 
@@ -998,6 +1107,11 @@ export interface DatosAvisoListaDeEspera {
   enlaceSalir: string
   /** El POST de un clic que la saca de la lista (RFC 8058). */
   enlaceSalirEnUnClic: string
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 /**
@@ -1015,6 +1129,8 @@ export function enviarAvisoListaDeEspera(datos: DatosAvisoListaDeEspera) {
   return enviar({
     tipo: "aviso-lista-de-espera",
     para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
     asunto: asunto`${conMayuscula(seLibero)} — ${datos.nombreNegocio}`,
     titulo: conMayuscula(seLibero),
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, ${seLibero} en <strong>${datos.nombreNegocio}</strong> el día que estabas esperando.`,
@@ -1041,6 +1157,11 @@ export interface DatosTeToca {
   /** `enlacesDeBajaDeCliente(customerId)` (`lib/baja-de-clientes.ts`). */
   enlaceDeBaja: string
   enlaceDeBajaEnUnClic: string
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 /** "Te toca" (#75). Promocional: sólo con consentimiento vigente. */
@@ -1057,6 +1178,8 @@ export function enviarTeToca(datos: DatosTeToca) {
   return enviar({
     tipo: "te-toca",
     para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
     asunto: asunto`¿Agendamos tu ${proxima}? — ${datos.nombreNegocio}`,
     titulo: toca,
     intro: datos.servicio
@@ -1080,6 +1203,11 @@ export interface DatosPedirResena {
   /** `enlacesDeBajaDeCliente(customerId)` (`lib/baja-de-clientes.ts`). */
   enlaceDeBaja: string
   enlaceDeBajaEnUnClic: string
+  /**
+   * El WhatsApp público del negocio (`Business.whatsapp`): con un número que se
+   * pueda leer, el correo suma "Escribir por WhatsApp". Sin él, no.
+   */
+  whatsapp?: string | null
 }
 
 /**
@@ -1092,6 +1220,8 @@ export function enviarPedirResena(datos: DatosPedirResena) {
   return enviar({
     tipo: "pedir-resena",
     para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
     asunto: asunto`¿Cómo te fue en ${datos.nombreNegocio}?`,
     titulo: "Gracias por tu visita",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, gracias por venir a <strong>${datos.nombreNegocio}</strong>. Si tienes un minuto, contar cómo te fue en Google ayuda a que más personas ${PRONOMBRE[local.genero]} conozcan.`,
@@ -1111,6 +1241,8 @@ export interface DatosAvisoFilaVirtual {
   nombreNegocio: string
   /** Su número de turno del día. */
   numero: number
+  /** El WhatsApp público del negocio (`Business.whatsapp`): con número, suma "Escribir por WhatsApp". */
+  whatsapp?: string | null
 }
 
 /**
@@ -1118,17 +1250,52 @@ export interface DatosAvisoFilaVirtual {
  * correo, cuando queda 1 persona adelante (o ninguna). De servicio: lo pidió
  * al anotarse, y se manda una sola vez por turno. Sin enlace al turno: la
  * base guarda sólo el hash del token del celular, así que el correo no puede
- * reconstruirlo; la persona ya tiene la página abierta en su teléfono.
+ * reconstruirlo; el enlace le llegó en el correo de cuando se anotó
+ * (`enviarTurnoEnLaFila`), y la persona suele tener la página abierta.
  */
 export function enviarAvisoFilaVirtual(datos: DatosAvisoFilaVirtual) {
   return enviar({
     tipo: "aviso-fila-virtual",
     para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
     asunto: asunto`Ya casi es tu turno — ${datos.nombreNegocio}`,
     titulo: "Ya casi es tu turno",
     intro: html`Hola <strong>${datos.nombreCliente}</strong>, en <strong>${datos.nombreNegocio}</strong> ya casi es tu turno: queda a lo más una persona antes que tú.`,
     detalle: [["Tu número", String(datos.numero)]],
     destacado: true,
-    cierre: html`Acércate ${al(palabrasDelCorreo(datos.rubro).local)} para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno.`,
+    cierre: html`Acércate ${al(palabrasDelCorreo(datos.rubro).local)} para no perderlo. Si ya no puedes ir, sal de la fila desde la página de tu turno: el enlace está en el correo que te llegó al anotarte.`,
+  })
+}
+
+export interface DatosTurnoEnLaFila extends DatosAvisoFilaVirtual {
+  /**
+   * La página de su turno (`/fila/<slug>/<token>`, con la URL completa). Lleva
+   * el token en claro: viaja sólo en este correo y en la respuesta a quien se
+   * anotó. La base guarda su hash.
+   */
+  enlaceTurno: string
+}
+
+/**
+ * "Tu lugar en la fila" (#85): apenas alguien se anota en la fila virtual con
+ * su correo, su número y el enlace a su turno, para volver a verlo si cierra
+ * la página. De servicio: lo pidió al dejar su correo. Uno por anotarse: lo
+ * acotan los mismos límites de la fila (`filaVirtual` por IP y
+ * `filaVirtualPorNegocio`).
+ */
+export function enviarTurnoEnLaFila(datos: DatosTurnoEnLaFila) {
+  return enviar({
+    tipo: "turno-en-la-fila",
+    para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    enlaces: enlacesParaElCliente(datos),
+    asunto: asunto`Tu lugar en la fila de ${datos.nombreNegocio}`,
+    titulo: "Ya estás en la fila",
+    intro: html`Hola <strong>${datos.nombreCliente}</strong>, quedaste en la fila de <strong>${datos.nombreNegocio}</strong>. Te escribimos de nuevo cuando ya casi sea tu turno.`,
+    detalle: [["Tu número", String(datos.numero)]],
+    destacado: true,
+    boton: { texto: "Ver mi turno", enlace: datos.enlaceTurno },
+    cierre: html`Con el botón ves cuántas personas hay antes que tú, o sales de la fila si ya no puedes ir.`,
   })
 }

@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { confirmarReserva, inscribirEnListaDeEspera, leerDisponibilidad, salirDeLaListaDeEspera } from "./_datos"
+import {
+  confirmarReserva,
+  inscribirEnListaDeEspera,
+  leerDisponibilidad,
+  mensajeParaQuienReserva,
+  MUCHOS_INTENTOS,
+  noSePudoGuardarLaReserva,
+  salirDeLaListaDeEspera,
+  SIN_INTERNET,
+} from "./_datos"
 
 /** Lo que la página pública manda al servidor para los consentimientos y la lista de espera. */
 
@@ -99,17 +108,60 @@ describe("lista de espera", () => {
     })
   })
 
-  it("un 429 (por IP o por correo) llega al formulario con el texto del servidor (#133)", async () => {
+  it("un 429 (por IP o por correo) llega al formulario dicho en claro: esperar un minuto (#133)", async () => {
     const datos = { servicioIds: ["s1"], profesionalId: null, fecha: "2030-01-07", nombre: "Lucía", apellido: "Pérez", email: "lucia@correo.test", telefono: "", whatsapp: false }
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "Demasiadas solicitudes, intenta más tarde" }), { status: 429 }))
-    expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: "Demasiadas solicitudes, intenta más tarde" })
+    expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: MUCHOS_INTENTOS })
     // Sin cuerpo (un proxy): el texto propio de la acción, no uno del tope.
     mockFetch.mockResolvedValueOnce(new Response("", { status: 429 }))
     expect(await inscribirEnListaDeEspera("uno", datos)).toEqual({ ok: false, error: "No se pudo anotar en la lista de espera" })
   })
 
+  it("el apellido es opcional: vacío o de puros espacios no se manda", async () => {
+    const datos = { servicioIds: ["s1"], profesionalId: null, fecha: "2030-01-07", nombre: "Lucía", apellido: "  ", email: "lucia@correo.test", telefono: "", whatsapp: false }
+    await inscribirEnListaDeEspera("uno", datos)
+    expect(cuerpo()).not.toHaveProperty("apellido")
+  })
+
   it("salir es un POST al token", async () => {
     await salirDeLaListaDeEspera("uno", "abc_-")
     expect(mockFetch).toHaveBeenCalledWith("/api/reservar/uno/lista-de-espera/abc_-", { method: "POST" })
+  })
+})
+
+describe("mensajeParaQuienReserva: ningún error técnico a la vista", () => {
+  const queHacer = noSePudoGuardarLaReserva("Salón Uno")
+
+  it("los mensajes técnicos se cambian por lo que hay que hacer", () => {
+    for (const tecnico of [
+      "Error interno del servidor",
+      "El pedido no es un JSON válido",
+      "Datos inválidos",
+      "Error al confirmar la reserva",
+      "No encontrado",
+      "Negocio no encontrado",
+      "",
+    ]) {
+      expect(mensajeParaQuienReserva(tecnico, queHacer)).toBe(queHacer)
+    }
+    expect(queHacer).toBe(
+      "No pudimos guardar tu reserva. Tus datos siguen acá: vuelve a apretar Confirmar en un minuto. Si sigue, escríbele a Salón Uno."
+    )
+  })
+
+  it("muchos pedidos seguidos: esperar un minuto", () => {
+    expect(mensajeParaQuienReserva("Demasiadas solicitudes, intenta más tarde", queHacer)).toBe(MUCHOS_INTENTOS)
+    expect(mensajeParaQuienReserva("Demasiados intentos, intenta más tarde", queHacer)).toBe(MUCHOS_INTENTOS)
+  })
+
+  it("sin conexión: revisar internet", () => {
+    expect(mensajeParaQuienReserva("Sin conexión con el servidor", queHacer)).toBe(SIN_INTERNET)
+  })
+
+  it("los mensajes que ya dicen qué hacer se quedan", () => {
+    expect(mensajeParaQuienReserva("Algo cambió mientras reservabas. Vuelve a elegir la hora.", queHacer)).toBe(
+      "Algo cambió mientras reservabas. Vuelve a elegir la hora."
+    )
+    expect(mensajeParaQuienReserva("El correo no es válido", queHacer)).toBe("El correo no es válido")
   })
 })

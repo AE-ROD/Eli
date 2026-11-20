@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
-import { frasesDeLasComisiones } from "./_frases"
+import { ejemploDelReparto, frasesDeLasComisiones } from "./_frases"
 
 const palabrasDe = (rubro: string | null): PalabrasDelRubro => vocabularioDe(rubro).palabras
 const NEUTRAS = palabrasDe(null)
@@ -23,6 +23,7 @@ describe("sin rubro: exactamente los textos de siempre", () => {
 
   it("la página y el aviso de pendientes", () => {
     expect(f.subtitulo).toBe("El porcentaje de cada profesional, por servicio y por producto.")
+    expect(f.queEsElPorcentaje).toBe("El % es lo que se lleva cada persona de lo que cobra por ese servicio.")
     expect(f.demasiadosPendientes).toBe(
       "Hay demasiados servicios pendientes para contarlos de una vez: los números de cada profesional se quedan cortos."
     )
@@ -85,10 +86,10 @@ describe("clínica dental", () => {
     expect(f.protesis.etiquetaDelProfesional).toBe("Odontólogo")
     expect(f.protesis.agregaLosMateriales).toBe("Agrega los materiales con que trabaja la clínica para poder crear prótesis.")
     expect(f.protesis.comoSeCalcula).toBe(
-      "Las prótesis se reparten en tres partes: la tratante, la clínica y el laboratorio. El resto de las prestaciones sigue con el % de comisión de cada odontólogo. Cada prótesis guarda su regla al crearse: lo que cambies aquí aplica a las prótesis nuevas; las creadas antes mantienen su regla."
+      "El resto de las prestaciones sigue con el % de comisión de cada odontólogo. Lo que cambies aquí vale para las prótesis nuevas; las de antes no cambian."
     )
     expect(f.protesis.tarjeta).toBe(
-      "Las prótesis se reparten en tres partes (la tratante, la clínica y el laboratorio) según el material. El resto de las prestaciones sigue con el % de comisión de cada odontólogo, aquí abajo."
+      "Las prótesis se reparten entre la tratante, la clínica y el laboratorio, según el material. El resto de las prestaciones, con el % de comisión de abajo."
     )
   })
 
@@ -135,9 +136,35 @@ describe("la concordancia sigue al género y no a una terminación pegada", () =
     expect(f.tarjeta.esperanUnPorcentaje(2)).toBe("2 trabajos ya cobrados esperan un porcentaje.")
     expect(f.tarjeta.eligeUno).toBe("Elige un trabajo")
     expect(f.tarjeta.escribeElPorcentaje).toBe("Escribe el porcentaje para ese trabajo.")
+    expect(frasesDeLasComisiones({ ...AL_REVES, servicio: { singular: "prestación", plural: "prestaciones", genero: "f" } }).queEsElPorcentaje).toBe(
+      "El % es lo que se lleva cada persona de lo que cobra por esa prestación."
+    )
     expect(f.historial.sinCambios(true)).toBe("Todavía no hay cambios de porcentaje de esta estilista.")
     expect(f.protesis.todosSiguenLaRegla).toBe("Todas siguen la regla de cada material.")
     expect(f.protesis.mandaSobreLaRegla).toBe("Manda sobre la regla del material para esa estilista, en sus prótesis nuevas.")
     expect(f.protesis.valorQuePaga).toBe("El valor que paga la clienta")
+  })
+})
+
+describe("el ejemplo del reparto en pesos", () => {
+  const REPARTO = { pbOdontologo: 4000, pbClinica: 4000, pbTecnico: 2000 }
+
+  it("sale de la misma función que reparte, con $100.000 si no hay precio", () => {
+    expect(ejemploDelReparto(REPARTO)).toBe(
+      "Ejemplo: de $100.000 cobrados, tratante $40.000, clínica $40.000 y laboratorio $20.000."
+    )
+  })
+
+  it("usa el precio que se le da, y el de ejemplo si no es positivo", () => {
+    expect(ejemploDelReparto(REPARTO, 180_000_00)).toBe(
+      "Ejemplo: de $180.000 cobrados, tratante $72.000, clínica $72.000 y laboratorio $36.000."
+    )
+    expect(ejemploDelReparto(REPARTO, 0)).toContain("de $100.000 cobrados")
+  })
+
+  it("las tres partes suman lo cobrado, también con decimales", () => {
+    expect(ejemploDelReparto({ pbOdontologo: 3333, pbClinica: 3334, pbTecnico: 3333 })).toBe(
+      "Ejemplo: de $100.000 cobrados, tratante $33.330, clínica $33.340 y laboratorio $33.330."
+    )
   })
 })

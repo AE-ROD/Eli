@@ -27,10 +27,10 @@ const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = 
   { id: "recordatorios", titulo: "Recordatorios por correo", icono: Mail },
   { id: "clientes", titulo: "Clientes con notas", icono: FileText },
   { id: "equipo", titulo: "Equipo con roles", icono: UsersRound },
-  { id: "tablero", titulo: "Tablero del día", icono: SquareKanban },
-  { id: "pago-dividido", titulo: "Pago dividido", icono: CreditCard },
+  { id: "tablero", titulo: "Quién llega hoy y qué falta cobrar", icono: SquareKanban },
+  { id: "pago-dividido", titulo: "Cobrar con dos medios de pago", icono: CreditCard },
   { id: "reportes", titulo: "Reportes", icono: ChartColumn },
-  { id: "anulaciones", titulo: "Anulaciones con registro", icono: RotateCcw },
+  { id: "anulaciones", titulo: "Si te equivocas, lo deshaces y queda anotado", icono: RotateCcw },
   {
     id: "servicios-y-horarios",
     titulo: "Servicios y horarios",

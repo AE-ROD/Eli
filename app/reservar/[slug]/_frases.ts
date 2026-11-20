@@ -98,7 +98,7 @@ export type FrasesDelCatalogo = ReturnType<typeof frasesDelCatalogo>
  * confirmada). Una por pantalla o por pieza, con el nombre de lo que dicen.
  */
 export function frasesDelFormulario(rubro: Rubro) {
-  const { hora, cita, servicioDeLaReserva: elegido, profesional, quienAtiende, negocio, primeraVez, conPalabrasPropias, clinicaDental } =
+  const { hora, cita, servicioDeLaReserva: elegido, profesional, quienAtiende, negocio, local, primeraVez, conPalabrasPropias, clinicaDental } =
     palabrasDeLaReserva(rubro)
   // "del otro" / "de la otra": el otro servicio, para "uno después del otro".
   const delOtro = del({ ...elegido, singular: concordar("otro", elegido) })
@@ -160,6 +160,8 @@ export function frasesDelFormulario(rubro: Rubro) {
       preguntaDePrimeraVez: `¿Es tu ${primeraVez.singular} en ${el(negocio)}?`,
       /** La respuesta que dice que sí: "Sí, es la primera". */
       respuestaDePrimeraVez: `Sí, es ${articuloDe(primeraVez)} ${concordar("primero", primeraVez)}`,
+      /** La respuesta que dice que no. */
+      respuestaDeNoPrimeraVez: "No, ya vine antes",
       /** La nota bajo la pregunta: "En la primera consulta sumamos 15 minutos para abrir tu ficha." */
       notaDePrimeraVez: textoDePrimeraVez(rubro),
       /** Sin responder no hay horas: "Responde si es tu primera consulta para ver las horas libres." */
@@ -178,16 +180,47 @@ export function frasesDelFormulario(rubro: Rubro) {
     paso3: {
       /** "¿Algo que debamos saber antes de tu cita?" / "…de tu hora?". */
       pistaDeComentarios: `¿Algo que debamos saber antes de tu ${cita.singular}?`,
+      /** Sólo en una clínica dental se pide el documento: "RUT (opcional)". En otro rubro, `null`: no se muestra. */
+      documento: clinicaDental ? "RUT (opcional)" : null,
     },
 
     confirmada: {
+      /** El título cuando la reserva quedó confirmada. */
+      titulo: "¡Reserva confirmada!",
       /** "¿Necesitas cancelar o cambiar la hora?" */
       pregunta: `¿Necesitas cancelar o cambiar ${el(hora)}?`,
       /** "Gestiona tu cita acá" / "Gestiona tu hora acá": el enlace al que lleva. */
       enlace: `Gestiona tu ${cita.singular} acá`,
+      /** Sin correo, el enlace sólo queda en esta pantalla: hay que guardarlo. */
+      guardaElEnlace: `Guarda este enlace: con él puedes cancelar o cambiar tu ${cita.singular}.`,
+      /** Con correo: el enlace también llegó por ahí. */
+      enlaceEnElCorreo: "También te lo mandamos por correo.",
+      /** El texto del mensaje de "Enviármelo por WhatsApp": "Mi hora en Salón Uno: https://…". */
+      mensajeParaGuardar: (nombreDelNegocio: string, enlace: string): string =>
+        `Mi ${cita.singular} en ${nombreDelNegocio}: ${enlace}`,
+    },
+
+    /**
+     * La reserva quedó por confirmar (#84): no se dice "confirmada". "Recibimos
+     * tu solicitud" y "El salón te confirmará la hora".
+     */
+    porConfirmar: {
+      titulo: "Recibimos tu solicitud",
+      bajada: (conCorreo: boolean): string =>
+        `${conMayuscula(el(local))} te confirmará ${el(hora)}${conCorreo ? " y te avisaremos por correo" : ""}.`,
     },
   }
 }
+
+/**
+ * La casilla de WhatsApp de la reserva y de la lista de espera. Hoy no se manda
+ * nada por WhatsApp: la casilla guarda el permiso para cuando se pueda, y lo
+ * dice así, sin prometer recordatorios que no llegan.
+ */
+export const CASILLA_DE_WHATSAPP = "Avísame también por WhatsApp cuando esa opción esté disponible"
+
+/** La línea bajo el correo: qué gana quien lo deja. */
+export const AYUDA_DEL_CORREO = "Con tu correo te llega la confirmación y un recordatorio el día antes."
 
 /**
  * "Avísame si se libera una hora": el botón y el formulario de la lista de
@@ -200,6 +233,8 @@ export function frasesDeLaListaDeEspera(rubro: Rubro) {
     avisame: `Avísame si se libera ${un(hora)}`,
     /** Lo que dice al inscribirse, hasta antes del correo: "Listo. Si se libera una hora el lunes 2 de noviembre, te escribimos a". */
     listo: (dia: string): string => `Listo. Si se libera ${un(hora)} el ${dia}, te escribimos a`,
+    /** Después del correo: dónde buscar el aviso. */
+    revisaSpam: "Te avisamos por correo: revisa también la carpeta Spam.",
     /** La explicación bajo el título: "…para que la reserves. Avisamos a todos los que esperan: la hora es de quien reserve primero." */
     explicacion: (dia: string): string =>
       `Si alguien cancela el ${dia}, te mandamos un correo para que ${pronombreDe(hora)} reserves. Avisamos a todos los que esperan: ${el(hora)} es de quien reserve primero.`,
@@ -327,5 +362,12 @@ export function frasesDeLaFila(rubro: Rubro) {
     cerrado: `${conMayuscula(el(local))} no está atendiendo en este momento. La fila se abre en su horario de atención.`,
     /** Un turno que ya no está: "Saliste de la fila o el local cerró tu turno. Si quieres, vuelve a anotarte." */
     fuera: `Saliste de la fila o ${el(local)} cerró tu turno. Si quieres, vuelve a anotarte.`,
+    /** Guardar el enlace del turno: si se cierra la página, se vuelve con él. */
+    guardarTurno: {
+      explicacion: "Si cierras esta página, vuelve con este enlace.",
+      copiar: "Copiar enlace de mi turno",
+      /** El texto del mensaje de "Enviármelo por WhatsApp": "Mi turno en Salón Uno: https://…". */
+      mensaje: (nombreDelNegocio: string, enlace: string): string => `Mi turno en ${nombreDelNegocio}: ${enlace}`,
+    },
   }
 }

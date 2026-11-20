@@ -71,9 +71,9 @@ export function AgregarAlCalendario({
           variante="secundario"
           icono={<Download />}
           onClick={() => descargarIcs(cita)}
-          className="w-full justify-start"
+          className="h-auto min-h-12 w-full justify-start py-3 text-left leading-snug whitespace-normal"
         >
-          iPhone, Outlook y otros (.ics)
+          Guardar en el calendario del celular (iPhone, Outlook y otros)
         </Boton>
       </div>
       {conRecordatorio && (

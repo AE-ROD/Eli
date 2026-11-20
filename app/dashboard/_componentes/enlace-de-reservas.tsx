@@ -3,27 +3,37 @@
 import { useId, useState } from "react"
 import { ArrowUpRight, Check, Copy, Link2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
+import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { mensajeParaCompartir } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
+import { BotonesParaCompartir } from "./compartir-enlace"
 
 interface PropsDeEnlaceDeReservas {
   /** El slug del negocio: la página pública es `/reservar/<slug>`. */
   slug: string
   /**
-   * Después de copiar (para la lista de inicio: el enlace ya se compartió).
-   * Lo que haga no frena ni deshace el copiado.
+   * Después de copiarlo, mandarlo por WhatsApp o compartirlo (para la lista de
+   * inicio: el enlace ya se compartió). Lo que haga no frena ni deshace nada.
    */
-  alCopiar?: () => void
+  alCompartir?: () => void
+  /** Si "Ver QR" lleva a la tarjeta del QR (`#qr-del-local`), cuando está en la pantalla. */
+  conQr?: boolean
 }
 
-/** El enlace público de reservas del negocio, para copiarlo o abrirlo. */
-export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
+/**
+ * El enlace público de reservas del negocio, para mandarlo por WhatsApp,
+ * copiarlo, compartirlo, ver su QR o abrir la página.
+ */
+export function EnlaceDeReservas({ slug, alCompartir, conQr = false }: PropsDeEnlaceDeReservas) {
   const idDelTitulo = useId()
+  const rubro = useRubroDelPanel()
   const [copiado, setCopiado] = useState(false)
   const [noSeCopio, setNoSeCopio] = useState(false)
   const enlace =
     typeof window !== "undefined" ? `${window.location.origin}/reservar/${slug}` : `/reservar/${slug}`
+  const mensaje = mensajeParaCompartir(rubro, enlace)
 
   // El portapapeles puede negarse (permiso, una página sin HTTPS, un navegador
   // viejo): entonces se dice y el enlace queda escrito para copiarlo a mano.
@@ -39,7 +49,7 @@ export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
     setNoSeCopio(false)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
-    alCopiar?.()
+    alCompartir?.()
   }
 
   return (
@@ -56,22 +66,30 @@ export function EnlaceDeReservas({ slug, alCopiar }: PropsDeEnlaceDeReservas) {
         subtitulo={<span className="font-mono break-all text-navy">{enlace}</span>}
         icono={{ figura: Link2, color: "azul" }}
         accion={
-          <>
-            <Boton
-              variante="secundario"
-              tamano="sm"
-              onClick={copiarEnlace}
-              icono={copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            >
-              {copiado ? "Copiado" : "Copiar"}
-            </Boton>
-            <Boton href={`/reservar/${slug}`} target="_blank" tamano="sm" icono={<ArrowUpRight aria-hidden="true" />}>
-              Ver página
-              <span className="sr-only"> (se abre en otra pestaña)</span>
-            </Boton>
-          </>
+          <Boton
+            href={`/reservar/${slug}`}
+            target="_blank"
+            variante="secundario"
+            tamano="sm"
+            icono={<ArrowUpRight aria-hidden="true" />}
+          >
+            Ver página
+            <span className="sr-only"> (se abre en otra pestaña)</span>
+          </Boton>
         }
       />
+      <div className="mt-4">
+        <BotonesParaCompartir mensaje={mensaje} alCompartir={alCompartir} hrefDelQr={conQr ? "#qr-del-local" : undefined}>
+          <Boton
+            variante="secundario"
+            tamano="sm"
+            onClick={copiarEnlace}
+            icono={copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          >
+            {copiado ? "Copiado" : "Copiar"}
+          </Boton>
+        </BotonesParaCompartir>
+      </div>
       {/* El texto del botón cambia, pero el lector de pantalla no siempre lo dice: esto sí. */}
       <p role="status" className={noSeCopio ? "mt-3 text-sm text-texto-2" : "sr-only"}>
         {copiado ? "Enlace copiado" : noSeCopio ? "No se pudo copiar. Selecciona el enlace de arriba y cópialo a mano." : ""}

@@ -17,7 +17,11 @@
  */
 
 import { cantidadDe, concordar, el, numeroDe } from "@/lib/concordancia"
+import { formatearMonto } from "@/lib/dinero"
 import { conMayuscula, vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
+
+/** Centavos a `$45.000`, igual que `pesos` de las piezas (que es de la pantalla). */
+const pesosDe = (centavos: number) => formatearMonto(centavos / 100)
 
 const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 
@@ -32,8 +36,24 @@ function sinPorcentajeAlCerrar(cantidad: number, servicio: PalabrasDelRubro["ser
   return `Hay ${cantidadDe(cantidad, servicio)} sin porcentaje de comisión: ${configuralo} en Comisiones antes de cerrar.`
 }
 
+/**
+ * Lo mismo que `sinPorcentajeAlCerrar`, dicho para quien no sabe dónde se
+ * configura: qué falta y qué hacer, sin "configúralos". La pantalla le suma el
+ * enlace a Comisiones.
+ */
+function sinPorcentajeEnPantalla(cantidad: number, servicio: PalabrasDelRubro["servicio"]): string {
+  const ponle = numeroDe(cantidad) === "singular" ? "Ponle" : "Ponles"
+  return `Hay ${cantidadDe(cantidad, servicio)} sin porcentaje de comisión. ${ponle} su porcentaje en Comisiones y vuelve a cerrar.`
+}
+
 export function frasesDeLasLiquidaciones(palabras: PalabrasDelRubro) {
   const { cliente, profesional, servicio } = palabras
+  /** El servidor lo dice con las palabras neutras o con las del rubro: cualquiera de las dos es "falta el %". */
+  const faltaPorcentaje = (delServidor: string | null, sinPorcentaje: number): boolean =>
+    delServidor !== null &&
+    sinPorcentaje > 0 &&
+    (delServidor === sinPorcentajeAlCerrar(sinPorcentaje, PALABRAS_NEUTRAS.servicio) ||
+      delServidor === sinPorcentajeAlCerrar(sinPorcentaje, servicio))
   const losServicios = el(servicio, "plural")
   const serviciosYProductos = `${conMayuscula(servicio.plural)} y productos`
 
@@ -64,9 +84,18 @@ export function frasesDeLasLiquidaciones(palabras: PalabrasDelRubro) {
        * servicio y queda como llegó.
        */
       motivoParaNoCerrar: (delServidor: string | null, sinPorcentaje: number): string | null =>
-        delServidor !== null && delServidor === sinPorcentajeAlCerrar(sinPorcentaje, PALABRAS_NEUTRAS.servicio)
-          ? sinPorcentajeAlCerrar(sinPorcentaje, servicio)
-          : delServidor,
+        faltaPorcentaje(delServidor, sinPorcentaje) ? sinPorcentajeEnPantalla(sinPorcentaje, servicio) : delServidor,
+      /** El motivo es que faltan porcentajes: la pantalla suma el enlace a Comisiones. */
+      faltaPorcentaje: (delServidor: string | null, sinPorcentaje: number): boolean =>
+        faltaPorcentaje(delServidor, sinPorcentaje),
+      /** El enlace del aviso: Comisiones no tiene ancla por persona, así que se dice a quién buscar. */
+      irAComisiones: (nombre: string): string => `Ir a Comisiones (busca la tarjeta de ${nombre})`,
+      /**
+       * El resumen grande de arriba: "Le pagas $45.000 a Ana". Con el total en
+       * contra no se puede cerrar, y se dice así.
+       */
+      resumen: (totalCents: number, nombre: string): string =>
+        totalCents >= 0 ? `Le pagas ${pesosDe(totalCents)} a ${nombre}` : `${nombre} queda debiendo ${pesosDe(-totalCents)}`,
     },
 
     /** El comprobante. */

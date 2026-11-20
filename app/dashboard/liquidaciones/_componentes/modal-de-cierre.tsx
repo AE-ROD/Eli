@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
@@ -27,8 +28,10 @@ interface Props {
 
 /**
  * La próxima liquidación de alguien, calculada en el servidor sin guardar, y
- * el botón para cerrarla. Lo pendiente con % ya configurado dice a cuánto se
- * congelará; lo que no tiene % frena el cierre. Los adelantos, vales y
+ * el botón para cerrarla. Arriba, en grande, cuánto se le paga; el detalle va
+ * plegado bajo "Ver el detalle". Lo pendiente con % ya configurado dice que
+ * queda fijo con el % de hoy; lo que no tiene % frena el cierre y el aviso
+ * lleva a Comisiones. Los adelantos, vales y
  * ajustes se pueden dejar para la siguiente (por ejemplo, si el total queda
  * negativo). Sólo la dueña llega acá.
  *
@@ -86,6 +89,13 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
   const vista = respuesta?.resultado.ok ? respuesta.resultado.datos : null
   // Lo que impide cerrar, con las palabras del rubro: el servidor lo arma sin mirarlas.
   const motivoParaNoCerrar = vista ? frases.motivoParaNoCerrar(vista.noSePuedeCerrar, vista.sinPorcentaje) : null
+  // Si lo que frena es un % que falta, el aviso lleva directo a Comisiones.
+  const faltaPorcentaje = vista ? frases.faltaPorcentaje(vista.noSePuedeCerrar, vista.sinPorcentaje) : false
+  const enlaceAComisiones = (
+    <Link href="/dashboard/comisiones" className="mt-2 inline-block font-medium text-navy underline underline-offset-2">
+      {frases.irAComisiones(miembro.nombre)}
+    </Link>
+  )
 
   const alternar = (id: string) => {
     setErrorAlCerrar("")
@@ -124,7 +134,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
     return (
       <ModalConfirmar
         titulo={`¿Cerrar la liquidación de ${miembro.nombre}?`}
-        descripcion={`${vista.periodo.texto}, con ${pesos(vista.totales.totalCents)} a pagar. Las comisiones pendientes se congelan y lo incluido ya no entra en otra liquidación. Se puede anular mientras no esté pagada.`}
+        descripcion={`${vista.periodo.texto}, con ${pesos(vista.totales.totalCents)} a pagar. Cada comisión queda fija con el % de hoy, aunque después lo cambies, y lo incluido ya no entra en otra liquidación. Se puede anular mientras no esté pagada.`}
         textoConfirmar="Cerrar liquidación"
         textoCancelar="Volver a la vista previa"
         trabajando={cerrando}
@@ -162,105 +172,122 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
         </div>
       ) : (
         <div className={cargando ? "space-y-6 opacity-60" : "space-y-6"} aria-busy={cargando}>
-          <section className="space-y-2">
-            <h3 className="font-medium">{frases.lineas(vista.lineas.length)}</h3>
-            {vista.lineas.length === 0 ? (
-              <p className="text-sm text-texto-2">Nada cobrado en este período.</p>
-            ) : (
-              <ul className="divide-y divide-borde/60 text-sm">
-                {vista.lineas.map((linea) => (
-                  <li key={linea.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
-                    <span className="min-w-0">
-                      <span className="text-texto-2">{fechaParaLeer(linea.fecha)} · </span>
-                      {linea.detalle}
-                      <span className="text-texto-2"> · {linea.cliente}</span>
-                    </span>
-                    <span className="tabular-nums">
-                      {linea.estado === "sin-porcentaje" ? (
-                        <span className="font-medium text-error">Sin porcentaje</span>
-                      ) : (
-                        <>
-                          <span className="text-texto-2">
-                            {linea.estado === "se-congelara" ? "se congelará al " : ""}
-                            {porcentaje(linea.porcentaje ?? 0)} de {pesos(linea.precioCents)} ={" "}
-                          </span>
-                          {pesos(linea.comisionCents ?? 0)}
-                        </>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <div className="rounded-campo bg-superficie p-4 text-center squircle" aria-live="polite">
+            <p className="text-2xl font-semibold tabular-nums">{frases.resumen(vista.totales.totalCents, miembro.nombre)}</p>
+            <p className="mt-1 text-sm text-texto-2">Es lo que suma este período, con descuentos y extras ya restados o sumados.</p>
+          </div>
 
-          <ListaDeProtesis protesis={vista.protesis} />
-
-          {vista.propinas.length > 0 && (
-            <section className="space-y-2">
-              <h3 className="font-medium">Propinas ({vista.propinas.length})</h3>
-              <ul className="divide-y divide-borde/60 text-sm">
-                {vista.propinas.map((propina) => (
-                  <li key={propina.id} className="flex justify-between gap-4 py-2">
-                    <span>
-                      <span className="text-texto-2">{fechaParaLeer(propina.fecha)} · </span>
-                      {propina.cliente}
-                    </span>
-                    <span className="tabular-nums">{pesos(propina.montoCents)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {vista.movimientos.length > 0 && (
-            <fieldset className="space-y-2">
-              <legend className="font-medium">Adelantos, vales y ajustes</legend>
-              <p className="text-sm text-texto-2">
-                Los adelantos y vales que desmarques quedan para la próxima liquidación. Los ajustes entran siempre.
-              </p>
-              <ul className="divide-y divide-borde/60 text-sm">
-                {vista.movimientos.map((movimiento) => {
-                  const detalle = (
-                    <span className="min-w-0 flex-1">
-                      <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
-                      {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
-                      {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
-                    </span>
-                  )
-                  const monto = (
-                    <span className="tabular-nums">
-                      {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
-                    </span>
-                  )
-                  // Un ajuste corrige algo ya cobrado (§3.7): no se deja para la siguiente.
-                  if (movimiento.tipo === "ajuste") {
-                    return (
-                      <li key={movimiento.id} className="flex min-h-11 items-center gap-3 py-2 pl-8">
-                        {detalle}
-                        {monto}
+          <details className="rounded-campo border border-borde p-4 squircle">
+            <summary className="flex min-h-11 cursor-pointer items-center font-medium">
+              Ver el detalle
+              <span className="ml-2 text-sm font-normal text-texto-2">(qué se cobró y cada descuento o extra)</span>
+            </summary>
+            <div className="mt-4 space-y-6">
+              <section className="space-y-2">
+                <h3 className="font-medium">{frases.lineas(vista.lineas.length)}</h3>
+                {vista.lineas.length === 0 ? (
+                  <p className="text-sm text-texto-2">Nada cobrado en este período.</p>
+                ) : (
+                  <ul className="divide-y divide-borde/60 text-sm">
+                    {vista.lineas.map((linea) => (
+                      <li key={linea.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+                        <span className="min-w-0">
+                          <span className="text-texto-2">{fechaParaLeer(linea.fecha)} · </span>
+                          {linea.detalle}
+                          <span className="text-texto-2"> · {linea.cliente}</span>
+                        </span>
+                        <span className="tabular-nums">
+                          {linea.estado === "sin-porcentaje" ? (
+                            <span className="font-medium text-error">Sin porcentaje</span>
+                          ) : (
+                            <>
+                              <span className="text-texto-2">
+                                {linea.estado === "se-congelara" ? "queda fijo con el % de hoy: " : ""}
+                                {porcentaje(linea.porcentaje ?? 0)} de {pesos(linea.precioCents)} ={" "}
+                              </span>
+                              {pesos(linea.comisionCents ?? 0)}
+                            </>
+                          )}
+                        </span>
                       </li>
-                    )
-                  }
-                  return (
-                    <li key={movimiento.id}>
-                      <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={movimiento.incluido}
-                          onChange={() => alternar(movimiento.id)}
-                          disabled={cerrando}
-                          className="size-5 accent-navy"
-                        />
-                        {detalle}
-                        {monto}
-                      </label>
-                    </li>
-                  )
-                })}
-              </ul>
-            </fieldset>
-          )}
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <ListaDeProtesis protesis={vista.protesis} />
+
+              {vista.propinas.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="font-medium">Propinas ({vista.propinas.length})</h3>
+                  <ul className="divide-y divide-borde/60 text-sm">
+                    {vista.propinas.map((propina) => (
+                      <li key={propina.id} className="flex justify-between gap-4 py-2">
+                        <span>
+                          <span className="text-texto-2">{fechaParaLeer(propina.fecha)} · </span>
+                          {propina.cliente}
+                        </span>
+                        <span className="tabular-nums">{pesos(propina.montoCents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {vista.movimientos.length > 0 && (
+                <fieldset className="space-y-2">
+                  <legend className="font-medium">Adelantos, vales y ajustes</legend>
+                  <p className="text-sm text-texto-2">
+                    Un vale es algo que se llevó a cuenta (un producto, por ejemplo) y se le descuenta. Un ajuste corrige algo
+                    ya cobrado: suma o resta.
+                  </p>
+                  <p className="text-sm text-texto-2">
+                    Los adelantos y vales que desmarques quedan para la próxima liquidación. Los ajustes entran siempre.
+                  </p>
+                  <ul className="divide-y divide-borde/60 text-sm">
+                    {vista.movimientos.map((movimiento) => {
+                      const detalle = (
+                        <span className="min-w-0 flex-1">
+                          <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)} · </span>
+                          {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
+                          {movimiento.motivo && <span className="text-texto-2">: {movimiento.motivo}</span>}
+                        </span>
+                      )
+                      const monto = (
+                        <span className="tabular-nums">
+                          {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
+                        </span>
+                      )
+                      // Un ajuste corrige algo ya cobrado (§3.7): no se deja para la siguiente.
+                      if (movimiento.tipo === "ajuste") {
+                        return (
+                          <li key={movimiento.id} className="flex min-h-11 items-center gap-3 py-2 pl-8">
+                            {detalle}
+                            {monto}
+                          </li>
+                        )
+                      }
+                      return (
+                        <li key={movimiento.id}>
+                          <label className="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={movimiento.incluido}
+                              onChange={() => alternar(movimiento.id)}
+                              disabled={cerrando}
+                              className="size-5 accent-navy"
+                            />
+                            {detalle}
+                            {monto}
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </fieldset>
+              )}
+            </div>
+          </details>
 
           <dl className="space-y-2 rounded-campo bg-superficie p-4 squircle">
             <FilaDeTotal concepto={frases.comisionPorServicios} centavos={vista.totales.comisionServiciosCents} />
@@ -276,6 +303,9 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             <FilaDeTotal concepto="Ajustes" centavos={vista.totales.ajustesCents} />
             <FilaDeTotal concepto="Total a pagar" centavos={vista.totales.totalCents} fuerte />
           </dl>
+          {vista.totales.ajustesCents !== 0 && (
+            <p className="-mt-4 text-sm text-texto-2">Ajustes: correcciones de algo ya cobrado, que suman o restan.</p>
+          )}
 
           <div className="space-y-2">
             <label htmlFor={idDeLaNota} className={CLASES_DE_ETIQUETA}>
@@ -294,6 +324,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           {motivoParaNoCerrar && (
             <Aviso tono="atencion" rol="status">
               {motivoParaNoCerrar}
+              {faltaPorcentaje && <span className="block">{enlaceAComisiones}</span>}
             </Aviso>
           )}
           {errorAlCerrar && <Aviso>{errorAlCerrar}</Aviso>}

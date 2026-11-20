@@ -42,8 +42,8 @@ export const PASOS_DE_INICIO: readonly PasoDeInicio[] = [
   {
     id: "enlace",
     titulo: "Comparte tu enlace de reservas",
-    texto: "Cópialo y pégalo en tu Instagram o en WhatsApp.",
-    accion: { texto: "Ir al enlace", href: "#enlace-de-reservas" },
+    texto: "Mándalo por WhatsApp o pégalo en tu Instagram.",
+    accion: { texto: "Compartir enlace", href: "#enlace-de-reservas" },
   },
   {
     id: "primeraReserva",
@@ -98,6 +98,25 @@ export function textosDeLaLista(rubro: string | null | undefined): TextosDeLaLis
   }
 }
 
+/**
+ * El mensaje que acompaña al enlace al mandarlo por WhatsApp o con "Compartir":
+ * corto, amable y con la palabra que lee quien reserva (`citaParaElCliente`:
+ * "hora" en un salón y en la clínica, "cita" sin rubro). "tu" no cambia con el
+ * género, así que no hace falta concordancia.
+ */
+export function mensajeParaCompartir(rubro: string | null | undefined, enlace: string): string {
+  const { citaParaElCliente } = vocabularioDe(rubro).palabras
+  return `¡Hola! Ya puedes reservar tu ${citaParaElCliente.singular} en línea, cuando quieras: ${enlace}`
+}
+
+/**
+ * El enlace que abre WhatsApp con el mensaje ya escrito, para que la persona
+ * elija a quién mandarlo (`wa.me/?text=`, sin número). Va codificado entero.
+ */
+export function enlaceDeWhatsApp(mensaje: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(mensaje)}`
+}
+
 /** Lo que devuelve `GET /api/dashboard/lista-de-inicio`. */
 
 export interface DatosDeListaDeInicio {
@@ -128,8 +147,8 @@ export async function leerListaDeInicio(): Promise<Resultado<DatosDeListaDeInici
 
 /**
  * Anota que el dueño compartió su enlace (sólo la primera vez cuenta). Se
- * llama después de copiar y sin esperarla: si falla, el enlace ya está
- * copiado y no hay nada que avisar.
+ * llama después de copiarlo, mandarlo por WhatsApp o compartirlo, y sin
+ * esperarla: si falla, el enlace ya salió y no hay nada que avisar.
  */
 export async function marcarEnlaceCompartido(): Promise<Resultado<{ marcado: boolean }>> {
   return pedir<{ marcado: boolean }>(`${URL_DE_LA_LISTA}/enlace-compartido`, "No se pudo marcar el enlace", {

@@ -127,17 +127,31 @@ describe("el motivo para no cerrar: lo del servidor, dicho con las palabras del 
   it("el aviso de las líneas sin % se traduce al rubro", () => {
     const dental = frasesDeLasLiquidaciones(palabrasDe("odontologia")).vistaPrevia
     expect(dental.motivoParaNoCerrar(delServidor(1), 1)).toBe(
-      "Hay 1 prestación sin porcentaje de comisión: configúralo en Comisiones antes de cerrar."
+      "Hay 1 prestación sin porcentaje de comisión. Ponle su porcentaje en Comisiones y vuelve a cerrar."
     )
     expect(dental.motivoParaNoCerrar(delServidor(4), 4)).toBe(
-      "Hay 4 prestaciones sin porcentaje de comisión: configúralos en Comisiones antes de cerrar."
+      "Hay 4 prestaciones sin porcentaje de comisión. Ponles su porcentaje en Comisiones y vuelve a cerrar."
     )
+    expect(dental.faltaPorcentaje(delServidor(4), 4)).toBe(true)
+    // El servidor ya lo dijo con las palabras del rubro: también es "falta el %".
+    const conRubro = motivoParaNoCerrar({ sinPorcentaje: 2, desde: "2026-10-01", hoy: "2026-11-03", totales, palabras: palabrasDe("odontologia") })
+    expect(dental.faltaPorcentaje(conRubro, 2)).toBe(true)
+    expect(dental.motivoParaNoCerrar(conRubro, 2)).toMatch(/^Hay 2 prestaciones sin porcentaje de comisión\. Ponles/)
+  })
+
+  it("el enlace a Comisiones y el resumen grande nombran a la persona", () => {
+    const f = frasesDeLasLiquidaciones(NEUTRAS).vistaPrevia
+    expect(f.irAComisiones("Ana")).toBe("Ir a Comisiones (busca la tarjeta de Ana)")
+    expect(f.resumen(4_500_000, "Ana")).toBe("Le pagas $45.000 a Ana")
+    expect(f.resumen(0, "Ana")).toBe("Le pagas $0 a Ana")
+    expect(f.resumen(-50_000, "Ana")).toBe("Ana queda debiendo $500")
   })
 
   it("lo que no nombra al servicio queda como llegó, y sin motivo no hay motivo", () => {
     const dental = frasesDeLasLiquidaciones(palabrasDe("odontologia")).vistaPrevia
     expect(dental.motivoParaNoCerrar(delServidor(0, "2026-12-01"), 0)).toBe("Este período todavía no empieza.")
     expect(dental.motivoParaNoCerrar("Otro motivo que dijo el servidor", 2)).toBe("Otro motivo que dijo el servidor")
+    expect(dental.faltaPorcentaje("Otro motivo que dijo el servidor", 2)).toBe(false)
     expect(dental.motivoParaNoCerrar(null, 0)).toBeNull()
   })
 
@@ -157,9 +171,11 @@ describe("el motivo para no cerrar: lo del servidor, dicho con las palabras del 
     }
   })
 
-  it("un rubro sin palabras propias deja el motivo del servidor exactamente igual", () => {
+  it("sin palabras propias, el aviso de las líneas sin % se dice en llano", () => {
     const neutras = frasesDeLasLiquidaciones(NEUTRAS).vistaPrevia
-    expect(neutras.motivoParaNoCerrar(delServidor(3), 3)).toBe(delServidor(3))
+    expect(neutras.motivoParaNoCerrar(delServidor(3), 3)).toBe(
+      "Hay 3 servicios sin porcentaje de comisión. Ponles su porcentaje en Comisiones y vuelve a cerrar."
+    )
   })
 })
 

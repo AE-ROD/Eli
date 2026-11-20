@@ -16,8 +16,53 @@
  */
 
 import type { PrecioDeLaHora } from "@/lib/hora-valle"
-import { pedir, conJson, type Resultado } from "@/lib/peticiones"
+import { pedir, conJson, SIN_CONEXION, type Resultado } from "@/lib/peticiones"
 import type { HorasDelDia } from "./_componentes/selector-fecha-hora"
+
+/** Lo que se dice cuando el servidor frena por muchos pedidos seguidos (429). */
+export const MUCHOS_INTENTOS = "Muchos intentos seguidos: espera un minuto y vuelve a intentar."
+
+/** Lo que se dice cuando el pedido ni llegó: sin internet o con el servidor caído. */
+export const SIN_INTERNET = "No pudimos conectarnos. Revisa tu internet y vuelve a intentar."
+
+/**
+ * Mensajes del servidor que no le sirven a quien reserva: no dicen qué hacer
+ * ("Error interno del servidor", "El pedido no es un JSON válido", "Datos
+ * inválidos", "No encontrado", o el texto por defecto "Error al …").
+ */
+const MENSAJES_TECNICOS = [/error interno/i, /json/i, /datos inv[aá]lidos/i, /^error al /i, /^(negocio )?no encontrado$/i]
+
+/** El freno por muchos pedidos: "Demasiadas solicitudes…" / "Demasiados intentos…". */
+const MUCHOS_PEDIDOS = /demasiad[ao]s (solicitudes|intentos)/i
+
+/**
+ * El error tal como se muestra en la pantalla pública: los mensajes técnicos
+ * se cambian por `queHacer` (una frase que dice qué hacer), el freno por
+ * muchos pedidos por `MUCHOS_INTENTOS` y la falta de conexión por
+ * `SIN_INTERNET`. Los demás (los de validación de cada campo, "Algo cambió
+ * mientras reservabas…") ya son claros y se quedan.
+ */
+export function mensajeParaQuienReserva(error: string, queHacer: string): string {
+  const texto = error.trim()
+  if (texto === "") return queHacer
+  if (texto === SIN_CONEXION) return SIN_INTERNET
+  if (MUCHOS_PEDIDOS.test(texto)) return MUCHOS_INTENTOS
+  if (MENSAJES_TECNICOS.some((patron) => patron.test(texto))) return queHacer
+  return texto
+}
+
+/** El `Resultado` con su error ya traducido (`mensajeParaQuienReserva`). */
+export function conMensajeClaro<T>(resultado: Resultado<T>, queHacer: string): Resultado<T> {
+  return resultado.ok ? resultado : { ok: false, error: mensajeParaQuienReserva(resultado.error, queHacer) }
+}
+
+/**
+ * "No pudimos guardar tu reserva. Tus datos siguen acá: …": lo que se dice si
+ * confirmar falla sin un motivo que sirva.
+ */
+export function noSePudoGuardarLaReserva(nombreDelNegocio: string): string {
+  return `No pudimos guardar tu reserva. Tus datos siguen acá: vuelve a apretar Confirmar en un minuto. Si sigue, escríbele a ${nombreDelNegocio}.`
+}
 
 /**
  * Quien atiende, con lo que alcanza para elegirlo y saber qué servicios hace.
@@ -39,6 +84,9 @@ export interface ProfesionalPublico extends ProfesionalDelEquipo {
   diasConAtencion: number[]
 }
 
+/** Lo que se dice si las horas de un día no se pudieron leer. */
+export const HORAS_SIN_CARGAR = "No pudimos cargar los horarios. Vuelve a intentar en un momento."
+
 export interface DatosDeReserva {
   /** Los servicios, en el orden en que se hacen (#89a): de 1 a 4. */
   servicioIds: string[]
@@ -55,7 +103,7 @@ export interface DatosDeReserva {
   cedula: string
   email: string
   telefono: string
-  /** "Quiero recibir recordatorios por WhatsApp". */
+  /** La casilla de WhatsApp (`CASILLA_DE_WHATSAPP`): el permiso, para cuando se pueda escribir por ahí. */
   whatsapp: boolean
   /** "Quiero recibir avisos y novedades por correo". */
   correoPromo: boolean
@@ -110,7 +158,7 @@ export async function leerDisponibilidad(
           sinListaDeEspera: resultado.datos.sinListaDeEspera === true,
         },
       }
-    : resultado
+    : conMensajeClaro(resultado, HORAS_SIN_CARGAR)
 }
 
 export interface ReservaConfirmada {
@@ -124,6 +172,11 @@ export interface ReservaConfirmada {
   recibiraRecordatorio?: boolean
   /** La sede donde quedó la cita, tal como la guardó el servidor. Sólo viene si la cita tiene sede. */
   sede?: { nombre: string; direccion: string; comuna: string }
+  /**
+   * La reserva entró por confirmar (#84): el negocio la confirma después. Con
+   * `true` la pantalla no dice "confirmada". Ausente: confirmada, como siempre.
+   */
+  porConfirmar?: boolean
 }
 
 /**
@@ -137,7 +190,7 @@ export async function confirmarReserva(
 ): Promise<Resultado<ReservaConfirmada>> {
   return pedir<ReservaConfirmada>(
     `/api/reservar/${encodeURIComponent(slug)}/confirmar`,
-    "Error al confirmar la reserva",
+    "No pudimos guardar tu reserva",
     conJson("POST", {
       servicioIds: datos.servicioIds,
       profesionalId: datos.profesionalId ?? undefined,
@@ -170,6 +223,7 @@ export interface DatosDeListaDeEspera {
   /** `YYYY-MM-DD`. */
   fecha: string
   nombre: string
+  /** Opcional: vacío no se manda. */
   apellido: string
   email: string
   telefono: string
@@ -180,7 +234,7 @@ export interface DatosDeListaDeEspera {
 
 /** "Avísame si se libera una hora" (#74): anota en la lista de espera de ese día. */
 export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeListaDeEspera): Promise<Resultado> {
-  return pedir(
+  const resultado = await pedir(
     `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera`,
     "No se pudo anotar en la lista de espera",
     conJson("POST", {
@@ -189,7 +243,8 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
       sedeId: datos.sedeId ?? undefined,
       fecha: datos.fecha,
       nombre: datos.nombre,
-      apellido: datos.apellido,
+      // El apellido es opcional: vacío no se manda.
+      apellido: datos.apellido.trim() || undefined,
       email: datos.email,
       telefono: datos.telefono || undefined,
       whatsappConsentimiento: datos.telefono ? datos.whatsapp : undefined,
@@ -197,13 +252,15 @@ export async function inscribirEnListaDeEspera(slug: string, datos: DatosDeLista
       primeraVez: datos.primeraVez ?? undefined,
     })
   )
+  return conMensajeClaro(resultado, "No pudimos anotarte. Vuelve a apretar Avísame en un minuto.")
 }
 
 /** "Salir de la lista de espera", con el token del correo. */
 export async function salirDeLaListaDeEspera(slug: string, token: string): Promise<Resultado> {
-  return pedir(
+  const resultado = await pedir(
     `/api/reservar/${encodeURIComponent(slug)}/lista-de-espera/${encodeURIComponent(token)}`,
     "No se pudo completar, intenta de nuevo",
     { method: "POST" }
   )
+  return conMensajeClaro(resultado, "No pudimos sacarte de la lista. Vuelve a intentar en un minuto.")
 }

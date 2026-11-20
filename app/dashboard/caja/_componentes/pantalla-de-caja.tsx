@@ -52,11 +52,24 @@ function conSigno(monto: number): string {
   return monto > 0 ? `+${formatearMonto(monto)}` : formatearMonto(monto)
 }
 
-function Renglon({ termino, valor, fuerte = false }: { termino: string; valor: string; fuerte?: boolean }) {
+function Renglon({
+  termino,
+  valor,
+  fuerte = false,
+  tono,
+}: {
+  termino: string
+  valor: string
+  fuerte?: boolean
+  /** `error`: el valor en rojo (falta plata). */
+  tono?: "error"
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2">
       <dt className="text-texto-2">{termino}</dt>
-      <dd className={cn("text-right tabular-nums", fuerte ? "font-semibold" : "font-medium")}>{valor}</dd>
+      <dd className={cn("text-right tabular-nums", fuerte ? "font-semibold" : "font-medium", tono === "error" && "text-error")}>
+        {valor}
+      </dd>
     </div>
   )
 }
@@ -192,7 +205,9 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
   const idDelFondo = useId()
   const idDelContado = useId()
   const idDeLaNota = useId()
-  const [fondo, setFondo] = useState("")
+  // El fondo arranca con lo que se contó en el último cierre: lo normal es que
+  // esa plata siga en el cajón. Se puede cambiar.
+  const [fondo, setFondo] = useState(estado.fondoSugerido === null ? "" : String(estado.fondoSugerido))
   const [contado, setContado] = useState("")
   const [nota, setNota] = useState("")
   const [errores, setErrores] = useState<{ fondo?: string; contado?: string; nota?: string }>({})
@@ -211,8 +226,8 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
     evento.preventDefault()
     if (enviado.current) return
     const nuevos: typeof errores = {}
-    if (cuenta.fondo === null) nuevos.fondo = "Escribe el fondo inicial (0 si no había)."
-    if (cuenta.contado === null) nuevos.contado = "Escribe el efectivo que contaste."
+    if (cuenta.fondo === null) nuevos.fondo = "Escribe con cuánta plata abriste la caja (0 si no había)."
+    if (cuenta.contado === null) nuevos.contado = "Cuenta la plata del cajón y escribe cuánto hay."
     if (hayDiferencia && !nota.trim()) nuevos.nota = "Hay diferencia: explica en una nota qué pasó."
     setErrores(nuevos)
     setAviso("")
@@ -283,8 +298,12 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoDeMonto
               id={idDelFondo}
-              etiqueta="Fondo inicial"
-              ayuda="Lo que había en el cajón al abrir."
+              etiqueta="Plata con que abriste la caja"
+              ayuda={
+                estado.fondoSugerido === null
+                  ? "Lo que había en el cajón al empezar. 0 si estaba vacío."
+                  : "Te pusimos lo que se contó en el último cierre. Cámbialo si sacaste o pusiste plata."
+              }
               valor={fondo}
               error={errores.fondo}
               onCambio={(valor) => {
@@ -294,8 +313,8 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
             />
             <CampoDeMonto
               id={idDelContado}
-              etiqueta="Efectivo contado"
-              ayuda="Todo el efectivo del cajón, fondo incluido."
+              etiqueta="Plata que hay ahora en el cajón"
+              ayuda="Cuenta todos los billetes y monedas, también los del comienzo."
               valor={contado}
               error={errores.contado}
               onCambio={(valor) => {
@@ -305,14 +324,21 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
             />
           </div>
 
-          <dl className="divide-y divide-borde border-y border-borde text-sm" aria-live="polite">
-            <Renglon termino="Esperado" valor={cuenta.esperado === null ? "—" : formatearMonto(cuenta.esperado)} />
-            <Renglon
-              termino="Diferencia"
-              valor={cuenta.diferencia === null ? "—" : conSigno(cuenta.diferencia)}
-              fuerte
-            />
-          </dl>
+          <div aria-live="polite">
+            <dl className="divide-y divide-borde border-y border-borde text-sm">
+              <Renglon termino="Debería haber" valor={cuenta.esperado === null ? "—" : formatearMonto(cuenta.esperado)} />
+              <Renglon
+                termino="Diferencia"
+                valor={cuenta.diferencia === null ? "—" : cuenta.diferencia === 0 ? "Cuadra" : conSigno(cuenta.diferencia)}
+                fuerte
+                tono={cuenta.diferencia !== null && cuenta.diferencia < 0 ? "error" : undefined}
+              />
+            </dl>
+            <p className="mt-2 text-xs text-texto-2">
+              Debería haber = la plata con que abriste + lo cobrado en efectivo. Si falta plata, la diferencia sale en
+              rojo con un menos (por ejemplo, -$2.000); si sobra, con un más.
+            </p>
+          </div>
 
           <div>
             <label htmlFor={idDeLaNota} className={CLASES_DE_ETIQUETA}>
@@ -362,12 +388,13 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
             }}
           >
             <dl className="divide-y divide-borde border-y border-borde text-sm">
-              <Renglon termino="Esperado" valor={formatearMonto(confirmando.esperado)} />
-              <Renglon termino="Contado" valor={formatearMonto(confirmando.contado)} />
+              <Renglon termino="Debería haber" valor={formatearMonto(confirmando.esperado)} />
+              <Renglon termino="Hay en el cajón" valor={formatearMonto(confirmando.contado)} />
               <Renglon
                 termino="Diferencia"
                 valor={confirmando.diferencia === 0 ? "Cuadra" : conSigno(confirmando.diferencia)}
                 fuerte
+                tono={confirmando.diferencia < 0 ? "error" : undefined}
               />
             </dl>
           </ModalConfirmar>
@@ -456,13 +483,13 @@ function CierresAnteriores({
                     veLaLineaDePropinas(rubro, cierre.propinasEfectivo) ? "sm:grid-cols-5" : "sm:grid-cols-4"
                   )}
                 >
-                  <Renglon termino="Fondo" valor={formatearMonto(cierre.fondoInicial)} />
+                  <Renglon termino="Con que abrió" valor={formatearMonto(cierre.fondoInicial)} />
                   <Renglon termino="Efectivo" valor={formatearMonto(cierre.efectivoCobrado)} />
                   {veLaLineaDePropinas(rubro, cierre.propinasEfectivo) && (
                     <Renglon termino="Propinas en efectivo" valor={formatearMonto(cierre.propinasEfectivo)} />
                   )}
-                  <Renglon termino="Esperado" valor={formatearMonto(cierre.esperado)} />
-                  <Renglon termino="Contado" valor={formatearMonto(cierre.contado)} />
+                  <Renglon termino="Debería haber" valor={formatearMonto(cierre.esperado)} />
+                  <Renglon termino="Había" valor={formatearMonto(cierre.contado)} />
                 </dl>
                 {cierre.nota && <p className="mt-1 break-words text-texto-2">Nota: {cierre.nota}</p>}
                 <p className="mt-1 text-texto-2">Cerró {cierre.cerradoPor}</p>

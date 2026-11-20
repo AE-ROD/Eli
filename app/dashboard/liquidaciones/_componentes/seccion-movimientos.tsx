@@ -15,7 +15,13 @@ import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { leerMonto } from "@/lib/dinero"
-import { NOMBRES_DE_MOVIMIENTO, errorDeMonto, type TipoDeMovimiento } from "@/lib/movimientos"
+import {
+  NOMBRES_DE_MOVIMIENTO,
+  errorDeMonto,
+  montoDeLaOpcion,
+  opcionesDeMovimiento,
+  type TipoDeMovimiento,
+} from "@/lib/movimientos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import { anularMovimiento, registrarMovimiento, type MovimientoParaMostrar } from "../_datos"
@@ -162,7 +168,11 @@ function ModalRegistrar({
   const idDeLaFecha = useId()
   const idDelMotivo = useId()
   const [miembroId, setMiembroId] = useState(miembros[0]?.id ?? "")
-  const [tipo, setTipo] = useState<TipoDeMovimiento>(tipos[0])
+  const opciones = opcionesDeMovimiento(tipos)
+  const idDeLaAyuda = useId()
+  const [clave, setClave] = useState(opciones[0]?.clave)
+  const opcion = opciones.find((otra) => otra.clave === clave) ?? opciones[0]
+  const tipo = opcion.tipo
   const [montoTexto, setMontoTexto] = useState("")
   const [fecha, setFecha] = useState(hoy)
   const [motivo, setMotivo] = useState("")
@@ -174,11 +184,13 @@ function ModalRegistrar({
     evento.preventDefault()
     if (enviado.current) return
     setError("")
-    const monto = leerMonto(montoTexto)
-    if (monto === null) return setError("Escribe el monto.")
+    const escrito = leerMonto(montoTexto)
+    if (escrito === null) return setError("Escribe el monto.")
+    // El signo lo pone la opción elegida: se escribe siempre el monto sin signo.
+    const monto = montoDeLaOpcion(opcion, escrito)
     const errorDelMonto = errorDeMonto(tipo, monto)
     if (errorDelMonto) return setError(errorDelMonto)
-    if (tipo === "ajuste" && !motivo.trim()) return setError("Escribe el motivo del ajuste.")
+    if (tipo === "ajuste" && !motivo.trim()) return setError("Escribe el motivo: qué se corrige o por qué se suma.")
 
     enviado.current = true
     setGuardando(true)
@@ -192,7 +204,7 @@ function ModalRegistrar({
   return (
     <MarcoDeModal
       titulo="Registrar"
-      descripcion="Los adelantos y vales se descuentan; un ajuste suma o resta (escribe -5000 para restar)."
+      descripcion="Elige qué pasó y escribe el monto sin signo: la app sabe si suma o resta."
       bloqueado={guardando}
       alCerrar={alCerrar}
     >
@@ -203,20 +215,27 @@ function ModalRegistrar({
           onChange={(evento) => setMiembroId(evento.target.value)}
           opciones={miembros.map((m) => ({ valor: m.id, texto: m.nombre }))}
         />
-        <Selector
-          etiqueta="Qué es"
-          value={tipo}
-          onChange={(evento) => setTipo(evento.target.value as TipoDeMovimiento)}
-          opciones={tipos.map((t) => ({ valor: t, texto: NOMBRES_DE_MOVIMIENTO[t] }))}
-        />
+        <div className="space-y-1">
+          <Selector
+            etiqueta="Qué pasó"
+            value={opcion.clave}
+            onChange={(evento) => setClave(evento.target.value as typeof opcion.clave)}
+            opciones={opciones.map((o) => ({ valor: o.clave, texto: o.texto }))}
+            aria-describedby={idDeLaAyuda}
+          />
+          <p id={idDeLaAyuda} className="text-sm text-texto-2">
+            {opcion.ayuda}
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor={idDelMonto} className={CLASES_DE_ETIQUETA}>
-              Monto
+              {opcion.signo === -1 ? "Monto a restar" : tipo === "ajuste" ? "Monto a sumar" : "Monto a descontar"}
             </label>
             <input
               id={idDelMonto}
               inputMode="decimal"
+              placeholder="$0"
               value={montoTexto}
               onChange={(evento) => setMontoTexto(evento.target.value)}
               className={CAMPO}

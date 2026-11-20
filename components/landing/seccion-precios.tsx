@@ -18,7 +18,6 @@ import {
   SquareKanban,
   User,
   Users,
-  UsersRound,
   type LucideIcon,
 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
@@ -40,25 +39,24 @@ import {
 import { cn } from "@/lib/utils"
 
 /**
- * Lo que trae Eli en los dos planes: las piezas de "Lo que trae Eli". Los dos
- * traen todas las funciones (`docs/PRODUCTO.md`, sección 4), también el equipo
- * con roles: el Independiente puede sumar un encargado, que no atiende.
+ * Lo que trae Eli en los dos planes: las piezas de "Lo que trae Eli". Lo único
+ * que cambia entre planes es atender solo con varias sedes (Independiente) o
+ * invitar al equipo con una sede (Equipo); ver `docs/PRODUCTO.md`, sección 4.
  */
 const FUNCIONES: readonly { id: string; titulo: string; icono: LucideIcon }[] = [
   { id: "agenda", titulo: "Agenda por profesional", icono: CalendarDays },
   { id: "pagina-de-reservas", titulo: "Página de reservas", icono: Link2 },
   { id: "recordatorios", titulo: "Recordatorios por correo", icono: Mail },
   { id: "clientes", titulo: "Clientes con notas", icono: FileText },
-  { id: "tablero", titulo: "Tablero del día", icono: SquareKanban },
-  { id: "pago-dividido", titulo: "Pago dividido", icono: CreditCard },
+  { id: "tablero", titulo: "Quién llega hoy y qué falta cobrar", icono: SquareKanban },
+  { id: "pago-dividido", titulo: "Cobrar con dos medios de pago", icono: CreditCard },
   { id: "reportes", titulo: "Reportes de lo cobrado", icono: ChartColumn },
-  { id: "anulaciones", titulo: "Anulaciones con registro", icono: RotateCcw },
+  { id: "anulaciones", titulo: "Si te equivocas, lo deshaces y queda anotado", icono: RotateCcw },
   {
     id: "servicios-y-horarios",
     titulo: "Servicios y horarios",
     icono: Clock,
   },
-  { id: "equipo", titulo: "Equipo con roles", icono: UsersRound },
 ]
 
 const DIA_CON_ELI = [
@@ -85,7 +83,7 @@ const ROLES: readonly {
   },
   {
     rol: "Encargado",
-    texto: "Organiza la agenda, los servicios y el equipo. No cuenta como persona que atiende.",
+    texto: "Organiza la agenda, los servicios y el equipo. No atiende clientes, así que no se suma al precio.",
     icono: Users,
     tono: "frambuesa",
   },
@@ -186,10 +184,10 @@ function EncabezadoDePrecios() {
           titulo={
             <>
               Dos planes.
-              <br className="max-md:hidden" /> Las <span className="resaltado">mismas funciones.</span>
+              <br className="max-md:hidden" /> Todo lo demás, <span className="resaltado">igual.</span>
             </>
           }
-          subtitulo="Lo único que cambia es cuántas personas atienden. En pesos chilenos, con IVA incluido."
+          subtitulo="Independiente, para atender solo, también en varias sedes. Equipo, para invitar a tu equipo, con una sede. En pesos chilenos, con IVA incluido."
         />
         <ul className="mt-[26px] flex flex-wrap justify-center gap-3 md:gap-3.5">
           {PILDORAS.map(({ texto, icono: Icono, tono }) => (
@@ -253,7 +251,7 @@ function Incluido() {
           id="incluido-titulo"
           className="mt-4 text-balance text-[2rem] font-medium leading-[1.04] tracking-[-0.045em] md:text-[2.625rem]"
         >
-          Todo lo que trae <span className="resaltado [--resaltado-fondo:white]">Eli,</span> sin funciones bloqueadas.
+          Todo lo que trae <span className="resaltado [--resaltado-fondo:white]">Eli,</span> en los dos planes.
         </h3>
         <p className={cn("mt-4 text-base leading-normal", TEXTO_SOBRE_TINTE)}>
           Prueba {DIAS_DE_PRUEBA} días gratis, sin tarjeta, contados desde que creas tu negocio.

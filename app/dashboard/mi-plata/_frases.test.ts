@@ -11,6 +11,8 @@ describe("sin rubro: exactamente los textos de siempre", () => {
     expect(f.esperanSuPorcentaje(1)).toBe("1 servicio espera su porcentaje de comisión: avísale a la dueña.")
     expect(f.esperanSuPorcentaje(2)).toBe("2 servicios esperan su porcentaje de comisión: avísale a la dueña.")
     expect(f.esperanSuPorcentaje(12)).toBe("12 servicios esperan su porcentaje de comisión: avísale a la dueña.")
+    // Una dueña que también atiende puede ponerlo ella misma.
+    expect(f.esperanSuPorcentaje(1, true)).toBe("1 servicio espera su porcentaje de comisión: ponlo en Comisiones, en tu tarjeta.")
   })
 })
 

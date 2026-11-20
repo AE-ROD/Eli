@@ -62,7 +62,7 @@ export function MaquetaCobro({ activa }: PropsDeMaqueta) {
     >
       <div
         role="img"
-        aria-label="Maqueta: el cobro de María G., color + corte por $37.000, dividido entre efectivo ($20.000) y débito ($17.000), que cuadra al centavo"
+        aria-label="Maqueta: el cobro de María G., color + corte por $37.000, dividido entre efectivo ($20.000) y débito ($17.000), con la caja que cuadra sola"
         className={cn(TARJETA_DE_MAQUETA, "w-full max-w-[300px] p-5 @xl:w-[250px] @xl:flex-none")}
       >
         <p className="text-[13px] text-texto-2">Cobrar · María G.</p>
@@ -95,7 +95,7 @@ export function MaquetaCobro({ activa }: PropsDeMaqueta) {
               <span className="grid size-5 place-items-center rounded-full bg-pistacho text-navy">
                 <Check className="size-3" strokeWidth={2.5} />
               </span>
-              Cuadra al centavo
+              La caja cuadra sola
             </motion.div>
           </div>
         </div>

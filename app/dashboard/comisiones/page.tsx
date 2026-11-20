@@ -31,6 +31,7 @@ export default async function PaginaComisiones() {
       <BarraSuperior titulo="Comisiones" subtitulo={frases.subtitulo} mostrarBusqueda={false} />
 
       <div className="max-w-5xl space-y-6 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+        <p className="text-sm text-pretty text-texto-2">{frases.queEsElPorcentaje}</p>
         {/* Sólo en una clínica dental: las prótesis se reparten en tres partes, aparte de la comisión. */}
         {puedeConfigurarRepartoDeProtesis(actor) && (
           <section aria-labelledby="reparto-de-protesis" className={`${TARJETA_DEL_PANEL} p-5 sm:p-6`}>

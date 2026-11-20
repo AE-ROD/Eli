@@ -239,6 +239,11 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
                 Versión {plan.version} · armada el {fechaCorta(plan.createdAt, zona)} por {plan.creadoPorNombre}
               </p>
             )}
+            {plan && (
+              <p className="mt-1 text-sm text-pretty text-texto-2">
+                Cada etapa junta los tratamientos que se hacen juntos y se aprueban juntos.
+              </p>
+            )}
           </div>
           {puedeEditar && (
             <div className="flex flex-wrap gap-2">

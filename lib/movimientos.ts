@@ -20,6 +20,68 @@ export const NOMBRES_DE_MOVIMIENTO: Record<TipoDeMovimiento, string> = {
   ajuste: "Ajuste",
 }
 
+/**
+ * Lo que se elige al registrar, en palabras de quien registra. Cada opción es
+ * uno de los tipos de siempre y el signo lo pone la app: nadie escribe
+ * "-5000". Lo que se guarda no cambia: adelanto y vale en positivo (se
+ * descuentan), ajuste con su signo.
+ */
+export interface OpcionDeMovimiento {
+  clave: "adelanto" | "vale" | "descuento" | "extra"
+  texto: string
+  /** Una línea que dice qué es, debajo del selector. */
+  ayuda: string
+  tipo: TipoDeMovimiento
+  /** Con qué signo se guarda el monto escrito. */
+  signo: 1 | -1
+}
+
+export const OPCIONES_DE_MOVIMIENTO: readonly OpcionDeMovimiento[] = [
+  {
+    clave: "adelanto",
+    texto: "Le adelanté plata",
+    ayuda: "Plata que se le pasó antes: se le descuenta en la próxima liquidación.",
+    tipo: "adelanto",
+    signo: 1,
+  },
+  {
+    clave: "vale",
+    texto: "Se llevó algo a cuenta (vale)",
+    ayuda: "Un vale es algo que se llevó sin pagar, como un producto: se le descuenta en la próxima liquidación.",
+    tipo: "vale",
+    signo: 1,
+  },
+  {
+    clave: "descuento",
+    texto: "Le descuento algo",
+    ayuda: "Corrige algo ya cobrado y resta de la liquidación. Di el motivo.",
+    tipo: "ajuste",
+    signo: -1,
+  },
+  {
+    clave: "extra",
+    texto: "Le sumo un extra",
+    ayuda: "Corrige algo ya cobrado o reconoce un extra, y suma a la liquidación. Di el motivo.",
+    tipo: "ajuste",
+    signo: 1,
+  },
+]
+
+/** Las opciones que quien registra puede usar, según los tipos que maneja. */
+export function opcionesDeMovimiento(tipos: readonly TipoDeMovimiento[]): OpcionDeMovimiento[] {
+  return OPCIONES_DE_MOVIMIENTO.filter((opcion) => tipos.includes(opcion.tipo))
+}
+
+/**
+ * El monto tal como se guarda: el que se escribió, sin signo, con el signo de
+ * la opción. Si alguien escribió "-5000" igual, el signo lo sigue poniendo la
+ * opción elegida.
+ */
+export function montoDeLaOpcion(opcion: OpcionDeMovimiento, montoEscrito: number): number {
+  const monto = Math.abs(montoEscrito)
+  return opcion.signo === -1 ? -monto : monto
+}
+
 export const esTipoDeMovimiento = (valor: unknown): valor is TipoDeMovimiento =>
   typeof valor === "string" && (TIPOS_DE_MOVIMIENTO as readonly string[]).includes(valor)
 

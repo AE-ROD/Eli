@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { ChevronRight, HandCoins, History, Smile } from "lucide-react"
 import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
-import { actorDeSesion, esClinicaDental, veLaLineaDePropinas, veMiPlata } from "@/lib/permisos"
+import { actorDeSesion, esClinicaDental, puedeEditarComisiones, veLaLineaDePropinas, veMiPlata } from "@/lib/permisos"
 import { calcularMiPlata, type Ganado } from "@/lib/mi-plata"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
@@ -94,11 +94,11 @@ export default async function PaginaMiPlata() {
           <section aria-labelledby="titulo-por-liberar" className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
             <EncabezadoDeTarjeta
               id="titulo-por-liberar"
-              titulo="Prótesis por liberar"
+              titulo="Abonos de prótesis que aún no te llegan"
               subtitulo={
                 plata.protesisPorLiberar.abonos > 0
                   ? `Tu parte de ${plata.protesisPorLiberar.abonos === 1 ? "1 abono ya cobrado" : `${plata.protesisPorLiberar.abonos} abonos ya cobrados`} de prótesis que todavía no se entregan.`
-                  : "Nada cobrado de prótesis tuyas sin entregar."
+                  : "No hay abonos de prótesis tuyas esperando la entrega."
               }
               icono={{ figura: Smile }}
             />
@@ -106,7 +106,8 @@ export default async function PaginaMiPlata() {
               <>
                 <p className="mt-4 text-2xl font-medium tabular-nums">{pesos(plata.protesisPorLiberar.totalCents)}</p>
                 <p className="mt-1 text-sm text-texto-2">
-                  Se libera al entregar cada prótesis: desde ese día cuenta en lo ganado y entra en tu liquidación.
+                  ¿Por qué todavía no? Tu parte de una prótesis se gana al entregarla. El día que se entrega, pasa a lo
+                  ganado y entra en tu liquidación.
                 </p>
               </>
             )}
@@ -115,7 +116,12 @@ export default async function PaginaMiPlata() {
 
         {plata.esperanPorcentaje > 0 && (
           <Aviso tono="atencion" rol="status">
-            {frases.esperanSuPorcentaje(plata.esperanPorcentaje)}
+            {frases.esperanSuPorcentaje(plata.esperanPorcentaje, puedeEditarComisiones(actor))}
+            {puedeEditarComisiones(actor) && (
+              <Link href="/dashboard/comisiones" className="mt-2 block font-medium text-navy underline underline-offset-2">
+                Ir a Comisiones
+              </Link>
+            )}
           </Aviso>
         )}
 

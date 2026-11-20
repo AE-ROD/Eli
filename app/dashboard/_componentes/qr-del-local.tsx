@@ -118,7 +118,14 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
   const nombreDelQr = enlace ? `Código QR que lleva a tu página de reservas: ${enlace}` : ""
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    // `id`: a dónde lleva "Ver QR" desde el enlace de reservas y la bienvenida.
+    // `tabIndex={-1}`: al llegar por el ancla, el foco entra a la tarjeta.
+    <section
+      id="qr-del-local"
+      tabIndex={-1}
+      aria-labelledby={idDelTitulo}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24 p-5 outline-none sm:p-6")}
+    >
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={tituloDelQr}

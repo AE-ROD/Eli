@@ -230,7 +230,7 @@ export function ModalNuevaEtapa({ pacienteId, alTerminar, alCerrar }: { paciente
   }
 
   return (
-    <MarcoDeModal titulo="Agregar etapa" descripcion="Va al final del plan, por aprobar." bloqueado={guardando} alCerrar={alCerrar}>
+    <MarcoDeModal titulo="Agregar etapa" descripcion="Una etapa son tratamientos que se hacen juntos y se aprueban juntos. Va al final del plan, por aprobar." bloqueado={guardando} alCerrar={alCerrar}>
       <form onSubmit={agregar} className="space-y-5" noValidate>
         <div>
           <label htmlFor={`${id}-nombre`} className={ETIQUETA}>
@@ -264,6 +264,17 @@ interface PropsDeCamposDePiezaYCaras {
   error?: string
   alElegirPieza: (texto: string) => void
   alAlternarCara: (cara: Cara) => void
+}
+
+/** Qué lado del diente es cada cara, dicho en llano, debajo de su nombre. */
+const AYUDA_DE_CARA: Record<Cara, string> = {
+  V: "hacia el labio o la mejilla",
+  P: "hacia el paladar",
+  L: "hacia la lengua",
+  M: "hacia el centro de la boca",
+  D: "hacia el fondo de la boca",
+  O: "la que mastica",
+  I: "el borde que corta",
 }
 
 /** La pieza (o boca completa) y sus caras: los de "Agregar prestación" y los de "Editar prestación". */
@@ -303,7 +314,8 @@ function CamposDePiezaYCaras({ id, pieza, caras, error, alElegirPieza, alAlterna
 
       {numeroDePieza !== null && (
         <fieldset aria-describedby={error ? `${id}-error-caras` : undefined}>
-          <legend className={ETIQUETA}>Caras (si la prestación es de algunas)</legend>
+          <legend className={ETIQUETA}>Caras del diente (sólo si el tratamiento es en algunas)</legend>
+          <p className="-mt-1 mb-2 text-xs text-pretty text-texto-2">Cada cara es un lado del diente. Marca las que se tratan.</p>
           <div className="flex flex-wrap gap-2">
             {carasPosibles.map((cara) => (
               <label
@@ -319,7 +331,10 @@ function CamposDePiezaYCaras({ id, pieza, caras, error, alElegirPieza, alAlterna
                   onChange={() => alAlternarCara(cara)}
                   className="anillo-foco size-4 shrink-0 cursor-pointer accent-navy"
                 />
-                <span className="capitalize">{nombreDeCara(cara)}</span>
+                <span className="flex flex-col leading-tight">
+                  <span className="capitalize">{nombreDeCara(cara)}</span>
+                  <span className="text-xs text-texto-2">{AYUDA_DE_CARA[cara]}</span>
+                </span>
               </label>
             ))}
           </div>

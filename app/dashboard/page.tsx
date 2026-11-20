@@ -92,9 +92,10 @@ export default function PaginaPanel() {
     })
   }, [verInvitacion])
 
-  // Al copiar el enlace: se anota en el servidor y el paso se marca en la
-  // lista sin recargar. Sin esperar ni avisar si falla: el enlace ya se copió.
-  const alCopiarElEnlace = useCallback(() => {
+  // Al copiar, mandar o compartir el enlace: se anota en el servidor y el paso
+  // se marca en la lista sin recargar. Sin esperar ni avisar si falla: el
+  // enlace ya salió.
+  const alCompartirElEnlace = useCallback(() => {
     void marcarEnlaceCompartido()
     setListaDeInicio((lista) => (lista ? { ...lista, pasos: { ...lista.pasos, enlace: true } } : lista))
   }, [])
@@ -153,7 +154,11 @@ export default function PaginaPanel() {
 
             {slugDelNegocio && (
               <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2 xl:items-start">
-                <EnlaceDeReservas slug={slugDelNegocio} alCopiar={verListaDeInicio ? alCopiarElEnlace : undefined} />
+                <EnlaceDeReservas
+                  slug={slugDelNegocio}
+                  alCompartir={verListaDeInicio ? alCompartirElEnlace : undefined}
+                  conQr
+                />
                 <QrDelLocal slug={slugDelNegocio} nombreNegocio={nombreDelNegocio} />
               </div>
             )}

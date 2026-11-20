@@ -16,7 +16,26 @@
  */
 
 import { cantidadDe, concordar, el, ese, este, numeroDe, pronombreDe, un } from "@/lib/concordancia"
+import { deCentavos } from "@/lib/atenciones"
+import { formatearMonto } from "@/lib/dinero"
+import { repartirMonto, type RepartoEnPuntosBase } from "@/lib/protesis"
 import { conMayuscula, type PalabrasDelRubro } from "@/lib/vocabulario"
+
+/** El monto del ejemplo del reparto cuando no hay un precio a mano: $100.000. */
+export const MONTO_DEL_EJEMPLO_CENTS = 100_000_00
+
+/**
+ * El reparto dicho en pesos, con la misma función que reparte de verdad
+ * (`repartirMonto`, sin la regla de la dueña tratante): "Ejemplo: de $100.000
+ * cobrados, tratante $40.000, clínica $40.000 y laboratorio $20.000.". Un monto
+ * que no es positivo usa el de ejemplo.
+ */
+export function ejemploDelReparto(reparto: RepartoEnPuntosBase, montoCents: number = MONTO_DEL_EJEMPLO_CENTS): string {
+  const monto = Number.isSafeInteger(montoCents) && montoCents > 0 ? montoCents : MONTO_DEL_EJEMPLO_CENTS
+  const partes = repartirMonto(monto, reparto, false)
+  const pesos = (centavos: number) => formatearMonto(deCentavos(centavos))
+  return `Ejemplo: de ${pesos(monto)} cobrados, tratante ${pesos(partes.odontologoCents)}, clínica ${pesos(partes.clinicaCents)} y laboratorio ${pesos(partes.tecnicoCents)}.`
+}
 
 export function frasesDeLasComisiones(palabras: PalabrasDelRubro) {
   const { cliente, profesional, servicio, negocio } = palabras
@@ -24,6 +43,8 @@ export function frasesDeLasComisiones(palabras: PalabrasDelRubro) {
   const todosSusServicios = `${concordar("todo", servicio, "plural")} sus ${servicio.plural}`
 
   return {
+    /** La línea de arriba de la página: qué es el %. */
+    queEsElPorcentaje: `El % es lo que se lleva cada persona de lo que cobra por ${ese(servicio)}.`,
     /** Debajo del título de la página. */
     subtitulo: `El porcentaje de cada ${profesional.singular}, por ${servicio.singular} y por producto.`,
     /** El aviso de que los pendientes no se contaron todos. */
@@ -64,11 +85,11 @@ export function frasesDeLasComisiones(palabras: PalabrasDelRubro) {
     /** Clínica dental: el reparto de las prótesis, que habla de sus odontólogos y de lo que se cobra al paciente. */
     protesis: {
       /** La tarjeta de la página de Comisiones que lleva al reparto. */
-      tarjeta: `Las prótesis se reparten en tres partes (la tratante, la clínica y el laboratorio) según el material. El resto de ${el(servicio, "plural")} sigue con el % de comisión de cada ${profesional.singular}, aquí abajo.`,
+      tarjeta: `Las prótesis se reparten entre la tratante, la clínica y el laboratorio, según el material. El resto de ${el(servicio, "plural")}, con el % de comisión de abajo.`,
       /** Sobre qué valor se calculan los porcentajes. */
       valorQuePaga: `El valor que paga ${el(cliente)}`,
       /** Cómo se calcula, al pie de la sección. */
-      comoSeCalcula: `Las prótesis se reparten en tres partes: la tratante, la clínica y el laboratorio. El resto de ${el(servicio, "plural")} sigue con el % de comisión de cada ${profesional.singular}. Cada prótesis guarda su regla al crearse: lo que cambies aquí aplica a las prótesis nuevas; las creadas antes mantienen su regla.`,
+      comoSeCalcula: `El resto de ${el(servicio, "plural")} sigue con el % de comisión de cada ${profesional.singular}. Lo que cambies aquí vale para las prótesis nuevas; las de antes no cambian.`,
       /** El título de la sección de excepciones. */
       excepcionesPor: `Excepciones por ${profesional.singular}`,
       /** Cuando no hay nadie a quien darle una excepción. */

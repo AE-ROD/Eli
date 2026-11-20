@@ -46,7 +46,7 @@ import {
   type MaterialEscrito,
   type RepartoEscrito,
 } from "../_datos"
-import { frasesDeLasComisiones } from "../_frases"
+import { ejemploDelReparto, frasesDeLasComisiones } from "../_frases"
 
 /** El color de cada parte: el pastel fuerte de un módulo, con texto navy. Nunca la única pista: cada una va con su nombre. */
 const PARTES = [
@@ -214,12 +214,12 @@ export function RepartoDeProtesisConfig() {
           <li className="rounded-[24px] bg-superficie p-4 squircle">
             <p className="antetitulo">Porcentajes sobre</p>
             <p className="mt-1.5 font-medium">{frases.valorQuePaga}</p>
-            <p className="mt-1 text-sm text-texto-2">Cada parte es un % de lo cobrado. No se descuenta el costo de los materiales.</p>
+            <p className="mt-1 text-sm text-texto-2">Cada parte es un % de lo cobrado, sin descontar materiales.</p>
           </li>
           <li className="rounded-[24px] bg-superficie p-4 squircle">
             <p className="antetitulo">Se liquida cuando</p>
             <p className="mt-1.5 font-medium">La prótesis queda entregada</p>
-            <p className="mt-1 text-sm text-texto-2">Lo cobrado antes de la entrega se libera al entregarla.</p>
+            <p className="mt-1 text-sm text-texto-2">Lo cobrado antes espera hasta la entrega.</p>
           </li>
         </ul>
         <p className="mt-4 text-sm text-texto-2">
@@ -231,7 +231,7 @@ export function RepartoDeProtesisConfig() {
         <EncabezadoDeTarjeta
           id={idMateriales}
           titulo="Reglas por material"
-          subtitulo="El precio, cómo se cobra, para qué tipos sirve y cuánto recibe cada parte."
+          subtitulo="El precio de cada material y cuánto recibe cada parte."
           accion={
             <Boton type="button" tamano="sm" icono={<Plus aria-hidden="true" />} onClick={() => setModalMaterial({ material: null })}>
               Agregar material
@@ -259,7 +259,10 @@ export function RepartoDeProtesisConfig() {
                     Laboratorio por defecto: {material.laboratorioPorDefecto?.nombre ?? "ninguno"}
                   </p>
                 </div>
-                <BarraDeReparto reparto={material} className="min-w-0 flex-[1_1_220px]" />
+                <div className="min-w-0 flex-[1_1_220px]">
+                  <BarraDeReparto reparto={material} />
+                  <p className="mt-1.5 text-[13px] text-texto-2 tabular-nums">{ejemploDelReparto(material, material.precioCents)}</p>
+                </div>
                 <Boton
                   type="button"
                   variante="secundario"
@@ -428,10 +431,13 @@ function CamposDeReparto({
   escrito,
   alCambiar,
   intentado,
+  montoDelEjemplo,
 }: {
   escrito: RepartoEscrito
   alCambiar: (escrito: RepartoEscrito) => void
   intentado: boolean
+  /** El precio para el ejemplo en pesos; sin él, $100.000. */
+  montoDelEjemplo?: number
 }) {
   const id = useId()
   const leido = leerReparto(escrito)
@@ -472,6 +478,11 @@ function CamposDeReparto({
       >
         {leido.ok ? "Suma 100 %." : leido.error}
       </p>
+      {leido.ok && (
+        <p aria-live="polite" className="mt-2 text-[13px] text-texto-2 tabular-nums">
+          {ejemploDelReparto(leido.reparto, montoDelEjemplo)}
+        </p>
+      )}
     </fieldset>
   )
 }
@@ -606,7 +617,12 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
           {intentado && errorDeTipos && <p className="mt-1 text-xs font-medium text-error">{errorDeTipos}</p>}
         </fieldset>
 
-        <CamposDeReparto escrito={reparto} alCambiar={setReparto} intentado={intentado} />
+        <CamposDeReparto
+          escrito={reparto}
+          alCambiar={setReparto}
+          intentado={intentado}
+          montoDelEjemplo={monto !== null && esPrecioValido(monto) ? aCentavos(monto) : undefined}
+        />
 
         <div>
           <label htmlFor={`${id}-laboratorio`} className={ETIQUETA}>
@@ -778,7 +794,7 @@ function ModalExcepcion({ excepcion, materiales, odontologos, frases, alGuardar,
           </p>
         )}
 
-        <CamposDeReparto escrito={reparto} alCambiar={setReparto} intentado={intentado} />
+        <CamposDeReparto escrito={reparto} alCambiar={setReparto} intentado={intentado} montoDelEjemplo={delMaterial?.precioCents} />
 
         {error && <Aviso>{error}</Aviso>}
         <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">

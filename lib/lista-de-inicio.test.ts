@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   PASOS_DE_INICIO,
   cuantosHechos,
+  enlaceDeWhatsApp,
+  mensajeParaCompartir,
   mostrarListaDeInicio,
   pasosDeInicioPara,
   pruebaTerminada,
@@ -85,5 +87,31 @@ describe("lista de inicio", () => {
     const fin = new Date("2026-10-22T12:00:00.000Z")
     expect(pruebaTerminada(fin, new Date("2026-10-22T11:59:59.999Z"))).toBe(false)
     expect(pruebaTerminada(fin, fin)).toBe(true)
+  })
+})
+
+describe("compartir el enlace de reservas", () => {
+  const enlace = "https://eli.cl/reservar/mi-salon"
+
+  it("el mensaje lleva el enlace y la palabra que lee quien reserva", () => {
+    expect(mensajeParaCompartir("salon", enlace)).toBe(
+      `¡Hola! Ya puedes reservar tu hora en línea, cuando quieras: ${enlace}`
+    )
+    expect(mensajeParaCompartir("odontologia", enlace)).toContain("reservar tu hora")
+    expect(mensajeParaCompartir(null, enlace)).toContain("reservar tu cita")
+  })
+
+  it("WhatsApp recibe el mensaje entero codificado, sin número de destino", () => {
+    const mensaje = mensajeParaCompartir("salon", enlace)
+    const url = enlaceDeWhatsApp(mensaje)
+    expect(url.startsWith("https://wa.me/?text=")).toBe(true)
+    expect(url).not.toContain(" ")
+    expect(decodeURIComponent(url.slice("https://wa.me/?text=".length))).toBe(mensaje)
+  })
+
+  it("el paso de la lista invita a compartir y lleva a la tarjeta del enlace", () => {
+    const paso = PASOS_DE_INICIO.find((p) => p.id === "enlace")
+    expect(paso?.accion).toEqual({ texto: "Compartir enlace", href: "#enlace-de-reservas" })
+    expect(paso?.texto).toMatch(/WhatsApp/)
   })
 })

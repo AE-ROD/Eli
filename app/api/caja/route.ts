@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
   const [ultimo, total, cierres] = await Promise.all([
     prisma.cierreDeCaja.findFirst({
       where: whereDeCierresDeCaja(actor),
-      select: { hasta: true },
+      select: { hasta: true, efectivoContadoCents: true },
       orderBy: { hasta: "desc" },
     }),
     prisma.cierreDeCaja.count({ where: whereDeCierresDeCaja(actor) }),
@@ -196,6 +196,12 @@ export async function GET(request: NextRequest) {
       /** El cobro más antiguo de un día anterior a hoy, si la caja arrastra días sin cerrar (#120); si no, null. */
       cobrosDesde: cobroDeOtroDia,
     },
+    /**
+     * Lo contado en el último cierre: la pantalla lo precarga como fondo
+     * inicial (se puede cambiar). Null si la caja nunca se cerró. No entra en
+     * ninguna cuenta del servidor: el fondo lo sigue mandando la pantalla.
+     */
+    fondoSugerido: ultimo ? deCentavos(ultimo.efectivoContadoCents) : null,
     cierres: cierres.map(formatearCierre),
     total,
     pagina,

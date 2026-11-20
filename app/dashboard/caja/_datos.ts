@@ -50,6 +50,8 @@ export interface EstadoDeCaja {
     /** El cobro más antiguo de un día anterior a hoy: la caja arrastra días sin cerrar. Null si todo es de hoy. */
     cobrosDesde: string | null
   }
+  /** Lo contado en el último cierre, para precargar el fondo inicial (editable). Null si nunca se cerró. */
+  fondoSugerido: number | null
   cierres: CierreDeCaja[]
   total: number
   pagina: number
