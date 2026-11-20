@@ -10,7 +10,7 @@ import { MarcaDeEli } from "@/components/comunes/marca-de-eli"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { frasesDelInicio } from "../_frases"
@@ -124,7 +124,7 @@ export function QrDelLocal({ slug, nombreNegocio }: PropsDeQrDelLocal) {
       id="qr-del-local"
       tabIndex={-1}
       aria-labelledby={idDelTitulo}
-      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24 p-5 outline-none sm:p-6")}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24 outline-none", RELLENO_DE_TARJETA)}
     >
       <EncabezadoDeTarjeta
         id={idDelTitulo}

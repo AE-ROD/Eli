@@ -9,7 +9,7 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { comoTexto, desplazarFecha, diasDeLaSemanaDe, limitesDelMesDe } from "@/lib/fechas"
 import { DIAS_MAXIMOS } from "@/lib/periodos"
 import { periodoParaLeer } from "@/lib/periodos-de-liquidacion"
@@ -108,8 +108,8 @@ export function LlenarHoras() {
   const mostrar = reporte !== null && rango.ok && !error
 
   return (
-    <div className="space-y-6">
-      <div className={cn(TARJETA_DEL_PANEL, "flex flex-wrap items-end gap-4 p-5 sm:p-6")}>
+    <div className="space-y-4 lg:space-y-6">
+      <div className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "flex flex-wrap items-end gap-4")}>
         <div className="w-full sm:w-56">
           <Selector
             etiqueta="Período"
@@ -126,7 +126,7 @@ export function LlenarHoras() {
         </div>
         {periodo === "personalizado" && (
           <>
-            <div>
+            <div className="max-lg:min-w-0 max-lg:flex-1">
               <label htmlFor={idDelDesde} className={CLASES_DE_ETIQUETA}>
                 Desde
               </label>
@@ -138,7 +138,7 @@ export function LlenarHoras() {
                 className={cn(CAMPO, "mt-2")}
               />
             </div>
-            <div>
+            <div className="max-lg:min-w-0 max-lg:flex-1">
               <label htmlFor={idDelHasta} className={CLASES_DE_ETIQUETA}>
                 Hasta
               </label>
@@ -170,10 +170,10 @@ export function LlenarHoras() {
       )}
 
       {!reporte && cargando && (
-        <div role="status" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div role="status" className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4">
           <span className="sr-only">Cargando el reporte…</span>
           {[0, 1, 2, 3].map((cifra) => (
-            <div key={cifra} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
+            <div key={cifra} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
               <Esqueleto className="w-1/2" />
               <Esqueleto className="h-7 w-1/3" />
             </div>
@@ -182,7 +182,7 @@ export function LlenarHoras() {
       )}
 
       {mostrar && (
-        <div aria-busy={cargando} className={cn("space-y-6 transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
+        <div aria-busy={cargando} className={cn("space-y-4 lg:space-y-6 transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
           {reporte.truncado && (
             <Aviso tono="atencion" rol="status">
               {frases.demasiadas}
@@ -194,7 +194,8 @@ export function LlenarHoras() {
             {periodoParaLeer(reporte.periodoAnterior.desde, reporte.periodoAnterior.hasta)}), {frases.zonaHoraria}.
           </p>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {/* En el celular, de a dos: las que traen su lectura van a lo ancho. */}
+          <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4">
             <CifraConComparacion
               titulo="Ocupación del equipo"
               valor={formatearTasa(reporte.ocupacion.total.ocupacion)}
@@ -202,6 +203,7 @@ export function LlenarHoras() {
               comparacion={textoDeComparacion(reporte.comparacion.ocupacion, "tasa")}
               lectura={frases.lecturaDeOcupacion(reporte.ocupacion.total.ocupacion)}
               principal
+              className="max-lg:col-span-2"
             />
             <CifraConComparacion
               titulo={frases.clientesNuevos}
@@ -221,10 +223,11 @@ export function LlenarHoras() {
               icono={UserX}
               comparacion={textoDeComparacion(reporte.comparacion.inasistencia, "tasa")}
               lectura={frases.lecturaDeInasistencia(reporte.inasistencia.total.tasa)}
+              className="max-lg:col-span-2"
             />
           </div>
 
-          <section aria-labelledby={idDeOcupacion} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+          <section aria-labelledby={idDeOcupacion} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
             <h2 id={idDeOcupacion} className={TITULO_DE_TARJETA}>
               {frases.ocupacionPor}
             </h2>
@@ -258,7 +261,7 @@ export function LlenarHoras() {
             )}
           </section>
 
-          <section aria-labelledby={idDeInasistencia} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+          <section aria-labelledby={idDeInasistencia} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
             <h2 id={idDeInasistencia} className={TITULO_DE_TARJETA}>
               Inasistencia
             </h2>
@@ -287,14 +290,16 @@ export function LlenarHoras() {
   )
 }
 
+/** `className` va en la columna entera (la cifra y su comparación): para que ocupe dos en el celular. */
 function CifraConComparacion({
   comparacion,
+  className,
   ...props
 }: Parameters<typeof Cifra>[0] & { comparacion: string }) {
   return (
-    <div className="flex flex-col">
+    <div className={cn("flex flex-col", className)}>
       <Cifra {...props} className="flex-1 rounded-b-none" />
-      <p className={cn(TARJETA_DEL_PANEL, "-mt-px rounded-t-none border-t border-borde px-5 py-2.5 text-xs text-texto-2 sm:px-6")}>
+      <p className={cn(TARJETA_DEL_PANEL, "-mt-px rounded-t-none border-t border-borde px-4 py-2.5 text-xs text-texto-2 lg:px-6")}>
         {comparacion}
       </p>
     </div>

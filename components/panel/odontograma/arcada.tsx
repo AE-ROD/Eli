@@ -1,9 +1,11 @@
 "use client"
 
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
+import { useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
 import {
   carasDe,
   esCara,
+  esDelMaxilar,
   posicionDe,
   type Cara,
   type Denticion,
@@ -30,21 +32,27 @@ import {
   LINEA_ENTRE_ARCADAS,
   LINEA_MEDIA,
   TECLAS_DE_LA_ARCADA,
+  escalaDeLaArcada,
+  filasDeLaArcada,
+  franjaDeLaVista,
   geometriaDeLaArcada,
   piezaVecina,
   type GeometriaDePieza,
   type LugarDeCara,
   type TeclaDeLaArcada,
+  type VistaDeLaArcada,
 } from "./geometria"
 import { etiquetaDePieza, marcaDeCara, nombreAccesibleDePieza, tieneMarcaDePieza } from "./marcas"
 
-/**
- * La escala más chica a la que se dibuja la arcada. Más chica, los números
- * dejan de leerse y las piezas no se pueden tocar con el dedo: por debajo
- * de este ancho, la arcada se desplaza de lado dentro de su caja (nunca la
- * página).
- */
-export const ESCALA_MINIMA = 0.72
+/** La escala mínima en el computador vive con el resto de la geometría; la prótesis la importa de acá. */
+export { ESCALA_MINIMA } from "./geometria"
+
+/** Las vistas del selector del celular, con su texto. */
+const VISTAS: readonly { id: VistaDeLaArcada; texto: string }[] = [
+  { id: "completa", texto: "Toda la boca" },
+  { id: "superior", texto: "Superior" },
+  { id: "inferior", texto: "Inferior" },
+]
 
 /** Cada cara es un trapecio del cuadrado de la pieza (en un lienzo de 100 × 100), y el centro, un cuadrado. */
 const POLIGONOS: Record<LugarDeCara, string> = {
@@ -91,6 +99,13 @@ interface PropsDeArcada {
  *   P, L) es tocar esa cara.
  *
  * Se achica con su caja hasta `ESCALA_MINIMA`; los números siguen a 12px.
+ *
+ * En el celular (por debajo de `lg`) hay un selector: "Toda la boca" entra a
+ * lo ancho, sin cortar piezas, para mirar; "Superior" e "Inferior" acercan
+ * una arcada hasta que la pieza más chica mide 32 px (`escalaDeLaArcada`),
+ * cómoda para el dedo, y se desplazan de lado dentro de su caja. La arcada
+ * acercada es la de la pieza elegida: elegir una de la otra (con las flechas
+ * o desde los hallazgos) cambia de arcada sola.
  */
 export function Arcada({
   denticion,
@@ -106,7 +121,18 @@ export function Arcada({
   // Para los ids de las rayas del sellante: sin los signos que no van en `url(#…)`.
   const idBase = `arcada${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`
   const botones = useRef(new Map<number, HTMLButtonElement>())
-  const [escala, setEscala] = useState(1)
+  const [ancho, setAncho] = useState(0)
+  const celular = !useEsEscritorio()
+  // Sólo en el celular: si se acercó una arcada. Cuál, lo dice la pieza elegida.
+  const [acercada, setAcercada] = useState(false)
+  const todas = geometriaDeLaArcada(denticion)
+  const elegidaEnLaDenticion = todas.some((g) => g.pieza === seleccionada)
+  const vista: VistaDeLaArcada =
+    celular && acercada ? (!elegidaEnLaDenticion || esDelMaxilar(seleccionada) ? "superior" : "inferior") : "completa"
+  const escala = escalaDeLaArcada(ancho, { celular, vista, denticion })
+  const franja = franjaDeLaVista(vista)
+  // La pieza a la que van las flechas, si es de la arcada que todavía no se dibuja: se enfoca al dibujarse.
+  const porEnfocar = useRef<number | null>(null)
 
   // Se mide la caja y no la ventana: al lado del panel de la pieza, la caja
   // es más angosta que la pantalla.
@@ -115,23 +141,47 @@ export function Arcada({
     if (!nodo) return
     // El observador avisa también apenas empieza a mirar: ésa es la primera medida.
     const observador = new ResizeObserver(() => {
-      const ancho = nodo.clientWidth
-      if (ancho > 0) setEscala(Math.min(1, Math.max(ESCALA_MINIMA, ancho / ANCHO_DE_LA_ARCADA)))
+      if (nodo.clientWidth > 0) setAncho(nodo.clientWidth)
     })
     observador.observe(nodo)
     return () => observador.disconnect()
   }, [])
 
-  // Si no entra, se desplaza: de entrada se muestra el centro, con los incisivos.
-  useLayoutEffect(() => {
+  // Si no entra, se desplaza: de entrada se muestra el centro, con los incisivos; con una
+  // arcada acercada, la pieza elegida (sólo al cambiar de vista, no a cada toque).
+  const centrar = useEffectEvent(() => {
     const nodo = caja.current
-    if (nodo && nodo.scrollWidth > nodo.clientWidth) nodo.scrollLeft = (nodo.scrollWidth - nodo.clientWidth) / 2
-  }, [denticion, escala])
+    if (!nodo || nodo.scrollWidth <= nodo.clientWidth) return
+    const centro = vista === "completa" ? undefined : todas.find((g) => g.pieza === seleccionada)?.centro.x
+    nodo.scrollLeft =
+      centro === undefined
+        ? (nodo.scrollWidth - nodo.clientWidth) / 2
+        : centro * escala - nodo.clientWidth / 2 + (nodo.scrollWidth - ANCHO_DE_LA_ARCADA * escala) / 2
+  })
+  useLayoutEffect(() => centrar(), [denticion, escala, vista])
 
-  const piezas = geometriaDeLaArcada(denticion)
+  useEffect(() => {
+    const pieza = porEnfocar.current
+    if (pieza === null) return
+    porEnfocar.current = null
+    const boton = botones.current.get(pieza)
+    boton?.focus()
+    ;(boton?.firstElementChild ?? boton)?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" })
+  }, [vista])
+
+  const piezas = vista === "completa" ? todas : todas.filter((g) => esDelMaxilar(g.pieza) === (vista === "superior"))
   const paradaDelTab = piezas.some((g) => g.pieza === seleccionada) ? seleccionada : piezas[0].pieza
   const temporal = denticion === "temporal"
   const e = (n: number) => n * escala
+
+  /** El selector del celular: acercar una arcada lleva la elección a esa arcada (la pieza de enfrente). */
+  const verVista = (otra: VistaDeLaArcada) => {
+    setAcercada(otra !== "completa")
+    if (otra === "completa") return
+    const enLaOtra = elegidaEnLaDenticion && esDelMaxilar(seleccionada) !== (otra === "superior")
+    if (enLaOtra) alElegir(piezaVecina(denticion, seleccionada, otra === "superior" ? "ArrowUp" : "ArrowDown"))
+    else if (!elegidaEnLaDenticion) alElegir(filasDeLaArcada(denticion)[otra === "superior" ? 0 : 1][0])
+  }
 
   const alTeclear = (evento: KeyboardEvent<HTMLButtonElement>, pieza: number) => {
     if (TECLAS_DE_LA_ARCADA.includes(evento.key)) {
@@ -139,6 +189,8 @@ export function Arcada({
       const destino = piezaVecina(denticion, pieza, evento.key as TeclaDeLaArcada)
       alElegir(destino)
       const boton = botones.current.get(destino)
+      // Con una arcada acercada, la de enfrente se dibuja recién al elegirla: se enfoca entonces.
+      if (!boton) porEnfocar.current = destino
       boton?.focus()
       // Angosta (a 390 px se desplaza de lado): la pieza enfocada siempre a la vista. El botón no
       // tiene área: se lleva a la vista su cuadrado. "auto" sigue al CSS (sin animación con
@@ -166,14 +218,40 @@ export function Arcada({
   }
 
   return (
+    <>
+    {/* Sólo en el celular: mirar la boca entera o acercar una arcada para tocar cómodo. */}
+    <div role="group" aria-label="Qué ver de la arcada" className="mb-2 flex gap-1 rounded-[16px] bg-superficie p-1 squircle lg:hidden">
+      {VISTAS.map(({ id, texto }) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={vista === id}
+          onClick={() => verVista(id)}
+          className={cn(
+            "min-h-11 flex-1 rounded-[12px] px-2 text-sm font-medium text-navy squircle anillo-foco transition-colors duration-150 ease-suave",
+            vista === id ? "bg-tarjeta font-semibold shadow-sm" : "hover:bg-borde"
+          )}
+        >
+          {texto}
+        </button>
+      ))}
+    </div>
     <div ref={caja} className="overflow-x-auto overflow-y-hidden rounded-[24px] bg-crema px-2 py-4 squircle sm:px-3">
       <div
         role="group"
-        aria-label={temporal ? "Arcada temporal, 20 piezas" : "Arcada permanente, 32 piezas"}
+        aria-label={
+          vista === "completa"
+            ? temporal
+              ? "Arcada temporal, 20 piezas"
+              : "Arcada permanente, 32 piezas"
+            : `Arcada ${vista} ${temporal ? "temporal, 10" : "permanente, 16"} piezas`
+        }
         aria-describedby={idDeLaAyuda}
-        className="relative mx-auto"
-        style={{ width: e(ANCHO_DE_LA_ARCADA), height: e(ALTO_DE_LA_ARCADA) }}
+        className={cn("relative mx-auto", vista !== "completa" && "overflow-hidden")}
+        style={{ width: e(ANCHO_DE_LA_ARCADA), height: e(franja.hasta - franja.desde) }}
       >
+      {/* La franja que se ve: toda la boca (sin correr nada) o una arcada. */}
+      <div className="absolute inset-x-0" style={{ top: -e(franja.desde), height: e(ALTO_DE_LA_ARCADA) }}>
         <span className={cn(ROTULO, "top-0 left-0")}>Maxilar superior</span>
         <span className={cn(ROTULO, "bottom-0 left-0")}>Mandíbula</span>
 
@@ -222,7 +300,9 @@ export function Arcada({
           />
         ))}
       </div>
+      </div>
     </div>
+    </>
   )
 }
 

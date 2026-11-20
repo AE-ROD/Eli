@@ -9,7 +9,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { ModalAnular } from "@/components/panel/modal-anular"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { comoTexto, formatearHora } from "@/lib/fechas"
 import { rangoDePeriodo, rangoPersonalizado, type RangoDePeriodo } from "@/lib/periodos"
 import { actorDeSesion, puedeAnular, puedeVerAnuladas } from "@/lib/permisos"
@@ -63,20 +63,20 @@ type VistaDeCobros = Exclude<VistaDeReporte, "llenar-horas">
 /** Mientras llega el primer reporte: las cifras y el historial en gris, con su forma, sin números inventados. */
 function ReporteCargando() {
   return (
-    <div role="status" className="space-y-4">
+    <div role="status" className="space-y-3 lg:space-y-4">
       <span className="sr-only">Cargando el reporte…</span>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+      <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-3" aria-hidden="true">
         {[0, 1, 2].map((cifra) => (
           <div
             key={cifra}
-            className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6", cifra === 0 && "sm:col-span-2 xl:col-span-1")}
+            className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4", cifra === 0 && "col-span-2 xl:col-span-1")}
           >
             <Esqueleto className="w-1/3" />
             <Esqueleto className="h-7 w-1/2" />
           </div>
         ))}
       </div>
-      <div className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")} aria-hidden="true">
+      <div className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")} aria-hidden="true">
         <Esqueleto className="h-5 w-1/4" />
         {[0, 1, 2, 3].map((fila) => (
           <Esqueleto key={fila} />
@@ -319,7 +319,7 @@ export default function PaginaReportes() {
     <div className="min-h-screen">
       <BarraSuperior titulo="Reportes" subtitulo={subtitulo} />
 
-      <div className="space-y-6 px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+      <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6 lg:space-y-6">
         {verAnuladas && (
           <SelectorDeVista idBase={idBase} idDelPanel={idDelPanel} vista={vistaVisible} onCambiar={cambiarVista} />
         )}
@@ -328,7 +328,7 @@ export default function PaginaReportes() {
           id={idDelPanel}
           role={verAnuladas ? "tabpanel" : undefined}
           aria-labelledby={verAnuladas ? idDePestaña(idBase, vistaVisible) : undefined}
-          className="space-y-6"
+          className="space-y-4 lg:space-y-6"
         >
           {llenarHoras && <LlenarHoras />}
           {!llenarHoras && (
@@ -369,7 +369,7 @@ export default function PaginaReportes() {
               {((vista === "cobradas" && !reporte) || (vista === "anuladas" && !anuladas)) && cargando && <ReporteCargando />}
 
               {mostrarReporte && (
-                <div aria-busy={cargando} className="space-y-6">
+                <div aria-busy={cargando} className="space-y-4 lg:space-y-6">
                   {reporte.truncado && !cargando && <AvisoDeTruncado />}
                   <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                     <ResumenDeReporte reporte={reporte} rotuloDeIngresos={rotulo} />
@@ -387,7 +387,7 @@ export default function PaginaReportes() {
               )}
 
               {mostrarAnuladas && (
-                <div aria-busy={cargando} className="space-y-6">
+                <div aria-busy={cargando} className="space-y-4 lg:space-y-6">
                   {anuladas.truncado && !cargando && <AvisoDeTruncado />}
                   <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                     <ResumenDeAnuladas reporte={anuladas} />

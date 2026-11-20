@@ -49,7 +49,7 @@ export function ListaDeProtesis({ protesis }: { protesis: readonly AbonoDeProtes
 const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
 
-/** En el comprobante: una tabla, como la de servicios, que se desplaza de lado en el teléfono. */
+/** En el comprobante: una tabla, como la de servicios; en la pantalla del celular, filas compactas. */
 export function TablaDeProtesis({
   protesis,
   encabezadoDelCliente,
@@ -65,8 +65,31 @@ export function TablaDeProtesis({
         Prótesis
       </h3>
       <p className="text-sm text-texto-2">{EXPLICACION}</p>
-      {/* En el teléfono la tabla se desplaza de lado: la caja se enfoca para moverla con el teclado. */}
-      <div tabIndex={0} role="region" aria-label="Prótesis de la liquidación" className="overflow-x-auto rounded-[12px] anillo-foco">
+      {/* En la pantalla del celular, filas compactas; al imprimir, siempre la tabla. */}
+      <ul className="divide-y divide-borde/60 border-y border-borde text-sm lg:hidden print:hidden">
+        {protesis.map((abono) => (
+          <li key={abono.id} className="py-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="min-w-0 font-medium break-words">{nombreDeLaProtesis(abono.detalle)}</p>
+              <p className="shrink-0 font-semibold tabular-nums">{pesos(abono.comisionCents)}</p>
+            </div>
+            <p className="mt-0.5 text-[13px] text-texto-2">
+              {abono.cliente} · liberado el {fechaParaLeer(abono.fecha)} · de un abono de{" "}
+              <span className="tabular-nums">{pesos(abono.abonoCents)}</span>
+            </p>
+            <p className="text-[13px] text-texto-2">
+              Cobrado el {fechaParaLeer(abono.cobradoEl)} · Entregada el {fechaParaLeer(abono.entregadaEl)}
+            </p>
+          </li>
+        ))}
+      </ul>
+      {/* Desde `lg` la tabla se desplaza de lado si no entra: la caja se enfoca para moverla con el teclado. */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Prótesis de la liquidación"
+        className="overflow-x-auto rounded-[12px] anillo-foco max-lg:not-print:hidden"
+      >
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-borde">

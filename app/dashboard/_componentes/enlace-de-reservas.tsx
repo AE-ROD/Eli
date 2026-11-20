@@ -5,7 +5,7 @@ import { ArrowUpRight, Check, Copy, Link2 } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { mensajeParaCompartir } from "@/lib/lista-de-inicio"
 import { cn } from "@/lib/utils"
 import { BotonesParaCompartir } from "./compartir-enlace"
@@ -57,13 +57,18 @@ export function EnlaceDeReservas({ slug, alCompartir, conQr = false }: PropsDeEn
     <section
       id="enlace-de-reservas"
       aria-labelledby={idDelTitulo}
-      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24 p-5 sm:p-6")}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-24", RELLENO_DE_TARJETA)}
     >
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Tu enlace de reservas"
         // Entero, aunque baje de renglón: es lo que se va a compartir.
-        subtitulo={<span className="font-mono break-all text-navy">{enlace}</span>}
+        // En el celular, en una línea (se corta con "…"); si no se pudo copiar, entero, para copiarlo a mano.
+        subtitulo={
+          <span className={cn("font-mono text-navy", noSeCopio ? "break-all" : "max-lg:block max-lg:truncate lg:break-all")}>
+            {enlace}
+          </span>
+        }
         icono={{ figura: Link2, color: "azul" }}
         accion={
           <Boton
@@ -78,7 +83,7 @@ export function EnlaceDeReservas({ slug, alCompartir, conQr = false }: PropsDeEn
           </Boton>
         }
       />
-      <div className="mt-4">
+      <div className="mt-3 lg:mt-4">
         <BotonesParaCompartir mensaje={mensaje} alCompartir={alCompartir} hrefDelQr={conQr ? "#qr-del-local" : undefined}>
           <Boton
             variante="secundario"

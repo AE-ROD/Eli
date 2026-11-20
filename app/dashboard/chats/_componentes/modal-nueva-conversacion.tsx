@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { User, Phone } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -29,9 +30,26 @@ export function ModalNuevaConversacion({
   onSubmit,
   onCerrar,
 }: PropsDeModalNuevaConversacion) {
+  // El botón de crear va en el pie del marco, fuera del <form>: lo nombra con `form`.
+  const idDelFormulario = useId()
   return (
-    <MarcoDeModal titulo="Nueva conversación" antetitulo="Chats" bloqueado={guardando} alCerrar={onCerrar}>
-      <form onSubmit={onSubmit} className="space-y-5">
+    <MarcoDeModal
+      titulo="Nueva conversación"
+      antetitulo="Chats"
+      bloqueado={guardando}
+      alCerrar={onCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            Crear
+          </BotonPrimario>
+        </div>
+      }
+    >
+      <form id={idDelFormulario} onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del cliente"
           placeholder="Nombre completo"
@@ -49,14 +67,6 @@ export function ModalNuevaConversacion({
           icono={<Phone className="h-4 w-4" />}
         />
         {aviso && <Aviso>{aviso}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            Crear
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

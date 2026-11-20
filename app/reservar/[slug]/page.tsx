@@ -88,7 +88,7 @@ export default async function PaginaReserva({ params }: { params: Promise<{ slug
         <MiniPagina pagina={pagina} ahora={ahora} />
         <div id={ANCLA_DE_RESERVA} className="mx-auto mt-10 max-w-[52rem] scroll-mt-6 md:mt-14">
         <EncabezadoDeReserva nivel={2} antetitulo={negocio.name} titulo={tituloDeLaReserva(negocio.type)} />
-        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-5 py-8 text-center sm:px-10 sm:py-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
             {frasesDeLaPagina(negocio.type).sinServicios}

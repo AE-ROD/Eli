@@ -56,9 +56,28 @@ export function ModalRenombrarCategoria({ frases, categoria, clave, cantidad, se
             ? f.plan.renombrar(categoria, plan.nuevo)
             : f.plan.unir(categoria, plan.nuevo, plan.conLosDe)
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
-    <MarcoDeModal titulo={f.titulo} descripcion={f.descripcion(categoria, cantidad)} bloqueado={trabajando} alCerrar={alCerrar}>
+    <MarcoDeModal
+      titulo={f.titulo}
+      descripcion={f.descripcion(categoria, cantidad)}
+      bloqueado={trabajando}
+      alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={trabajando}>
+            {f.cancelar}
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={trabajando} disabled={!confirmable}>
+            {plan.tipo === "unir" ? f.confirmarUnir : f.confirmar}
+          </BotonPrimario>
+        </div>
+      }
+    >
       <form
+        id={idDelFormulario}
         onSubmit={(evento) => {
           evento.preventDefault()
           if (confirmable) alConfirmar(plan)
@@ -84,15 +103,6 @@ export function ModalRenombrarCategoria({ frases, categoria, clave, cantidad, se
         </div>
 
         {aviso && <Aviso>{aviso}</Aviso>}
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={trabajando}>
-            {f.cancelar}
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={trabajando} disabled={!confirmable}>
-            {plan.tipo === "unir" ? f.confirmarUnir : f.confirmar}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

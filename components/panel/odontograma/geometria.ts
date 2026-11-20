@@ -215,3 +215,58 @@ export function carasEnLaCruz(pieza: number): Record<LugarDeCara, Cara> {
     centro: posicionDe(pieza) <= 3 ? "I" : "O",
   }
 }
+
+/**
+ * La escala más chica a la que se dibuja la arcada en el computador. Más
+ * chica, los números dejan de leerse y las piezas no se pueden tocar: por
+ * debajo de este ancho, la arcada se desplaza de lado dentro de su caja
+ * (nunca la página).
+ */
+export const ESCALA_MINIMA = 0.72
+
+/** En el celular, la boca entera se achica hasta acá para entrar a lo ancho, sin desplazarse. */
+const ESCALA_MINIMA_DE_LA_BOCA_ENTERA = 0.35
+
+/** Lo que mide, como mínimo, la pieza más chica al acercar una arcada en el celular: lo cómodo para un dedo. */
+export const LADO_PARA_EL_DEDO = 32
+
+/**
+ * Qué se ve de la arcada en el celular: la boca entera (que entra a lo ancho)
+ * o una sola arcada acercada, con las piezas del tamaño de un dedo.
+ */
+export type VistaDeLaArcada = "completa" | "superior" | "inferior"
+
+/** El lado de la pieza más chica de la dentición, en unidades del dibujo. */
+export function ladoMasChico(denticion: Denticion): number {
+  return Math.min(...(denticion === "temporal" ? TEMPORAL : PERMANENTE).map(([, , lado]) => lado))
+}
+
+/**
+ * A qué escala se dibuja la arcada en una caja de `ancho` px.
+ *
+ * - En el computador, como siempre: se achica con la caja hasta
+ *   `ESCALA_MINIMA` (y no se agranda de 1).
+ * - En el celular, la boca entera entra a lo ancho: se achica lo que haga
+ *   falta (hasta `ESCALA_MINIMA_DE_LA_BOCA_ENTERA`).
+ * - En el celular, con una arcada acercada, la pieza más chica mide
+ *   `LADO_PARA_EL_DEDO` o más, y la arcada se desplaza de lado si no entra.
+ *
+ * Sin medida todavía (`ancho` 0), 1.
+ */
+export function escalaDeLaArcada(ancho: number, { celular, vista, denticion }: { celular: boolean; vista: VistaDeLaArcada; denticion: Denticion }): number {
+  if (ancho <= 0) return 1
+  const queEntra = Math.min(1, ancho / ANCHO_DE_LA_ARCADA)
+  if (!celular) return Math.max(ESCALA_MINIMA, queEntra)
+  if (vista === "completa") return Math.max(ESCALA_MINIMA_DE_LA_BOCA_ENTERA, queEntra)
+  return Math.max(LADO_PARA_EL_DEDO / ladoMasChico(denticion), queEntra)
+}
+
+/**
+ * La franja del dibujo (de arriba abajo, en unidades) que se ve con cada
+ * vista: la boca entera, o una arcada con la línea que las separa.
+ */
+export function franjaDeLaVista(vista: VistaDeLaArcada): { desde: number; hasta: number } {
+  if (vista === "superior") return { desde: 0, hasta: LINEA_ENTRE_ARCADAS + 14 }
+  if (vista === "inferior") return { desde: LINEA_ENTRE_ARCADAS - 14, hasta: ALTO_DE_LA_ARCADA }
+  return { desde: 0, hasta: ALTO_DE_LA_ARCADA }
+}

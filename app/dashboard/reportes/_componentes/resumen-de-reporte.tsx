@@ -4,7 +4,7 @@ import { useId, type ReactNode } from "react"
 import { DollarSign, Receipt, TrendingUp, type LucideIcon } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -25,18 +25,33 @@ interface PropsDeCifra {
 /**
  * Una cifra del resumen en su tarjeta: qué es, el número grande y el ícono en
  * el lima de reportes. Un monto largo baja de renglón antes que salirse.
+ *
+ * En el celular va compacta, de a dos por fila: relleno de 16 px, número de
+ * 22 px y, salvo en la principal, sin ícono, que le quitaba medio ancho.
  */
 export function Cifra({ titulo, valor, icono, principal = false, lectura, className }: PropsDeCifra) {
   return (
-    <div className={cn(TARJETA_DEL_PANEL, "flex items-start justify-between gap-4 p-5 sm:p-6", className)}>
-      <div className="min-w-0 space-y-2">
-        <p className="text-sm text-pretty text-texto-2">{titulo}</p>
-        <p className="text-[28px] leading-[1.1] font-medium tracking-[-1px] tabular-nums [overflow-wrap:anywhere] sm:text-[32px]">
+    <div
+      className={cn(
+        TARJETA_DEL_PANEL,
+        RELLENO_DE_TARJETA,
+        "flex items-start justify-between gap-3 lg:gap-4",
+        className
+      )}
+    >
+      <div className="min-w-0 space-y-1.5 lg:space-y-2">
+        <p className="text-[13px] leading-snug text-pretty text-texto-2 lg:text-sm">{titulo}</p>
+        <p
+          className={cn(
+            "leading-[1.1] font-medium tracking-[-0.5px] tabular-nums [overflow-wrap:anywhere] lg:text-[32px] lg:tracking-[-1px]",
+            principal ? "text-[28px]" : "text-[22px]"
+          )}
+        >
           {valor}
         </p>
-        {lectura && <p className="text-sm text-pretty text-texto-2">{lectura}</p>}
+        {lectura && <p className="text-xs text-pretty text-texto-2 lg:text-sm">{lectura}</p>}
       </div>
-      <CuadroDeIcono icono={icono} color="lima" activo={principal} />
+      <CuadroDeIcono icono={icono} color="lima" activo={principal} className={cn(!principal && "max-lg:hidden")} />
     </div>
   )
 }
@@ -63,7 +78,7 @@ function Desglose({ titulo, renglones, sinDesglose }: { titulo: string; renglone
   const mayor = renglones ? Math.max(0, ...renglones.map((renglon) => renglon.monto)) : 0
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <h2 id={idDelTitulo} className={TITULO_DE_TARJETA}>
         {titulo}
       </h2>
@@ -126,8 +141,9 @@ interface PropsDeResumenDeReporte {
  * todo le habla en segunda persona, porque son sus números y no los del
  * negocio: lo que atendió, sin totales del local ni medios de pago.
  *
- * Los ingresos van primero y, entre sm y xl, a lo ancho: con tres tarjetas por
- * fila un monto largo no entraba en las de una tableta.
+ * Los ingresos van primero y, por debajo de xl, a lo ancho: con tres tarjetas
+ * por fila un monto largo no entraba en las de una tableta. En el celular, las
+ * otras dos quedan de a dos, compactas, debajo.
  */
 export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDeReporte) {
   const { resumen, alcance } = reporte
@@ -136,14 +152,14 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
   const { resumen: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-3 lg:space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-3">
         <Cifra
           titulo={rotuloDeIngresos}
           valor={formatearMonto(resumen.ingresos)}
           icono={DollarSign}
           principal
-          className="sm:col-span-2 xl:col-span-1"
+          className="col-span-2 xl:col-span-1"
         />
         <Cifra titulo={propio ? "Tus atenciones" : "Atenciones"} valor={String(resumen.cantidad)} icono={Receipt} />
         <Cifra
@@ -153,7 +169,7 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3 lg:gap-4">
         {/* Al profesional, el desglose por profesional sería una sola fila: la suya, que ya está arriba. */}
         {!propio && (
           <Desglose

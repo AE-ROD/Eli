@@ -38,6 +38,8 @@ import type { Advertencia } from "@/lib/mover-cita"
 import { MAX_SERVICIOS_POR_RESERVA, resumenDeLaReserva } from "@/lib/servicios-de-la-reserva"
 import { formatearTiempoLibre, horaAMinutos, minutosAHora } from "@/lib/horario-dia"
 import { formatearMonto } from "@/lib/dinero"
+import { formatearDuracionDeServicio } from "@/lib/fechas"
+import { vistaDelCatalogo } from "@/lib/servicios-por-categoria"
 import { SelectorServicio } from "@/app/reservar/[slug]/_componentes/selector-servicio"
 
 /** La hora de fin de `inicio` ("HH:MM") más `minutos`, o `null` si pasa de medianoche. */
@@ -137,6 +139,7 @@ export function ModalNuevaCita({
   const idDeHoraInicio = `${idBase}-hora-inicio`
   const idDeHoraFin = `${idBase}-hora-fin`
   const idDelHorarioDeLaSede = `${idBase}-horario-de-la-sede`
+  const idDelFormulario = `${idBase}-formulario`
 
   useEffect(() => {
     if (!puedeAsignarProfesional) return
@@ -229,6 +232,15 @@ export function ModalNuevaCita({
     .map((id) => catalogo?.servicios.find((servicio) => servicio.id === id))
     .filter((servicio): servicio is ServicioDelCatalogo => servicio !== undefined)
   const resumen = elegidos.length > 0 ? resumenDeLaReserva(elegidos) : null
+  // Lo que dice el botón de guardar en el celular después del verbo: "30 min · $8.000".
+  const resumenDelBoton = resumen
+    ? [formatearTiempoLibre(resumen.duracion), resumen.precio !== null ? formatearMonto(resumen.precio) : null]
+        .filter(Boolean)
+        .join(" · ")
+    : ""
+  // En el celular, con un catálogo corto (sin categorías ni búsqueda), cada
+  // servicio es una fila de una línea; con uno largo, el selector de siempre.
+  const filasEnElCelular = serviciosOfrecidos.length > 0 && !vistaDelCatalogo(serviciosOfrecidos).agrupado
   // Con servicios, la hora de fin sale de la de inicio más la duración. Si eso
   // pasa de medianoche no hay hora que mostrar y se vuelve a pedir a mano.
   const finCalculado = resumen ? horaDeFin(form.horaInicio, resumen.duracion) : null
@@ -276,8 +288,31 @@ export function ModalNuevaCita({
   })
 
   return (
-    <MarcoDeModal titulo={frases.nuevaCita} bloqueado={guardando} alCerrar={onCerrar}>
-      <form onSubmit={onSubmit} className="space-y-5">
+    <MarcoDeModal
+      titulo={frases.nuevaCita}
+      bloqueado={guardando}
+      alCerrar={onCerrar}
+      pie={
+        // `lg:pt-1`: en el computador, la misma separación de antes (el cuerpo deja 20 px y acá van 4 más).
+        <div className="flex gap-3 lg:pt-1">
+          {/* En el celular se cierra con la X de arriba: el botón de guardar ocupa el ancho, a mano del pulgar. */}
+          <Boton type="button" variante="secundario" className="w-full max-lg:hidden" disabled={guardando} onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          {hayAdvertencias ? (
+            <Boton type="button" className="w-full" cargando={guardando} onClick={onGuardarIgual}>
+              Guardar igual
+            </Boton>
+          ) : (
+            <Boton type="submit" form={idDelFormulario} className="w-full" cargando={guardando}>
+              {frases.guardarCita}
+              {resumenDelBoton && <span className="lg:hidden"> · {resumenDelBoton}</span>}
+            </Boton>
+          )}
+        </div>
+      }
+    >
+      <form id={idDelFormulario} onSubmit={onSubmit} className="space-y-5">
         {/* Búsqueda de cliente */}
         <div>
           <label htmlFor={idDelBuscador} className={cn(ETIQUETA, "mb-2")}>
@@ -366,7 +401,15 @@ export function ModalNuevaCita({
             <p id={idDelCatalogo} className={cn(ETIQUETA, "mb-2")}>
               {frases.servicio.delCatalogo}
             </p>
-            <div className="max-h-72 overflow-y-auto p-0.5">
+            {filasEnElCelular && (
+              <FilasDeServicios
+                servicios={serviciosOfrecidos}
+                elegidos={elegidos}
+                onAlternar={alternarServicio}
+                tope={MAX_SERVICIOS_POR_RESERVA}
+              />
+            )}
+            <div className={cn("max-h-72 overflow-y-auto p-0.5", filasEnElCelular && "max-lg:hidden")}>
               <SelectorServicio
                 servicios={serviciosOfrecidos}
                 seleccionados={elegidos}
@@ -531,22 +574,78 @@ export function ModalNuevaCita({
             ))}
           </Aviso>
         )}
-
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
-            Cancelar
-          </Boton>
-          {hayAdvertencias ? (
-            <Boton type="button" className="w-full" cargando={guardando} onClick={onGuardarIgual}>
-              Guardar igual
-            </Boton>
-          ) : (
-            <Boton type="submit" className="w-full" cargando={guardando}>
-              {frases.guardarCita}
-            </Boton>
-          )}
-        </div>
       </form>
     </MarcoDeModal>
+  )
+}
+
+/**
+ * Los servicios del catálogo en el celular: una fila de una línea por
+ * servicio (nombre, duración y precio) con su casilla a la derecha, en vez de
+ * las tarjetas grandes del selector. Cada fila es un botón con `aria-pressed`,
+ * como las tarjetas; con más de uno elegido, la casilla lleva el número de
+ * orden. Con el tope lleno, los demás quedan deshabilitados.
+ */
+function FilasDeServicios({
+  servicios,
+  elegidos,
+  onAlternar,
+  tope,
+}: {
+  servicios: ServicioDelCatalogo[]
+  elegidos: ServicioDelCatalogo[]
+  onAlternar: (servicio: ServicioDelCatalogo) => void
+  tope: number
+}) {
+  const lleno = elegidos.length >= tope
+  return (
+    <ul className="space-y-1.5 lg:hidden">
+      {servicios.map((servicio) => {
+        const posicion = elegidos.findIndex((elegido) => elegido.id === servicio.id)
+        const elegido = posicion >= 0
+        const bloqueado = !elegido && lleno
+        return (
+          <li key={servicio.id}>
+            <button
+              type="button"
+              aria-pressed={elegido}
+              disabled={bloqueado}
+              onClick={() => onAlternar(servicio)}
+              className={cn(
+                "flex min-h-12 w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left text-navy squircle anillo-foco",
+                "transition-[background-color,box-shadow] duration-150 ease-suave",
+                elegido
+                  ? "bg-azul-suave inset-ring-2 inset-ring-navy"
+                  : bloqueado
+                    ? "cursor-not-allowed opacity-60 inset-ring-1 inset-ring-texto-2"
+                    : "inset-ring-1 inset-ring-texto-2 hover:bg-crema"
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate text-[15px]">
+                <span className="font-medium">{servicio.name}</span>
+                <span className={cn("ml-1.5 text-[13px] tabular-nums", elegido ? "text-navy/75" : "text-texto-2")}>
+                  {formatearDuracionDeServicio(servicio.duration)}
+                  {servicio.price != null && ` · ${formatearMonto(servicio.price)}`}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-[7px]",
+                  elegido ? "bg-navy text-white" : "inset-ring-[1.5px] inset-ring-texto-2"
+                )}
+              >
+                {elegido &&
+                  (elegidos.length > 1 ? (
+                    <span className="text-xs font-semibold tabular-nums">{posicion + 1}</span>
+                  ) : (
+                    <Check className="size-3.5" strokeWidth={2.5} />
+                  ))}
+              </span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

@@ -83,7 +83,8 @@ interface PropsDeHerramienta {
  * de 196 px y la tarjeta crecía dos o tres renglones. Cada uno tiene su nombre
  * completo para el lector de pantalla y un globo con la acción.
  *
- * Miden 36 px a la vista y 44 × 44 para el dedo.
+ * Miden 36 px a la vista y 44 × 44 para el dedo; en el celular, 44 también a
+ * la vista.
  */
 export function Herramienta({ etiqueta, globo, icono: Icono, peligro = false, ocupado, onClick }: PropsDeHerramienta) {
   return (
@@ -94,7 +95,10 @@ export function Herramienta({ etiqueta, globo, icono: Icono, peligro = false, oc
       title={globo}
       aria-disabled={ocupado || undefined}
       onClick={ocupado ? undefined : onClick}
-      className={cn("w-9 px-0 after:-inset-x-1", peligro && "text-error hover:bg-error/8")}
+      className={cn(
+        "w-9 px-0 after:-inset-x-1 max-lg:size-11 max-lg:after:inset-0",
+        peligro && "text-error hover:bg-error/8"
+      )}
     >
       <Icono aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
     </Boton>

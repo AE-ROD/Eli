@@ -3,7 +3,7 @@ import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { type FilaDelHistorial, type FrasesDelHistorial, type RepartoEscrito } from "./_frases"
 
@@ -52,7 +52,7 @@ function Reparto({ titulo, reparto }: { titulo: string; reparto: RepartoEscrito 
 export function HistorialDeCambiosDelReparto({ filas, frases, hrefDeVerMas, topeAlcanzado }: PropsDelHistorial) {
   return (
     <section aria-labelledby="historial-del-reparto" className={cn(TARJETA_DEL_PANEL, "overflow-hidden")}>
-      <div className="space-y-4 p-5 sm:p-6">
+      <div className={cn(RELLENO_DE_TARJETA, "space-y-4")}>
         <EncabezadoDeTarjeta id="historial-del-reparto" titulo={frases.titulo} subtitulo={frases.subtitulo} icono={{ figura: History }} />
 
         {filas.length === 0 ? (

@@ -10,7 +10,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { ZONA_POR_DEFECTO } from "@/lib/zona-horaria"
 import { ZONAS_DE_CHILE, esZonaDeChile, horaActualEn, zonaDeChilePorId } from "@/lib/zonas-de-chile"
 import { cn } from "@/lib/utils"
@@ -114,7 +114,7 @@ export function SeccionZonaHoraria({ zonaGuardada }: PropsDeSeccionZonaHoraria) 
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

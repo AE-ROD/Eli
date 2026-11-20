@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { Mail, Phone, User } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -60,9 +61,25 @@ export function ModalNuevoCliente({
   onCerrar,
 }: PropsDeModalNuevoCliente) {
   const { formulario } = frasesDeClientes(palabras)
+  // El botón de guardar va en el pie del marco, fuera del <form>: lo nombra con `form`.
+  const idDelFormulario = useId()
   return (
-    <MarcoDeModal titulo={formulario.titulo(editando)} bloqueado={guardando} alCerrar={onCerrar}>
-      <form onSubmit={onSubmit} className="space-y-5">
+    <MarcoDeModal
+      titulo={formulario.titulo(editando)}
+      bloqueado={guardando}
+      alCerrar={onCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" form={idDelFormulario} className="w-full" cargando={guardando}>
+            {formulario.guardar(editando)}
+          </Boton>
+        </div>
+      }
+    >
+      <form id={idDelFormulario} onSubmit={onSubmit} className="space-y-5">
         {/* Al abrir, el foco va al nombre. `MarcoDeModal` anota antes quién lo abrió. */}
         <CampoFormulario
           autoFocus
@@ -124,14 +141,6 @@ export function ModalNuevoCliente({
 
         {aviso && <Aviso>{aviso}</Aviso>}
 
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            {formulario.guardar(editando)}
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

@@ -73,7 +73,8 @@ export function BotonesParaCompartir({ mensaje, alCompartir, hrefDelQr, alVerQr,
     <>
       <div className="flex flex-wrap gap-2">
         <Boton href={enlaceDeWhatsApp(mensaje)} {...AFUERA} tamano="sm" icono={<MessageCircle />} onClick={alCompartir}>
-          Enviar por WhatsApp
+          {/* En el celular se lee "WhatsApp" a secas, para que los botones entren en una fila. */}
+          <span className="max-lg:sr-only">Enviar por </span>WhatsApp
           <span className="sr-only"> (se abre en otra pestaña)</span>
         </Boton>
         {children}
@@ -84,7 +85,7 @@ export function BotonesParaCompartir({ mensaje, alCompartir, hrefDelQr, alVerQr,
         )}
         {hrefDelQr && (
           <Boton href={hrefDelQr} variante="secundario" tamano="sm" icono={<QrCode />} onClick={alVerQr}>
-            Ver QR
+            <span className="max-lg:sr-only">Ver </span>QR
           </Boton>
         )}
       </div>

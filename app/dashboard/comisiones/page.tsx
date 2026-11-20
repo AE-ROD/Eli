@@ -7,7 +7,7 @@ import { actorDeSesion, puedeConfigurarRepartoDeProtesis, puedeEditarComisiones,
 import { Boton } from "@/components/comunes/boton"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { PantallaDeComisiones } from "./_componentes/pantalla-de-comisiones"
 import { frasesDeLasComisiones } from "./_frases"
@@ -30,11 +30,11 @@ export default async function PaginaComisiones() {
     <div className="min-h-dvh">
       <BarraSuperior titulo="Comisiones" subtitulo={frases.subtitulo} mostrarBusqueda={false} />
 
-      <div className="max-w-5xl space-y-6 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-5xl space-y-4 px-4 pt-4 pb-12 sm:px-6 lg:space-y-6 lg:pt-8">
         <p className="text-sm text-pretty text-texto-2">{frases.queEsElPorcentaje}</p>
         {/* Sólo en una clínica dental: las prótesis se reparten en tres partes, aparte de la comisión. */}
         {puedeConfigurarRepartoDeProtesis(actor) && (
-          <section aria-labelledby="reparto-de-protesis" className={`${TARJETA_DEL_PANEL} p-5 sm:p-6`}>
+          <section aria-labelledby="reparto-de-protesis" className={`${TARJETA_DEL_PANEL} ${RELLENO_DE_TARJETA}`}>
             <EncabezadoDeTarjeta
               id="reparto-de-protesis"
               titulo="Reparto de prótesis"
@@ -50,7 +50,7 @@ export default async function PaginaComisiones() {
         )}
         {/* Junto al reparto: lo que se le debe a cada laboratorio por las prótesis entregadas. */}
         {puedePagarAlLaboratorio(actor) && (
-          <section aria-labelledby="por-pagar-al-laboratorio" className={`${TARJETA_DEL_PANEL} p-5 sm:p-6`}>
+          <section aria-labelledby="por-pagar-al-laboratorio" className={`${TARJETA_DEL_PANEL} ${RELLENO_DE_TARJETA}`}>
             <EncabezadoDeTarjeta
               id="por-pagar-al-laboratorio"
               titulo="Por pagar al laboratorio"

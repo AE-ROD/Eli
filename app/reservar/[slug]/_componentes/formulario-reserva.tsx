@@ -588,7 +588,7 @@ export function FormularioReserva({
           titulo={email.trim() ? frases.registrada.titulo : frases.confirmada.titulo}
           bajada={email.trim() ? frases.registrada.bajada : `Te esperamos, ${nombre}. ¡Hasta pronto!`}
         />
-        <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12 lg:mt-5 lg:p-6">
+        <Tarjeta className="mx-auto mt-8 max-w-xl px-5 py-6 sm:p-10 md:mt-12 lg:mt-5 lg:p-6">
           <div className="flex items-center gap-4">
             <CuadroDeIcono icono={CalendarCheck} color="azul" tamano="lg" activo />
             <p className="titulo-3 min-w-0 break-words text-navy">{servicioSeleccionado.name}</p>
@@ -703,7 +703,7 @@ export function FormularioReserva({
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso0}
                   onClick={() => setPaso(1)}
-                  className="w-full @[32rem]:ml-auto @[32rem]:w-auto"
+                  className={cn(BOTON_PRINCIPAL, "@[32rem]:ml-auto")}
                 >
                   Continuar
                 </Boton>
@@ -767,7 +767,7 @@ export function FormularioReserva({
                     variante="secundario"
                     icono={<ArrowLeft />}
                     onClick={() => setPaso(0)}
-                    className="w-full @[32rem]:w-auto"
+                    className={BOTON_ATRAS}
                   >
                     Atrás
                   </Boton>
@@ -780,7 +780,7 @@ export function FormularioReserva({
                     setAvisoDeServicios("")
                     setPaso(2)
                   }}
-                  className="w-full @[32rem]:ml-auto @[32rem]:w-auto"
+                  className={cn(BOTON_PRINCIPAL, "@[32rem]:ml-auto")}
                 >
                   Continuar
                 </Boton>
@@ -903,7 +903,7 @@ export function FormularioReserva({
                   variante="secundario"
                   icono={<ArrowLeft />}
                   onClick={() => setPaso(1)}
-                  className="w-full @[32rem]:w-auto"
+                  className={BOTON_ATRAS}
                 >
                   Atrás
                 </Boton>
@@ -911,7 +911,7 @@ export function FormularioReserva({
                   icono={<ArrowRight />}
                   disabled={!puedeAvanzarPaso2}
                   onClick={() => setPaso(3)}
-                  className="w-full @[32rem]:w-auto"
+                  className={BOTON_PRINCIPAL}
                 >
                   Continuar
                 </Boton>
@@ -930,7 +930,13 @@ export function FormularioReserva({
                 porque los errores los dice la página, por campo y en su idioma;
                 el botón no se deshabilita: al apretarlo se dice qué falta.
               */}
-              <form noValidate onSubmit={confirmar} aria-describedby={error ? idDelError : undefined}>
+              {/* El `scroll-mb`: un campo enfocado (o el primero con error) no queda bajo el pie pegajoso. */}
+              <form
+                noValidate
+                onSubmit={confirmar}
+                aria-describedby={error ? idDelError : undefined}
+                className="max-lg:[&_:is(input,textarea)]:scroll-mb-28"
+              >
               <div className="mt-5 grid gap-5 @[32rem]:grid-cols-2">
                 <CampoFormulario
                   ref={(campo) => {
@@ -1079,7 +1085,7 @@ export function FormularioReserva({
                   variante="secundario"
                   icono={<ArrowLeft />}
                   onClick={() => setPaso(2)}
-                  className="w-full @[32rem]:w-auto"
+                  className={BOTON_ATRAS}
                 >
                   Atrás
                 </Boton>
@@ -1088,7 +1094,7 @@ export function FormularioReserva({
                   icono={<Check />}
                   cargando={enviando}
                   aria-describedby={error ? idDelError : undefined}
-                  className="w-full @[32rem]:w-auto"
+                  className={BOTON_PRINCIPAL}
                 >
                   Confirmar reserva
                 </Boton>
@@ -1224,15 +1230,38 @@ function ServicioElegido({
 }
 
 /**
- * Los botones de abajo. En el teléfono van apilados y a lo ancho, con la
- * acción principal última, cerca del pulgar; desde sm, en fila: "Atrás" a la
- * izquierda y la principal a la derecha. El orden del Tab es el mismo que se ve.
+ * Los botones de abajo, en fila: "Atrás" a la izquierda y la principal a la
+ * derecha. El orden del Tab es el mismo que se ve.
+ *
+ * Por debajo de lg (el celular y la tableta) es un pie pegajoso: en los pasos
+ * largos (el calendario con sus horas, "Tus datos") la acción de avanzar queda
+ * siempre a la vista, abajo y cerca del pulgar, sin bajar hasta el final. Va
+ * de borde a borde de la tarjeta (el `-mx` deshace su relleno), con su fondo y
+ * el área segura del iPhone. Desde lg, el formulario es el panel fijo de la
+ * derecha y la barra es la de siempre.
  */
+const CLASES_DEL_PIE_PEGAJOSO =
+  "max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:-mx-4 max-lg:mt-6 max-lg:flex-row max-lg:items-center max-lg:border-t max-lg:border-borde max-lg:bg-tarjeta max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:max-lg:-mx-8 sm:max-lg:px-8"
+
 function BarraDeAcciones({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-8 flex flex-col gap-3 @[32rem]:flex-row @[32rem]:items-center @[32rem]:justify-between @[40rem]:mt-10">{children}</div>
+    <div
+      className={cn(
+        "mt-8 flex flex-col gap-3 @[32rem]:flex-row @[32rem]:items-center @[32rem]:justify-between @[40rem]:mt-10",
+        CLASES_DEL_PIE_PEGAJOSO
+      )}
+    >
+      {children}
+    </div>
   )
 }
+
+/**
+ * Los botones de la barra: en el celular, "Atrás" a su medida y la acción
+ * principal ocupa el resto; desde @[32rem] (y en lg), como siempre.
+ */
+const BOTON_ATRAS = "w-full max-lg:w-auto max-lg:shrink-0 @[32rem]:w-auto"
+const BOTON_PRINCIPAL = "w-full max-lg:w-auto max-lg:flex-1 @[32rem]:w-auto"
 
 /*
  * Lo elegido en la pregunta de la primera vez, como "¿Con quién?": el azul

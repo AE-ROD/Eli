@@ -48,7 +48,7 @@ export function SalirDeLaLista({ slug, token, rubro = null }: { slug: string; to
         bajada={listo ? frases.listo : frases.confirmar}
       />
       {!listo && (
-        <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 max-w-xl px-5 py-6 sm:p-10 md:mt-12">
           <form onSubmit={confirmar} className="flex flex-col items-center gap-5 text-center">
             <CuadroDeIcono icono={Hourglass} color="azul" tamano="lg" />
             {error && (

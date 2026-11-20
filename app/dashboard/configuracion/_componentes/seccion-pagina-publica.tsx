@@ -10,7 +10,7 @@ import { ImagenConRespaldo } from "@/components/comunes/imagen-con-respaldo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { GuiaPlegable } from "@/components/panel/guia-plegable"
 import { SelectorDeFoto } from "@/components/panel/selector-de-foto"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
@@ -129,7 +129,7 @@ export function SeccionPaginaPublica({
   const color = colorDelNegocio(datos.color)
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

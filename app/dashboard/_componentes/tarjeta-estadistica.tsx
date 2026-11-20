@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import type { ColorDeModulo } from "@/lib/modulos"
 import { cn } from "@/lib/utils"
 
@@ -21,7 +21,7 @@ interface PropsDeTarjetaEstadistica {
 /** Una cifra del inicio, en grande, con lo que mide arriba y de qué está hecha abajo. No es un enlace: no se eleva. */
 export function TarjetaEstadistica({ titulo, valor, icono, color, procedencia }: PropsDeTarjetaEstadistica) {
   return (
-    <div className={cn(TARJETA_DEL_PANEL, "flex h-full flex-col p-5 sm:p-6")}>
+    <div className={cn(TARJETA_DEL_PANEL, "flex h-full flex-col", RELLENO_DE_TARJETA)}>
       <div className="flex items-start justify-between gap-3">
         <p className="pt-1.5 text-sm font-medium text-texto-2">{titulo}</p>
         <CuadroDeIcono icono={icono} color={color} tamano="sm" />

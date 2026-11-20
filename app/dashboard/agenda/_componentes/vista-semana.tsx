@@ -96,9 +96,17 @@ export function VistaSemana({
   }, [primerDia, indiceDeHoy])
 
   return (
-    <div ref={caja} className="mx-2 mb-2 max-h-[calc(100dvh-17.5rem)] min-h-96 overflow-auto rounded-[24px] sm:mx-3 sm:mb-3">
-      {/* Cada día, unos 80 px en el teléfono: se lee el nombre. Desde lg alcanza con 64. */}
-      <div className="min-w-[40rem] lg:min-w-[32rem]">
+    <div
+      ref={caja}
+      className="mx-2 mb-2 max-h-[calc(100dvh-17.5rem)] min-h-96 overflow-auto rounded-[24px] max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-14 max-sm:@container sm:mx-3 sm:mb-3"
+    >
+      {/*
+        En el teléfono, tres días enteros a la vista (el ancho de la caja menos
+        las horas, en tres) y al deslizar cada día se detiene junto a las horas:
+        ninguno queda cortado a la mitad. Hasta lg, unos 80 px por día; desde
+        lg alcanza con 64.
+      */}
+      <div className="min-w-[40rem] max-sm:min-w-[calc(3.5rem_+_(100cqw_-_3.5rem)_*_7_/_3)] lg:min-w-[32rem]">
         {/* Cabecera con días */}
         <div className="sticky top-0 z-20 flex border-b border-borde bg-tarjeta">
           <div className="sticky left-0 z-10 w-14 shrink-0 bg-tarjeta" />
@@ -148,7 +156,7 @@ export function VistaSemana({
             return (
               <div
                 key={indiceDia}
-                className={cn("relative min-w-0 flex-1 border-l border-borde", esHoy(dia) && "bg-azul-suave/40")}
+                className={cn("relative min-w-0 flex-1 border-l border-borde max-sm:snap-start", esHoy(dia) && "bg-azul-suave/40")}
               >
                 {/* Líneas de hora: sólo dibujan la grilla, no se tocan. */}
                 {horasDelDia.map((hora) => (

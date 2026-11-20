@@ -2,12 +2,15 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { ArrowLeft, CalendarPlus, MessageCircle, PhoneCall } from "lucide-react"
+import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import type { PlanRespuesta } from "@/lib/edicion-del-plan"
 import type { FichaClinicaRespuesta, OdontogramaRespuesta } from "@/lib/ficha-clinica"
 import type { Rol } from "@/lib/permisos"
 import { conMayuscula, vocabularioDe } from "@/lib/vocabulario"
+import { enlaceDeWhatsapp, saludoSugerido } from "../../_escribirle"
 import { subtituloDelPaciente } from "../_formato"
 import { ProveedorDeCambiosSinGuardar } from "./cambios-sin-guardar"
 import { Pestanas, idDePanel, idDePestana, type Pestana } from "./pestanas"
@@ -37,6 +40,10 @@ export interface UsuarioDeLaFicha {
   nombre: string
   rubro: string | null
 }
+
+/** Los botones de sólo ícono de la fila del celular: 44 × 44, lo mínimo para un dedo. */
+const BOTON_DE_ICONO =
+  "grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
 
 type IdDePestana = "odontograma" | "plan" | "protesis" | "evoluciones" | "antecedentes"
 
@@ -107,6 +114,10 @@ export function FichaDelPaciente({
     enfocarPestana.current = null
   }, [activa, idBase])
 
+  // Las acciones rápidas del celular: WhatsApp con el mismo saludo que la lista de pacientes.
+  const nombreNegocio = useSession().data?.user?.businessName ?? ""
+  const whatsapp = enlaceDeWhatsapp(paciente.telefono, saludoSugerido({ nombre: paciente.nombre, nombreNegocio }))
+
   // Lo último guardado manda: si se editaron los antecedentes, la alerta los sigue.
   const alergias = ficha ? ficha.alergias?.trim() || null : alergiasIniciales
 
@@ -142,10 +153,44 @@ export function FichaDelPaciente({
         mostrarBusqueda={false}
       />
 
-      <div className="space-y-5 px-4 pt-4 pb-10 sm:px-6">
+      <div className="space-y-4 px-4 pt-3 pb-10 sm:px-6 lg:space-y-5 lg:pt-4">
+        {/* En el celular: volver, el paciente y las acciones rápidas (llamar, WhatsApp, agendar) en una fila de íconos de 44 px. */}
+        <div className="-mx-1 flex items-center gap-1.5 lg:hidden">
+          <Link href="/dashboard/clientes" aria-label={`Volver a ${cliente.plural}`} className={BOTON_DE_ICONO}>
+            <ArrowLeft className="size-5" aria-hidden="true" strokeWidth={1.75} />
+          </Link>
+          <AvatarUsuario nombre={paciente.nombre} tamaño="sm" />
+          <p className="ml-1 line-clamp-2 min-w-0 flex-1 text-[15px] leading-tight font-semibold break-words text-navy">{paciente.nombre}</p>
+          {paciente.telefono && (
+            <a href={`tel:${paciente.telefono}`} aria-label={`Llamar a ${paciente.nombre}`} title="Llamar" className={BOTON_DE_ICONO}>
+              <PhoneCall className="size-5" aria-hidden="true" strokeWidth={1.75} />
+            </a>
+          )}
+          {whatsapp && (
+            <a
+              href={whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`WhatsApp: escribirle a ${paciente.nombre}`}
+              title="WhatsApp"
+              className={BOTON_DE_ICONO}
+            >
+              <MessageCircle className="size-5" aria-hidden="true" strokeWidth={1.75} />
+            </a>
+          )}
+          <Link
+            href={`/dashboard/agenda?nueva=1&cliente=${encodeURIComponent(paciente.id)}`}
+            aria-label={`Agendar una cita a ${paciente.nombre}`}
+            title="Agendar"
+            className={BOTON_DE_ICONO}
+          >
+            <CalendarPlus className="size-5" aria-hidden="true" strokeWidth={1.75} />
+          </Link>
+        </div>
+
         <Link
           href="/dashboard/clientes"
-          className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline"
+          className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline max-lg:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden="true" strokeWidth={1.75} />
           {conMayuscula(cliente.plural)}

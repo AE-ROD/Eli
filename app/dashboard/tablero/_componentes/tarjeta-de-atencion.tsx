@@ -259,7 +259,8 @@ export function TarjetaDeAtencion({
           onClick={principal.tipo === "cobrar" ? onCobrar : () => onMover(principal.hacia)}
           cargando={enCurso}
           aria-label={enCurso ? `Guardando: ${quien}` : `${principal.texto}: ${quien}`}
-          className="w-full"
+          // En el celular, 44 px a la vista: es el botón que más se toca en el día.
+          className="w-full max-lg:h-11 max-lg:after:inset-y-0"
         >
           {principal.texto}
         </Boton>

@@ -35,27 +35,29 @@ export function ModalFotoDeLaCuenta({ nombre, fotoUrl: inicial, alCerrar, alCamb
       antetitulo="Tu cuenta"
       descripcion="Es la foto de tu cuenta: te acompaña donde trabajes y solo la ves tú, en el panel. No se publica en la página de reservas."
       alCerrar={alCerrar}
+      pie={
+        // `lg:pt-1`: en el computador, los mismos 24 px de antes entre la foto y el botón.
+        <div className="lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar}>
+            Listo
+          </BotonPrimario>
+        </div>
+      }
     >
-      <div className="space-y-6">
-        <SelectorDeFoto
-          titulo="Tu foto"
-          nombreConArticulo="tu foto"
-          forma="circulo"
-          url={fotoUrl}
-          nombre={nombre}
-          puedeEditar
-          onSubir={subirFotoDeLaCuenta}
-          onQuitar={quitarFotoDeLaCuenta}
-          alCambiar={(url) => {
-            setFotoUrl(url)
-            alCambiar(url)
-          }}
-        />
-
-        <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar}>
-          Listo
-        </BotonPrimario>
-      </div>
+      <SelectorDeFoto
+        titulo="Tu foto"
+        nombreConArticulo="tu foto"
+        forma="circulo"
+        url={fotoUrl}
+        nombre={nombre}
+        puedeEditar
+        onSubir={subirFotoDeLaCuenta}
+        onQuitar={quitarFotoDeLaCuenta}
+        alCambiar={(url) => {
+          setFotoUrl(url)
+          alCambiar(url)
+        }}
+      />
     </MarcoDeModal>
   )
 }

@@ -1,8 +1,18 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react"
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Esqueleto } from "@/components/comunes/esqueleto"
+import { CONSULTA_DE_ESCRITORIO, useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import type { EstadoActivo } from "@/lib/atenciones"
 import {
@@ -34,11 +44,34 @@ const VACIO: Record<ColumnaId, string> = {
 }
 
 /**
- * Las columnas: en el teléfono, de 272 px una al lado de la otra, con scroll
- * horizontal que se detiene en cada una; desde md se reparten el ancho con un
- * mínimo de 196 px. Si las cinco no entran (una tableta, o una pantalla
- * mediana con la barra lateral), el tablero se desplaza de costado dentro de
- * su caja y la página no.
+ * Cómo se llama cada columna en su pestaña del celular: corto, para que entren
+ * varias a la vista con su número ("Por llegar 3 · En espera 1").
+ */
+const NOMBRE_CORTO: Record<ColumnaId, string> = {
+  reservas: "Por llegar",
+  "en-espera": "En espera",
+  "en-atencion": "Atendiendo",
+  "por-cobrar": "Por cobrar",
+  finalizada: "Finalizado",
+}
+
+/**
+ * La pestaña con que abre el tablero en el celular: la primera etapa que tiene
+ * a alguien, sin contar lo ya cobrado; si no hay nadie, "Por llegar".
+ */
+function pestanaInicial(tablero: Tablero): ColumnaId {
+  const conAlguien = COLUMNAS_DEL_TABLERO.find(({ id }) =>
+    id === "reservas" ? tablero.reservas.length > 0 : id !== "finalizada" && atencionesDeColumna(tablero.atenciones, id).length > 0
+  )
+  return conAlguien?.id ?? "reservas"
+}
+
+/**
+ * Las columnas. En el celular (por debajo de `lg`) se ve una sola, a todo el
+ * ancho, y se cambia con las pestañas de arriba; las demás quedan ocultas.
+ * Desde `lg` se reparten el ancho con un mínimo de 196 px. Si las cinco no
+ * entran (una pantalla mediana con la barra lateral), el tablero se desplaza
+ * de costado dentro de su caja y la página no.
  *
  * La caja llega hasta el borde del contenido (el margen negativo deshace el
  * relleno de la página y su propio relleno lo devuelve): al desplazarse, las
@@ -50,9 +83,8 @@ const VACIO: Record<ColumnaId, string> = {
  * contenedor que recorta, y la estiraban: la página entera se desplazaba de
  * costado en el teléfono.
  */
-const CONTENEDOR =
-  "relative flex gap-3 overflow-x-auto snap-x snap-mandatory md:snap-none pb-3 -mx-4 px-4 scroll-px-4 sm:-mx-6 sm:px-6 sm:scroll-px-6"
-const ANCHO_DE_COLUMNA = "w-68 shrink-0 snap-start md:w-auto md:min-w-[196px] md:flex-1 md:shrink"
+const CONTENEDOR = "relative lg:flex lg:gap-3 lg:overflow-x-auto lg:pb-3 lg:-mx-6 lg:px-6 lg:scroll-px-6"
+const ANCHO_DE_COLUMNA = "lg:min-w-[196px] lg:flex-1"
 
 /**
  * Cuando las columnas no entran (QA#17: un escritorio de 1126 px con la barra
@@ -115,6 +147,14 @@ function useDesborde(caja: { current: HTMLDivElement | null }): Desborde {
  * recorta todo lo que se sale de ella.
  */
 const ISLA = "flex flex-col gap-2.5 rounded-panel bg-superficie p-2.5 squircle"
+
+/**
+ * Las pestañas del celular: píldoras de 44 px con el nombre corto y el número.
+ * Si no entran, la fila se desliza de lado; el relleno de arriba y abajo deja
+ * lugar al anillo del foco, que la fila con scroll recortaría.
+ */
+const PESTANA =
+  "relative inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-3.5 text-sm whitespace-nowrap anillo-foco transition-colors duration-150 ease-suave"
 
 /** El título de la columna, con el contador en una píldora blanca. */
 const TITULO_DE_COLUMNA =
@@ -181,6 +221,12 @@ const comoTarjeta = (arrastrada: Arrastrada): TarjetaDelTablero =>
 interface PropsDeColumna {
   id: ColumnaId
   titulo: string
+  /** El id de la sección: su pestaña del celular la nombra en `aria-controls`. */
+  idDelPanel: string
+  /** En el celular: si es la columna de la pestaña elegida. Las otras no se ven. */
+  activa: boolean
+  /** En el celular la columna es el panel de su pestaña (`role="tabpanel"`); en el computador, una sección. */
+  comoPanel: boolean
   cantidad: number
   vacio: string
   /** Mientras se arrastra una tarjeta: si se puede soltar acá. */
@@ -196,6 +242,9 @@ interface PropsDeColumna {
 function Columna({
   id,
   titulo,
+  idDelPanel,
+  activa,
+  comoPanel,
   cantidad,
   vacio,
   destinoValido,
@@ -210,6 +259,8 @@ function Columna({
 
   return (
     <section
+      id={idDelPanel}
+      role={comoPanel ? "tabpanel" : undefined}
       aria-labelledby={idDelTitulo}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -217,6 +268,7 @@ function Columna({
       className={cn(
         ANCHO_DE_COLUMNA,
         ISLA,
+        !activa && "max-lg:hidden",
         "transition-colors duration-150 ease-suave",
         // Mientras se arrastra, las columnas que aceptan la tarjeta se marcan con
         // un borde de trazos, y la que está debajo del puntero toma el naranja
@@ -229,7 +281,8 @@ function Columna({
         El título se enfoca desde el código: es adonde va el foco cuando la
         tarjeta ya no está. El anillo entra en el relleno de la isla.
       */}
-      <h2 id={idDelTitulo} data-columna={id} tabIndex={-1} className={cn(TITULO_DE_COLUMNA, "anillo-foco")}>
+      {/* En el celular el nombre y el número ya están en la pestaña: el título queda para el lector de pantalla. */}
+      <h2 id={idDelTitulo} data-columna={id} tabIndex={-1} className={cn(TITULO_DE_COLUMNA, "anillo-foco max-lg:sr-only")}>
         <span className="min-w-0 break-words">{titulo}</span>
         <span className="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-tarjeta px-2 text-[13px] font-semibold tabular-nums">
           <span className="sr-only">, </span>
@@ -301,6 +354,39 @@ export function TableroDeColumnas({
   const contenedor = useRef<HTMLDivElement>(null)
   const desborde = useDesborde(contenedor)
 
+  // En el celular, la columna que se ve. Se recuerda mientras la página siga
+  // abierta: las recargas del tablero no la cambian.
+  const esEscritorio = useEsEscritorio()
+  const [activa, setActiva] = useState<ColumnaId>(() => pestanaInicial(tablero))
+  const idBase = useId()
+  const idDePestana = (columna: ColumnaId) => `${idBase}-pestana-${columna}`
+  const idDelPanel = (columna: ColumnaId) => `${idBase}-panel-${columna}`
+  const pestanas = useRef<HTMLDivElement>(null)
+
+  const elegir = (columna: ColumnaId) => {
+    setActiva(columna)
+    pestanas.current?.querySelector<HTMLElement>(`#${CSS.escape(idDePestana(columna))}`)?.focus()
+  }
+
+  // El patrón de pestañas de ARIA: las flechas pasan de una a otra, Inicio y Fin a las puntas.
+  const alTeclearEnPestanas = (evento: KeyboardEvent<HTMLDivElement>) => {
+    const ids = COLUMNAS_DEL_TABLERO.map(({ id }) => id)
+    const actual = ids.indexOf(activa)
+    const destino =
+      evento.key === "ArrowRight"
+        ? ids[(actual + 1) % ids.length]
+        : evento.key === "ArrowLeft"
+          ? ids[(actual - 1 + ids.length) % ids.length]
+          : evento.key === "Home"
+            ? ids[0]
+            : evento.key === "End"
+              ? ids[ids.length - 1]
+              : null
+    if (!destino) return
+    evento.preventDefault()
+    elegir(destino)
+  }
+
   /** Una columna hacia un lado: lo que mide la primera más el espacio entre columnas. */
   const desplazar = (hacia: 1 | -1) => {
     const nodo = contenedor.current
@@ -312,7 +398,10 @@ export function TableroDeColumnas({
 
   // Después de dibujar lo que cambió: la tarjeta en su lugar nuevo o, si ya
   // no está, el título de la columna. Las tarjetas y los títulos se marcan
-  // con `data-atencion`, `data-reserva` y `data-columna`.
+  // con `data-atencion`, `data-reserva` y `data-columna`. En el celular, si la
+  // tarjeta pasó a otra columna (que no se ve), el foco va a la pestaña que
+  // se está mirando: la vista no salta de etapa y el número de la otra
+  // pestaña ya dice adónde fue.
   useEffect(() => {
     if (!foco) return
     const raiz = contenedor.current
@@ -321,7 +410,12 @@ export function TableroDeColumnas({
       : foco.reservaId
         ? raiz?.querySelector<HTMLElement>(`[data-reserva="${CSS.escape(foco.reservaId)}"]`)
         : null
-    const destino = tarjeta ?? raiz?.querySelector<HTMLElement>(`[data-columna="${foco.columna}"]`)
+    const enElCelular = !window.matchMedia(CONSULTA_DE_ESCRITORIO).matches
+    const destino = enElCelular
+      ? tarjeta && tarjeta.getClientRects().length > 0
+        ? tarjeta
+        : pestanas.current?.querySelector<HTMLElement>(`[aria-selected="true"]`)
+      : (tarjeta ?? raiz?.querySelector<HTMLElement>(`[data-columna="${foco.columna}"]`))
     if (destino) enfocar(destino)
     onFocoAplicado()
   }, [foco, onFocoAplicado])
@@ -409,8 +503,53 @@ export function TableroDeColumnas({
         tarjeta, y en el teléfono se desliza con el dedo. Por eso fuera del
         orden de Tab y escondidas del lector de pantalla.
       */}
+      {/*
+        En el celular, una pestaña por etapa con su número; muestra una columna
+        a la vez. Desde `lg` no está: se ven las cinco columnas.
+      */}
+      <div
+        ref={pestanas}
+        role="tablist"
+        aria-label="Etapas"
+        onKeyDown={alTeclearEnPestanas}
+        className="-mx-4 mb-1.5 flex gap-2 overflow-x-auto px-4 py-1.5 sm:-mx-6 sm:px-6 lg:hidden"
+      >
+        {COLUMNAS_DEL_TABLERO.map(({ id: columna }) => {
+          const elegida = activa === columna
+          const cantidad =
+            columna === "reservas" ? tablero.reservas.length : atencionesDeColumna(tablero.atenciones, columna).length
+          return (
+            <button
+              key={columna}
+              id={idDePestana(columna)}
+              type="button"
+              role="tab"
+              aria-selected={elegida}
+              aria-controls={idDelPanel(columna)}
+              tabIndex={elegida ? 0 : -1}
+              onClick={() => elegir(columna)}
+              className={cn(
+                PESTANA,
+                elegida ? "bg-navy font-semibold text-white" : "bg-tarjeta font-medium text-navy shadow-sm"
+              )}
+            >
+              {NOMBRE_CORTO[columna]}
+              <span
+                className={cn(
+                  "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[13px] font-semibold tabular-nums",
+                  elegida ? "bg-white/20 text-white" : "bg-superficie text-navy"
+                )}
+              >
+                <span className="sr-only">, </span>
+                {cantidad}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       {hayDesborde && (
-        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 md:flex">
+        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 lg:flex">
           <button
             type="button"
             tabIndex={-1}
@@ -434,13 +573,16 @@ export function TableroDeColumnas({
         </div>
       )}
       <div className="relative">
-        <div aria-hidden="true" className={cn(DEGRADADO, "-left-4 bg-linear-to-r sm:-left-6", desborde.izquierda ? "opacity-100" : "opacity-0")} />
-        <div aria-hidden="true" className={cn(DEGRADADO, "-right-4 bg-linear-to-l sm:-right-6", desborde.derecha ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-left-6 bg-linear-to-r max-lg:hidden", desborde.izquierda ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-right-6 bg-linear-to-l max-lg:hidden", desborde.derecha ? "opacity-100" : "opacity-0")} />
         <div ref={contenedor} className={CONTENEDOR}>
           {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
             const propsDeColumna = {
               id: columna,
               titulo,
+              idDelPanel: idDelPanel(columna),
+              activa: activa === columna,
+              comoPanel: !esEscritorio,
               vacio: VACIO[columna],
               destinoValido: destinos.includes(columna),
               arrastrando: arrastrada !== null,
@@ -504,8 +646,9 @@ export function TableroCargando() {
   return (
     <div className={CONTENEDOR} role="status">
       <span className="sr-only">{cargando}</span>
-      {COLUMNAS_DEL_TABLERO.map(({ id, titulo }) => (
-        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA)}>
+      {/* En el celular, sólo la primera: ahí se ve una columna a la vez. */}
+      {COLUMNAS_DEL_TABLERO.map(({ id, titulo }, indice) => (
+        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA, indice > 0 && "max-lg:hidden")}>
           <p className={TITULO_DE_COLUMNA}>{titulo}</p>
           {[0, 1].map((fila) => (
             <div key={fila} className="flex flex-col gap-3 rounded-[24px] bg-tarjeta p-3.5 shadow-sm squircle">

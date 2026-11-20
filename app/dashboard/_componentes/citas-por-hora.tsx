@@ -5,7 +5,7 @@ import { Clock } from "lucide-react"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearHora } from "@/lib/fechas"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import type { CitaDelDia } from "@/lib/horario-dia"
@@ -28,7 +28,7 @@ export function CitasPorHora({ citas, zona }: PropsDeCitasPorHora) {
   const frases = frasesDelInicio(palabras).citasPorHora
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta id={idDelTitulo} titulo={frases.titulo} icono={{ figura: Clock, color: "azul" }} />
 
       <div className="mt-5">

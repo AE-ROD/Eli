@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { leerProtesisParaAbonar, type Atencion, type ProtesisParaAbonar } from "../_datos"
 import { frasesDelTablero } from "../_frases"
+import { BotonesDelPie } from "./botones-del-pie"
 
 interface PropsDeModalAbono {
   atencion: Atencion
@@ -66,6 +67,7 @@ export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCe
   const [monto, setMonto] = useState<string | null>(null)
   const [intento, setIntento] = useState(false)
   const campoDelMonto = useRef<HTMLInputElement>(null)
+  const idDelFormulario = useId()
 
   useEffect(() => {
     let vigente = true
@@ -79,6 +81,8 @@ export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCe
   }, [atencion.id, version, reintentos])
 
   const protesis = lectura && "protesis" in lectura ? lectura.protesis : null
+  /** Si se ve el formulario (hay prótesis): sólo entonces van los botones del pie. */
+  const conFormulario = protesis !== null && protesis.length > 0
   const abonables = protesis?.filter((p) => p.saldo > 0) ?? []
   // La elegida, si sigue siendo abonable con lo último que se leyó; si no, la
   // primera con saldo (la única, casi siempre).
@@ -115,6 +119,20 @@ export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCe
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
+      // Los botones, sólo con la lista de prótesis a la vista: en el pie, fijos abajo de la hoja en el celular.
+      pie={
+        conFormulario ? (
+          <BotonesDelPie
+            formulario={idDelFormulario}
+            onCancelar={onCerrar}
+            guardando={guardando}
+            deshabilitado={!actual}
+            mientrasGuarda="Agregando el abono"
+          >
+            Agregar abono
+          </BotonesDelPie>
+        ) : undefined
+      }
     >
       {lectura === null ? (
         <div role="status" className="space-y-3">
@@ -144,7 +162,7 @@ export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCe
           </Boton>
         </div>
       ) : (
-        <form onSubmit={abonar} noValidate className="space-y-6">
+        <form id={idDelFormulario} onSubmit={abonar} noValidate className="space-y-6">
           <fieldset>
             <legend className="mb-3 text-sm font-semibold">¿A qué prótesis?</legend>
             <ul className="space-y-2">
@@ -239,21 +257,6 @@ export function ModalAbono({ atencion, aviso, guardando, version, onAbonar, onCe
               {aviso}
             </Aviso>
           )}
-
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
-            <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
-              Cancelar
-            </Boton>
-            <Boton
-              type="submit"
-              disabled={!actual}
-              cargando={guardando}
-              aria-label={guardando ? "Agregando el abono" : undefined}
-              className="w-full"
-            >
-              Agregar abono
-            </Boton>
-          </div>
         </form>
       )}
     </MarcoDeModal>

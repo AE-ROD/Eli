@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, useId } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -59,24 +59,29 @@ export function ModalSede({ sede, sedes, alGuardar, alCerrar }: PropsDeModalSede
     alGuardar(resultado.datos)
   }
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <MarcoDeModal
       titulo={sede ? frases.tituloEditar : frases.tituloAgregar}
       descripcion={sede ? undefined : frases.ayudaAgregar}
       bloqueado={guardando}
       alCerrar={alCerrar}
-    >
-      <form ref={formulario} onSubmit={guardar} noValidate className="space-y-5">
-        <FormularioDeSede datos={datos} errores={errores} alCambiar={cambiar} enfocarElNombre guardando={guardando} />
-        {aviso && <Aviso>{aviso}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
             {frases.cancelar}
           </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
             {sede ? frases.guardar : frases.agregar}
           </BotonPrimario>
         </div>
+      }
+    >
+      <form id={idDelFormulario} ref={formulario} onSubmit={guardar} noValidate className="space-y-5">
+        <FormularioDeSede datos={datos} errores={errores} alCambiar={cambiar} enfocarElNombre guardando={guardando} />
+        {aviso && <Aviso>{aviso}</Aviso>}
       </form>
     </MarcoDeModal>
   )

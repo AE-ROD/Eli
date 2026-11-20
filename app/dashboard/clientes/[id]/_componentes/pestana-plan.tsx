@@ -7,7 +7,7 @@ import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import type { AccionDeEtapa, EtapaRespuesta, PlanRespuesta, PrestacionRespuesta } from "@/lib/edicion-del-plan"
 import { textoDeCaras } from "@/lib/odontograma"
@@ -216,8 +216,8 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
   const realizado = plan ? porcentajeRealizado(plan.totales) : null
 
   return (
-    <div className="flex flex-wrap items-start gap-6">
-      <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "min-w-0 flex-[999_1_640px] p-4 sm:p-6")}>
+    <div className="flex flex-wrap items-start gap-4 lg:gap-6">
+      <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "min-w-0 flex-[999_1_640px]")}>
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -325,8 +325,8 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
         )}
       </section>
 
-      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-6">
-        <section aria-labelledby={idDelPresupuesto} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4 lg:gap-6">
+        <section aria-labelledby={idDelPresupuesto} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
           <h2 id={idDelPresupuesto} className={TITULO_DE_TARJETA}>
             Presupuesto
           </h2>
@@ -346,7 +346,7 @@ export function PestanaPlan({ pacienteId, plan: respuesta, alCambiar, conOdontog
         </section>
 
         {versionesAnteriores.length > 0 && (
-          <section aria-label="Versiones anteriores" className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+          <section aria-label="Versiones anteriores" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
             <h2 className="font-semibold">Versiones anteriores</h2>
             <ul className="mt-2 space-y-1 text-sm text-texto-2">
               {versionesAnteriores.map((version) => (
@@ -529,12 +529,13 @@ function Etapa({
       </div>
 
       {conPrestaciones ? (
-        // La tabla no se aprieta: en el teléfono se desplaza de lado dentro de la etapa, no la página.
+        // Desde lg la tabla no se aprieta: si no entra, se desplaza de lado dentro de la etapa, no la página.
+        // En el celular cada prestación es una tarjeta apilada (la fila y sus celdas pasan a bloques).
         // `relative`: lo `sr-only` de la tabla (absoluto) queda adentro y no estira la página.
         <div className="relative mt-3 overflow-x-auto rounded-[14px] anillo-foco" role="region" aria-label={`Prestaciones de la etapa ${etapa.orden}`} tabIndex={0}>
-          <table className="w-full min-w-[620px] border-separate border-spacing-y-1.5 text-sm">
+          <table className="w-full border-separate border-spacing-y-1.5 text-sm max-lg:block lg:min-w-[620px]">
             <caption className="sr-only">Prestaciones de la etapa {etapa.orden}</caption>
-            <thead>
+            <thead className="max-lg:hidden">
               <tr className="text-left text-[13px] text-texto-2">
                 <th scope="col" className="px-3 font-medium">
                   Pieza
@@ -558,7 +559,7 @@ function Etapa({
                 )}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-lg:block max-lg:space-y-2">
               {etapa.prestaciones.map((prestacion) => (
                 <FilaDePrestacion
                   key={prestacion.id}
@@ -569,6 +570,7 @@ function Etapa({
                   trabajandoElProfesional={trabajando === `${prestacion.id}:profesional`}
                   ocupado={ocupado}
                   profesional={puedeEditar ? profesionalDe(prestacion) : null}
+                  quienAtiende={quienAtiende}
                   alCambiarProfesional={(valor) => alCambiarProfesional(prestacion, valor)}
                   alEditar={puedeEditar && porAprobar ? () => alEditarPrestacion(prestacion) : undefined}
                   zona={zona}
@@ -666,6 +668,8 @@ interface PropsDeFilaDePrestacion {
   ocupado: boolean
   /** El selector de quién la hace, para quien edita; `null`, sólo el nombre. */
   profesional: ReturnType<typeof profesionalDeLaFila> | null
+  /** El nombre de la columna de quién la hace ("Odontólogo"): en el celular va sobre el selector. */
+  quienAtiende: string
   alCambiarProfesional: (valor: string) => void
   /** Sólo en una etapa por aprobar: corregir la pieza, las caras y el nombre. */
   alEditar?: () => void
@@ -679,7 +683,18 @@ interface PropsDeFilaDePrestacion {
   alBorrar: () => void
 }
 
-const CELDA = "bg-tarjeta px-3 py-3 align-top"
+const CELDA = "bg-tarjeta px-3 py-3 align-top max-lg:block max-lg:bg-transparent max-lg:p-0"
+
+/**
+ * En el celular la fila es una tarjeta: arriba la pieza, la prestación y el
+ * valor; debajo, quién la hace y el estado, cada uno con su nombre visible
+ * (la cabecera de la tabla no se ve), y el borrar al lado del estado.
+ */
+const FILA_COMO_TARJETA =
+  "max-lg:grid max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:items-start max-lg:gap-x-3 max-lg:gap-y-2.5 max-lg:rounded-[16px] max-lg:bg-tarjeta max-lg:p-3 max-lg:squircle"
+
+/** El nombre de la columna sobre su valor, sólo en el celular. */
+const NOMBRE_EN_EL_CELULAR = "mb-1 block text-[13px] text-texto-2 lg:hidden"
 
 /** "Falta el valor": en palabras y en el naranja de lo incompleto (el tono `atencion` de `Aviso`), no sólo $0. */
 const FALTA_EL_VALOR = "inline-flex h-6 items-center gap-1.5 rounded-full bg-naranja-suave px-2.5 text-[13px] font-medium whitespace-nowrap text-navy"
@@ -692,6 +707,7 @@ function FilaDePrestacion({
   trabajandoElProfesional,
   ocupado,
   profesional,
+  quienAtiende,
   alCambiarProfesional,
   alEditar,
   zona,
@@ -711,8 +727,8 @@ function FilaDePrestacion({
   ].filter(Boolean)
 
   return (
-    <tr>
-      <td className={cn(CELDA, "rounded-l-[14px] font-semibold whitespace-nowrap tabular-nums")}>{piezaDe(prestacion)}</td>
+    <tr className={FILA_COMO_TARJETA}>
+      <td className={cn(CELDA, "rounded-l-[14px] font-semibold whitespace-nowrap tabular-nums max-lg:pt-0.5")}>{piezaDe(prestacion)}</td>
       <td className={CELDA}>
         <span className="flex items-start gap-1">
           <span className="min-w-0 flex-1">
@@ -733,7 +749,10 @@ function FilaDePrestacion({
           )}
         </span>
       </td>
-      <td className={cn(CELDA, "whitespace-nowrap")}>
+      <td className={cn(CELDA, "whitespace-nowrap max-lg:col-span-3 max-lg:row-start-2")}>
+        <span className={NOMBRE_EN_EL_CELULAR} aria-hidden="true">
+          {quienAtiende}
+        </span>
         {profesional ? (
           <select
             value={profesional.valor}
@@ -741,7 +760,7 @@ function FilaDePrestacion({
             disabled={ocupado}
             aria-label={`Quién hace ${prestacion.nombre}, ${dondeEs}`}
             aria-busy={trabajandoElProfesional || undefined}
-            className={cn(CAMPO, "min-h-10 w-auto max-w-48 cursor-pointer py-1.5 pr-8")}
+            className={cn(CAMPO, "min-h-10 w-auto max-w-48 cursor-pointer py-1.5 pr-8 max-lg:min-h-11 max-lg:w-full max-lg:max-w-none")}
           >
             {profesional.opciones.map((opcion) => (
               <option key={opcion.valor} value={opcion.valor}>
@@ -753,7 +772,10 @@ function FilaDePrestacion({
           prestacion.profesionalNombre ?? <span className="text-texto-2">Sin asignar</span>
         )}
       </td>
-      <td className={cn(CELDA, "whitespace-nowrap")}>
+      <td className={cn(CELDA, "whitespace-nowrap max-lg:row-start-3", conColumnaDeBorrar ? "max-lg:col-span-2" : "max-lg:col-span-3")}>
+        <span className={NOMBRE_EN_EL_CELULAR} aria-hidden="true">
+          Estado
+        </span>
         {puedeEditar ? (
           <select
             value={prestacion.estado}
@@ -761,7 +783,7 @@ function FilaDePrestacion({
             disabled={trabajando || ocupado}
             aria-label={`Estado de ${prestacion.nombre}, ${dondeEs}`}
             aria-busy={trabajando || undefined}
-            className={cn(CAMPO, "min-h-10 w-auto cursor-pointer py-1.5 pr-8", FONDO_DE_PRESTACION[prestacion.estado])}
+            className={cn(CAMPO, "min-h-10 w-auto cursor-pointer py-1.5 pr-8 max-lg:min-h-11 max-lg:w-full", FONDO_DE_PRESTACION[prestacion.estado])}
           >
             {ESTADOS_DE_PRESTACION.map((estado) => (
               <option key={estado.id} value={estado.id}>
@@ -775,7 +797,13 @@ function FilaDePrestacion({
           </span>
         )}
       </td>
-      <td className={cn(CELDA, "text-right font-medium whitespace-nowrap tabular-nums", !conColumnaDeBorrar && "rounded-r-[14px]")}>
+      <td
+        className={cn(
+          CELDA,
+          "text-right font-medium whitespace-nowrap tabular-nums max-lg:col-start-3 max-lg:row-start-1",
+          !conColumnaDeBorrar && "rounded-r-[14px]"
+        )}
+      >
         {alCambiarValor ? (
           // El valor se toca para cambiarlo; el que falta, para completarlo.
           <button
@@ -807,7 +835,7 @@ function FilaDePrestacion({
         )}
       </td>
       {conColumnaDeBorrar && (
-        <td className={cn(CELDA, "rounded-r-[14px] px-1 py-1.5 text-right")}>
+        <td className={cn(CELDA, "rounded-r-[14px] px-1 py-1.5 text-right max-lg:col-start-3 max-lg:row-start-3 max-lg:self-end max-lg:p-0")}>
           {prestacion.estado === "por-agendar" && (
             <button
               type="button"

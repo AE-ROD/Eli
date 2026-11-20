@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
+import { AnimatePresence } from "framer-motion"
 import { CalendarCheck, Clock, Copy, Save } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
+import { CampoHora } from "@/components/panel/campo-hora"
 import { FilaDeDia } from "@/components/panel/fila-de-dia"
 import { RangoDeHoras } from "@/components/panel/rango-de-horas"
 import { cn } from "@/lib/utils"
@@ -14,6 +16,7 @@ import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorario, type HorarioDelDia } from "../_datos"
 import { frasesDeConfiguracion } from "../_frases"
 import { DIAS, HORARIO_INICIAL, horarioParaMostrar } from "../_horario"
+import { BarraParaGuardarEnElCelular, FilaDeDiaCompacta, HojaDeHorasDelDia, LISTAS_GRANDES } from "./horario-en-el-celular"
 
 interface PropsDeSeccionHorario {
   horariosIniciales: HorarioDelDia[]
@@ -58,6 +61,8 @@ export function SeccionHorario({
   const [aviso, setAviso] = useState("")
   // Lo que se anuncia al copiar un día a los demás (el botón no cambia de texto).
   const [anuncio, setAnuncio] = useState("")
+  // En el celular, el día cuyas horas se están cambiando en la hoja.
+  const [diaEnLaHoja, setDiaEnLaHoja] = useState<number | null>(null)
 
   const pendiente = JSON.stringify(horarios) !== JSON.stringify(enLaBase)
   useEffect(() => {
@@ -125,7 +130,7 @@ export function SeccionHorario({
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
@@ -140,7 +145,8 @@ export function SeccionHorario({
             onClick={() => guardar()}
             variante={guardado && !pendiente ? "secundario" : "primario"}
             // Sin nada guardado, el botón se destaca: es lo único que falta para que se reserve.
-            className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2")}
+            // En el celular, con cambios sin guardar, el que se ve es el fijo de abajo.
+            className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2", pendiente && "max-lg:hidden")}
           >
             {nuncaGuardado ? "Guardar horario" : guardado && !pendiente ? "Guardado" : "Guardar"}
           </BotonPrimario>
@@ -180,11 +186,34 @@ export function SeccionHorario({
       {aviso && <Aviso className="mt-5">{aviso}</Aviso>}
 
       {/*
-        Desde sm, cada día en una fila: el interruptor con su nombre y las
-        horas al lado. En el teléfono las horas bajan debajo del día: en una
-        sola fila no entraban y la página se ensanchaba a 478 px.
+        En el celular, cada día en una fila compacta: el día, sus horas en un
+        botón que abre la hoja y el interruptor (`horario-en-el-celular.tsx`).
       */}
-      <ul className="mt-5 divide-y divide-borde">
+      <ul className="mt-3 divide-y divide-borde lg:hidden">
+        {horarios.map((horario) => {
+          const dia = DIAS[horario.dayOfWeek]
+          return (
+            <FilaDeDiaCompacta
+              key={horario.dayOfWeek}
+              etiqueta={dia}
+              activo={horario.active}
+              alAlternar={() => alternarDia(horario.dayOfWeek)}
+              resumen={`${horario.startTime} – ${horario.endTime}`}
+              resumenParaLeer={`de ${horario.startTime} a ${horario.endTime}`}
+              alAbrirLasHoras={() => {
+                setAnuncio("")
+                setDiaEnLaHoja(horario.dayOfWeek)
+              }}
+            />
+          )
+        })}
+      </ul>
+
+      {/*
+        Desde lg, cada día en una fila: el interruptor con su nombre y las
+        horas al lado.
+      */}
+      <ul className="mt-5 divide-y divide-borde max-lg:hidden">
         {horarios.map((horario) => {
           const dia = DIAS[horario.dayOfWeek]
           return (
@@ -214,6 +243,57 @@ export function SeccionHorario({
           )
         })}
       </ul>
+
+      <AnimatePresence>
+        {diaEnLaHoja !== null && hojaDelDia(diaEnLaHoja)}
+      </AnimatePresence>
+
+      <BarraParaGuardarEnElCelular visible={pendiente} guardando={guardando} alGuardar={() => guardar()}>
+        Guardar horario
+      </BarraParaGuardarEnElCelular>
     </section>
   )
+
+  /** La hoja del celular con las horas de un día (una función y no un componente: así no se vuelve a montar al cambiar una hora). */
+  function hojaDelDia(dayOfWeek: number) {
+    const horario = horarios.find((otro) => otro.dayOfWeek === dayOfWeek)
+    if (!horario) return null
+    const dia = DIAS[horario.dayOfWeek]
+    return (
+      <HojaDeHorasDelDia key="hoja-del-dia" dia={dia} descripcion="Desde qué hora y hasta qué hora atiendes ese día." alCerrar={() => setDiaEnLaHoja(null)}>
+        <div className={cn("space-y-4", LISTAS_GRANDES)}>
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-navy">
+              Desde
+            </p>
+            <CampoHora
+              etiqueta={`${dia}: desde`}
+              value={horario.startTime}
+              onChange={(valor) => cambiarHora(horario.dayOfWeek, "startTime", valor)}
+            />
+          </div>
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-navy">Hasta</p>
+            <CampoHora
+              etiqueta={`${dia}: hasta`}
+              value={horario.endTime}
+              onChange={(valor) => cambiarHora(horario.dayOfWeek, "endTime", valor)}
+            />
+          </div>
+          {diasMarcados > 1 && (
+            <button
+              type="button"
+              onClick={() => copiarATodos(horario.dayOfWeek)}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-boton text-left text-sm font-medium text-navy underline-offset-4 hover:underline anillo-foco"
+            >
+              <Copy aria-hidden="true" className="size-4 shrink-0" strokeWidth={2} />
+              {frases.copiarATodos}
+            </button>
+          )}
+          {/* El anuncio de la copia, también a la vista: con la hoja abierta no se ven los demás días. */}
+          {anuncio && <p className="text-[13px] text-texto-2">{anuncio}</p>}
+        </div>
+      </HojaDeHorasDelDia>
+    )
+  }
 }

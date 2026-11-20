@@ -10,7 +10,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { LARGO_MAXIMO_DEL_NOMBRE } from "@/lib/sillones"
 import { cn } from "@/lib/utils"
@@ -95,7 +95,7 @@ export function SeccionSillones({ sillonesIniciales }: PropsDeSeccionSillones) {
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
@@ -252,14 +252,27 @@ function ModalSillon({ sillon, alGuardar, alCerrar }: PropsDeModalSillon) {
     alGuardar(resultado.datos)
   }
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <MarcoDeModal
       titulo={sillon ? "Renombrar sillón" : "Nuevo sillón"}
       descripcion={sillon ? undefined : "Va al final de la lista; después lo puedes subir."}
       bloqueado={guardando}
       alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            {sillon ? "Guardar" : "Agregar sillón"}
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={guardar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={guardar} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre"
           placeholder="Ej.: Sillón 1, Box 2"
@@ -273,14 +286,6 @@ function ModalSillon({ sillon, alGuardar, alCerrar }: PropsDeModalSillon) {
           required
         />
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {sillon ? "Guardar" : "Agregar sillón"}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

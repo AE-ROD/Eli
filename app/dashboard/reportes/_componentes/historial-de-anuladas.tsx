@@ -19,7 +19,7 @@ import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
 export function ResumenDeAnuladas({ reporte }: { reporte: ReporteDeAnuladas }) {
   const { cantidad, montoAnulado } = reporte.resumen
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-3 lg:gap-4">
       <Cifra titulo="Atenciones anuladas" valor={String(cantidad)} icono={Ban} />
       <Cifra titulo="Cobrado que se anuló" valor={formatearMonto(montoAnulado)} icono={DollarSign} />
     </div>
@@ -72,6 +72,34 @@ function Cobro({ fila }: { fila: FilaAnulada }) {
   )
 }
 
+/**
+ * Una anulada como tarjeta del celular: a quién y el total a la derecha;
+ * debajo cuándo y quién la anuló, qué tenía, si se había cobrado y el motivo.
+ */
+function TarjetaDeAnulada({ fila, sinServicios }: { fila: FilaAnulada; sinServicios: string }) {
+  return (
+    <li className="space-y-2 px-4 py-3.5 text-sm">
+      <div className="flex items-baseline justify-between gap-3 text-[15px]">
+        <p className="min-w-0 font-medium break-words">{fila.cliente.nombre}</p>
+        <p className="shrink-0 font-semibold tabular-nums">{formatearMonto(fila.total)}</p>
+      </div>
+      <p className="text-[13px] text-texto-2">
+        Anulada el{" "}
+        <time dateTime={fila.anuladaEn}>
+          {diaCorto(fila.anuladaEn)}, {formatearHora(fila.anuladaEn)}
+        </time>{" "}
+        · {fila.anuladaPor ?? "sin registro de quién"}
+      </p>
+      <Servicios fila={fila} sinServicios={sinServicios} />
+      <Cobro fila={fila} />
+      <p className="break-words">
+        <span className="text-texto-2">Motivo: </span>
+        {fila.motivoDeAnulacion ?? <span className="text-texto-2">Sin motivo</span>}
+      </p>
+    </li>
+  )
+}
+
 interface PropsDeHistorialDeAnuladas {
   reporte: ReporteDeAnuladas
   /** Mientras llega otra página u otro período. */
@@ -98,7 +126,7 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
       // La fila fija de arriba del teléfono mide 68 px: el principio de la sección no queda debajo.
       className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 lg:scroll-mt-6")}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 lg:px-6 lg:pb-4 lg:pt-6">
         <h2 id={idDelTitulo} className={TITULO_DE_TARJETA}>
           Historial de anuladas
         </h2>
@@ -113,69 +141,82 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
         // `relative`, como en el historial de cobros: el título `sr-only` de la
         // tabla es `position: absolute` y, sin un ancestro posicionado dentro
         // del scroll, estiraba la página de costado.
-        <div className="relative overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <caption className="sr-only">
-              Atenciones anuladas, página {pagina} de {paginas}
-            </caption>
-            <thead>
-              <tr className="border-y border-borde bg-crema text-left">
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Anulada
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Por
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  {frases.cliente}
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  {frases.servicios}
-                </th>
-                <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
-                  Total
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Cobro
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Motivo
-                </th>
-              </tr>
-            </thead>
-            <tbody
-              className={cn(
-                "divide-y divide-borde transition-opacity duration-200 ease-suave",
-                actualizando && "opacity-60"
-              )}
-            >
-              {reporte.filas.map((fila) => (
-                <tr key={fila.id}>
-                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
-                    <Momento iso={fila.anuladaEn} />
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "break-words")}>
-                    {/* El nombre se copia al anular y queda aunque la persona se vaya: sólo falta si no se registró. */}
-                    {fila.anuladaPor ?? <span className="text-texto-2">Sin registro</span>}
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
-                  <td className={CLASES_DE_CELDA}>
-                    <Servicios fila={fila} sinServicios={frases.sinServicios} />
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
-                    {formatearMonto(fila.total)}
-                  </td>
-                  <td className={CLASES_DE_CELDA}>
-                    <Cobro fila={fila} />
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "max-w-[16rem] break-words")}>
-                    {fila.motivoDeAnulacion ?? <span className="text-texto-2">Sin motivo</span>}
-                  </td>
+        <>
+          <ul
+            aria-label={`Atenciones anuladas, página ${pagina} de ${paginas}`}
+            className={cn(
+              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave lg:hidden",
+              actualizando && "opacity-60"
+            )}
+          >
+            {reporte.filas.map((fila) => (
+              <TarjetaDeAnulada key={fila.id} fila={fila} sinServicios={frases.sinServicios} />
+            ))}
+          </ul>
+          <div className="relative overflow-x-auto max-lg:hidden">
+            <table className="w-full min-w-[900px] text-sm">
+              <caption className="sr-only">
+                Atenciones anuladas, página {pagina} de {paginas}
+              </caption>
+              <thead>
+                <tr className="border-y border-borde bg-crema text-left">
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    Anulada
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    Por
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    {frases.cliente}
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    {frases.servicios}
+                  </th>
+                  <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
+                    Total
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    Cobro
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    Motivo
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody
+                className={cn(
+                  "divide-y divide-borde transition-opacity duration-200 ease-suave",
+                  actualizando && "opacity-60"
+                )}
+              >
+                {reporte.filas.map((fila) => (
+                  <tr key={fila.id}>
+                    <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
+                      <Momento iso={fila.anuladaEn} />
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "break-words")}>
+                      {/* El nombre se copia al anular y queda aunque la persona se vaya: sólo falta si no se registró. */}
+                      {fila.anuladaPor ?? <span className="text-texto-2">Sin registro</span>}
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
+                    <td className={CLASES_DE_CELDA}>
+                      <Servicios fila={fila} sinServicios={frases.sinServicios} />
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
+                      {formatearMonto(fila.total)}
+                    </td>
+                    <td className={CLASES_DE_CELDA}>
+                      <Cobro fila={fila} />
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "max-w-[16rem] break-words")}>
+                      {fila.motivoDeAnulacion ?? <span className="text-texto-2">Sin motivo</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <Paginador nombre="Páginas de anuladas" pagina={pagina} paginas={paginas} actualizando={actualizando} onPagina={irA} />

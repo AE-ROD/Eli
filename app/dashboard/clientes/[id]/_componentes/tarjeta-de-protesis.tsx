@@ -6,7 +6,7 @@ import { Check } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import type { EtapaRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import type { ColorDeModulo } from "@/lib/modulos"
@@ -210,7 +210,7 @@ export function TarjetaDeProtesis({
   ]
 
   return (
-    <article aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <article aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <ResumenDeProtesis
         titulo={tituloDeProtesis(protesis.tipo, protesis.arcada)}
         idDelTitulo={`${id}-titulo`}

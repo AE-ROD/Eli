@@ -8,7 +8,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { MAXIMO_DE_EVOLUCION, type EvolucionRespuesta } from "@/lib/ficha-clinica"
 import { cn } from "@/lib/utils"
@@ -90,7 +90,7 @@ export function PestanaEvoluciones({ pacienteId, activa, editable, zona, hoy }: 
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Evoluciones"
@@ -141,7 +141,7 @@ export function PestanaEvoluciones({ pacienteId, activa, editable, zona, hoy }: 
         ) : (
           <ol className="space-y-3">
             {evoluciones.map((evolucion) => (
-              <li key={evolucion.id} className="flex flex-wrap gap-x-6 gap-y-2 rounded-[20px] bg-superficie px-[18px] py-4 squircle">
+              <li key={evolucion.id} className="flex flex-wrap gap-x-6 gap-y-2 rounded-[20px] bg-superficie px-[18px] py-4 squircle max-lg:gap-y-1.5 max-lg:px-3.5 max-lg:py-3">
                 <p className="shrink-0 basis-44">
                   <span className="block font-semibold">{fechaYHora(evolucion.createdAt, zona)}</span>
                   <span className="block text-[13px] text-texto-2">{evolucion.autorNombre}</span>
@@ -242,8 +242,19 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
       bloqueado={guardando}
       ancho="lg"
       alCerrar={alCerrar}
+    
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" form={`${id}-formulario`} className="w-full" cargando={guardando}>
+            Anotar evolución
+          </Boton>
+        </div>
+      }
     >
-      <form onSubmit={anotar} className="space-y-5" noValidate>
+      <form id={`${id}-formulario`} onSubmit={anotar} className="space-y-5" noValidate>
         <div>
           <label htmlFor={`${id}-texto`} className={ETIQUETA}>
             Qué se hizo
@@ -294,14 +305,6 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
 
         {aviso && <Aviso>{aviso}</Aviso>}
 
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            Anotar evolución
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

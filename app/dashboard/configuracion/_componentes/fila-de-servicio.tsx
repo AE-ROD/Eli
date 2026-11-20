@@ -54,19 +54,20 @@ export function FilaDeServicio({ servicio, frases, seleccionando, marcado, alMar
   )
 
   return (
-    // Si no entran los botones al lado (el teléfono), bajan a la derecha, debajo del servicio.
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3.5 first:pt-1.5 last:pb-1.5">
+    // En el celular, una sola fila: el servicio se achica y sus botones quedan al lado. Desde lg, si no
+    // entran los botones al lado, bajan a la derecha, debajo del servicio.
+    <li className="flex flex-nowrap items-center gap-x-2 gap-y-1 py-2.5 first:pt-1.5 last:pb-1.5 lg:flex-wrap lg:gap-x-3 lg:py-3.5">
       {seleccionando ? (
         // Mientras se selecciona, la fila entera es la casilla: tocar el nombre también la marca.
-        <CasillaDeSeleccion etiqueta={frases.seleccion.marcar(servicio.name)} marcada={marcado} alCambiar={alMarcar} className="min-w-48 flex-1">
+        <CasillaDeSeleccion etiqueta={frases.seleccion.marcar(servicio.name)} marcada={marcado} alCambiar={alMarcar} className="min-w-0 flex-1 lg:min-w-48">
           {contenido}
         </CasillaDeSeleccion>
       ) : (
-        <div className="flex min-w-48 flex-1">{contenido}</div>
+        <div className="flex min-w-0 flex-1 lg:min-w-48">{contenido}</div>
       )}
 
       {!seleccionando && (
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 lg:gap-1">
           <InterruptorDelServicio activo={servicio.active} etiqueta={frases.activo(servicio.name)} alCambiar={alAlternarActivo} />
           <button type="button" onClick={alEditar} aria-label={`Editar ${servicio.name}`} title="Editar" className={BOTON_DE_ICONO}>
             <Pencil className="size-4" aria-hidden="true" strokeWidth={1.75} />

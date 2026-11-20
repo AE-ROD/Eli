@@ -164,6 +164,52 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
           titulo={`¡Bienvenido a Eli, ${nombreNegocio}!`}
           antetitulo={`Paso ${paso + 1} de ${pasos.length}`}
           alCerrar={cerrar}
+          pie={
+            /*
+              El principal es hacer el paso; "Siguiente" (o "Después", en el
+              último) lo deja para más tarde. En el teléfono, fijos al pie de la
+              hoja: el principal arriba y de ancho completo, y "Atrás" y
+              "Siguiente" de a dos debajo. `lg:pt-3`: en el computador, los 32
+              px de antes entre el paso y los botones.
+            */
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 lg:pt-3">
+              {paso > 0 ? (
+                <Boton variante="fantasma" onClick={() => irAlPaso(paso - 1)} className="w-full sm:mr-auto sm:w-auto">
+                  Atrás
+                </Boton>
+              ) : (
+                <span aria-hidden="true" className="hidden sm:mr-auto sm:block" />
+              )}
+              <Boton
+                ref={refBotonSiguiente}
+                variante="secundario"
+                onClick={esElUltimo ? cerrar : () => irAlPaso(paso + 1)}
+                className={cn("w-full sm:w-auto", paso === 0 && "col-span-2")}
+              >
+                {esElUltimo ? "Después" : "Siguiente"}
+              </Boton>
+              {pasoActual.accion ? (
+                <Boton href={pasoActual.accion.href} onClick={cerrar} icono={<ArrowRight />} className="col-span-2 -order-1 w-full sm:order-none sm:w-auto">
+                  {pasoActual.accion.texto}
+                </Boton>
+              ) : puedeCompartir ? (
+                <Boton onClick={compartir} icono={<Share2 />} className="col-span-2 -order-1 w-full sm:order-none sm:w-auto">
+                  Compartir enlace
+                </Boton>
+              ) : (
+                <Boton
+                  href={enlaceDeWhatsApp(mensaje)}
+                  {...AFUERA}
+                  onClick={marcarCompartido}
+                  icono={<MessageCircle />}
+                  className="col-span-2 -order-1 w-full sm:order-none sm:w-auto"
+                >
+                  Compartir por WhatsApp
+                  <span className="sr-only"> (se abre en otra pestaña)</span>
+                </Boton>
+              )}
+            </div>
+          }
         >
           {/* El avance ya lo dice el antetítulo: las barras son para el ojo. */}
           <div aria-hidden="true" className="-mt-2 mb-7 flex gap-1.5">
@@ -244,48 +290,6 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
             )}
           </motion.div>
 
-          {/*
-            El principal es hacer el paso; "Siguiente" (o "Después", en el
-            último) lo deja para más tarde. En el teléfono, uno debajo del
-            otro: el principal arriba y de ancho completo.
-          */}
-          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            {paso > 0 ? (
-              <Boton variante="fantasma" onClick={() => irAlPaso(paso - 1)} className="w-full sm:mr-auto sm:w-auto">
-                Atrás
-              </Boton>
-            ) : (
-              <span aria-hidden="true" className="hidden sm:mr-auto sm:block" />
-            )}
-            <Boton
-              ref={refBotonSiguiente}
-              variante="secundario"
-              onClick={esElUltimo ? cerrar : () => irAlPaso(paso + 1)}
-              className="w-full sm:w-auto"
-            >
-              {esElUltimo ? "Después" : "Siguiente"}
-            </Boton>
-            {pasoActual.accion ? (
-              <Boton href={pasoActual.accion.href} onClick={cerrar} icono={<ArrowRight />} className="w-full sm:w-auto">
-                {pasoActual.accion.texto}
-              </Boton>
-            ) : puedeCompartir ? (
-              <Boton onClick={compartir} icono={<Share2 />} className="w-full sm:w-auto">
-                Compartir enlace
-              </Boton>
-            ) : (
-              <Boton
-                href={enlaceDeWhatsApp(mensaje)}
-                {...AFUERA}
-                onClick={marcarCompartido}
-                icono={<MessageCircle />}
-                className="w-full sm:w-auto"
-              >
-                Compartir por WhatsApp
-                <span className="sr-only"> (se abre en otra pestaña)</span>
-              </Boton>
-            )}
-          </div>
         </MarcoDeModal>
       )}
     </AnimatePresence>

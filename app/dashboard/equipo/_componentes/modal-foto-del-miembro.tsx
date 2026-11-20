@@ -38,8 +38,13 @@ export function ModalFotoDelMiembro({ miembro, alCerrar, alCambiar }: PropsDeMod
       antetitulo="Equipo"
       descripcion={foto.descripcion(apareceEnLaPagina(miembro.role))}
       alCerrar={alCerrar}
+      pie={
+        <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} className="lg:mt-1">
+          Listo
+        </BotonPrimario>
+      }
     >
-      <div className="space-y-6">
+      <div>
         <SelectorDeFoto
           titulo={`Foto ${delRol(miembro.role, rubro)}`}
           nombreConArticulo={`la foto de ${primerNombre}`}
@@ -54,10 +59,6 @@ export function ModalFotoDelMiembro({ miembro, alCerrar, alCambiar }: PropsDeMod
             alCambiar(miembro.id, url)
           }}
         />
-
-        <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar}>
-          Listo
-        </BotonPrimario>
       </div>
     </MarcoDeModal>
   )

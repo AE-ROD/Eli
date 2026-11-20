@@ -127,7 +127,7 @@ export function AnotarseEnLaFila({ slug, nombreNegocio, rubro = null, abierto, e
         bajada="Anótate desde tu celular y espera tranquilo: te mostramos cuántas personas tienes adelante."
       />
 
-      <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
+      <Tarjeta className="mx-auto mt-8 max-w-xl px-5 py-6 sm:p-10 md:mt-12">
         {turnoGuardado ? (
           <div className="flex flex-col items-center gap-4 text-center">
             <CuadroDeIcono icono={Ticket} color="azul" tamano="lg" />

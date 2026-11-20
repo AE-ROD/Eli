@@ -27,6 +27,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { esAbono, leerLineasSinPorcentaje, nombreDelAbono, type Atencion } from "../_datos"
 import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
+import { BotonesDelPie } from "./botones-del-pie"
 
 /**
  * Cuánto se espera la revisión de comisiones antes de mostrar el cobro igual.
@@ -86,6 +87,7 @@ export function ModalCobro({
   onCerrar,
 }: PropsDeModalCobro) {
   const idBase = useId()
+  const idDelFormulario = `${idBase}-formulario`
   // La palabra del rubro y sus avisos: "Sala de espera" en una clínica dental, "prestación" en vez de "servicio".
   // Memorizadas: la lectura de comisiones de más abajo depende de ellas y no debe repetirse en cada dibujo.
   const rubro = useRubroDelPanel()
@@ -217,6 +219,21 @@ export function ModalCobro({
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
+      // Mientras se revisan las comisiones no hay botones (QA#11, arriba). Después, en el pie: en el celular,
+      // fijos abajo de la hoja y con el total a la vista en "Cobrar".
+      pie={
+        revisando ? undefined : (
+          <BotonesDelPie
+            formulario={idDelFormulario}
+            onCancelar={onCerrar}
+            guardando={guardando}
+            deshabilitado={!listo}
+            mientrasGuarda="Cobrando"
+          >
+            Cobrar {formatearMonto(deCentavos(totalCentavos))}
+          </BotonesDelPie>
+        )
+      }
     >
       {revisando ? (
         <div role="status" className="space-y-3">
@@ -226,7 +243,7 @@ export function ModalCobro({
           ))}
         </div>
       ) : (
-        <form onSubmit={cobrar} noValidate className="space-y-6">
+        <form id={idDelFormulario} onSubmit={cobrar} noValidate className="space-y-6">
           <section aria-labelledby={`${idBase}-resumen`} className="rounded-[24px] bg-superficie p-4 squircle sm:p-5">
             <h3 id={`${idBase}-resumen`} className="mb-3 text-sm font-semibold">
               Lo que se hizo
@@ -547,21 +564,6 @@ export function ModalCobro({
               {aviso}
             </Aviso>
           )}
-
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
-            <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
-              Cancelar
-            </Boton>
-            <Boton
-              type="submit"
-              disabled={!listo}
-              cargando={guardando}
-              aria-label={guardando ? "Cobrando" : undefined}
-              className="w-full"
-            >
-              Cobrar {formatearMonto(deCentavos(totalCentavos))}
-            </Boton>
-          </div>
         </form>
       )}
     </MarcoDeModal>

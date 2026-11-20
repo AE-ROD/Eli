@@ -1,6 +1,7 @@
 "use client"
 
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { Aviso } from "@/components/panel/aviso"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import type { FilaOmitida, ResumenDeImportacion as Resumen } from "../../_datos"
@@ -41,7 +42,7 @@ export function ResumenDeImportacion({
 }) {
   const { importar } = frasesDeClientes(palabras)
   return (
-    <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-resumen">
+    <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-resumen">
       <h2 id="titulo-resumen" className="font-medium text-navy">
         Resultado de la importación
       </h2>

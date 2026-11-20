@@ -2,7 +2,6 @@
 
 import { useId, useState, type FormEvent } from "react"
 import { TriangleAlert } from "lucide-react"
-import { Boton } from "@/components/comunes/boton"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import {
@@ -17,6 +16,7 @@ import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 import { formatearMonto } from "@/lib/dinero"
 import { vocabularioDe } from "@/lib/vocabulario"
+import { BotonesDelPie } from "./botones-del-pie"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /**
@@ -74,6 +74,7 @@ export function ModalServicios({
   const [filas, setFilas] = useState<FilaDeServicio[]>(() => filasIniciales(atencion, catalogo))
   const [intentoGuardar, setIntentoGuardar] = useState(false)
   const idDeLosAbonos = useId()
+  const idDelFormulario = useId()
   const abonos = atencion.lineas.filter(esAbono)
 
   const validacion = lineasDesdeFilas(filas, eligeProfesional, palabras)
@@ -107,8 +108,13 @@ export function ModalServicios({
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
+      pie={
+        <BotonesDelPie formulario={idDelFormulario} onCancelar={onCerrar} guardando={guardando} mientrasGuarda="Guardando">
+          {textoDelBoton}
+        </BotonesDelPie>
+      }
     >
-      <form onSubmit={guardar} noValidate className="space-y-6">
+      <form id={idDelFormulario} onSubmit={guardar} noValidate className="space-y-6">
         <EditorDeServicios
           filas={filas}
           catalogo={catalogo}
@@ -150,22 +156,6 @@ export function ModalServicios({
             {aviso}
           </Aviso>
         )}
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
-            Cancelar
-          </Boton>
-          <Boton
-            type="submit"
-            cargando={guardando}
-            // Mientras guarda, el botón muestra sólo el ícono que gira: el
-            // nombre dice qué está haciendo.
-            aria-label={guardando ? "Guardando" : undefined}
-            className="w-full"
-          >
-            {textoDelBoton}
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

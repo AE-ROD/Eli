@@ -10,7 +10,7 @@ import { Boton } from "@/components/comunes/boton"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { descripcionDePlan, nombreDePlan, type PlanId } from "@/lib/planes"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -86,7 +86,7 @@ export function SeccionPlan({ plan: planInicial, integrantes, invitacionesPendie
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta id={idDelTitulo} nivel={3} titulo={frases.titulo} subtitulo={frases.subtitulo} icono={{ figura: Layers }} />
 
       <div className="mt-5 rounded-campo bg-superficie p-4 squircle sm:p-5">

@@ -7,8 +7,8 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
-import { TarjetaCita } from "@/components/panel/tarjeta-cita"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { FilaDeCita, TarjetaCita } from "@/components/panel/tarjeta-cita"
 import type { CitaDelDia } from "@/lib/horario-dia"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -31,7 +31,7 @@ export function CitasDeHoy({ citas, zona, className }: PropsDeCitasDeHoy) {
   const frases = frasesDelInicio(palabras).citasDeHoy
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6", className)}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, className)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={frases.titulo}
@@ -44,17 +44,27 @@ export function CitasDeHoy({ citas, zona, className }: PropsDeCitasDeHoy) {
         }
       />
 
-      <div className="mt-5">
+      <div className="mt-4 lg:mt-5">
         {!citas ? (
           <ListaCargando texto={frases.cargando} />
         ) : citas.length > 0 ? (
-          <ul className="space-y-2">
-            {citas.map((cita) => (
-              <li key={cita.id}>
-                <TarjetaCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} compacta />
-              </li>
-            ))}
-          </ul>
+          <>
+            {/* En el celular, filas compactas con un divisor; en el computador, las tarjetas de siempre. */}
+            <ul className="-mx-3 divide-y divide-superficie lg:hidden">
+              {citas.map((cita) => (
+                <li key={cita.id}>
+                  <FilaDeCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} />
+                </li>
+              ))}
+            </ul>
+            <ul className="space-y-2 max-lg:hidden">
+              {citas.map((cita) => (
+                <li key={cita.id}>
+                  <TarjetaCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} compacta />
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
           <EstadoVacio>{frases.sinCitas}</EstadoVacio>
         )}

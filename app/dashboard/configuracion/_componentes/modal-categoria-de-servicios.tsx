@@ -44,9 +44,28 @@ export function ModalCategoriaDeServicios({ frases, cantidad, categorias, trabaj
   const usaLaExistente = canonica !== "" && canonica !== valor.trim()
   const f = frases.cambiarCategoria
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
-    <MarcoDeModal titulo={f.titulo} descripcion={f.descripcion(cantidad)} bloqueado={trabajando} alCerrar={alCerrar}>
+    <MarcoDeModal
+      titulo={f.titulo}
+      descripcion={f.descripcion(cantidad)}
+      bloqueado={trabajando}
+      alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={trabajando}>
+            {f.cancelar}
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={trabajando}>
+            {f.confirmar}
+          </BotonPrimario>
+        </div>
+      }
+    >
       <form
+        id={idDelFormulario}
         onSubmit={(evento) => {
           evento.preventDefault()
           alConfirmar(canonica)
@@ -96,15 +115,6 @@ export function ModalCategoriaDeServicios({ frases, cantidad, categorias, trabaj
         )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={trabajando}>
-            {f.cancelar}
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={trabajando}>
-            {f.confirmar}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

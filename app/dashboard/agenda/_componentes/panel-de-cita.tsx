@@ -334,6 +334,83 @@ export function PanelDeCita({
   const registraAjustes = puedeRegistrarAjuste(actorDeSesion(sesion))
   const veLiquidaciones = puedeVerLiquidacionesDelEquipo(actorDeSesion(sesion))
 
+  // Lo que se puede hacer con la cita. En el computador va al final del panel;
+  // en el celular, fijo al pie de la hoja, a la altura del pulgar.
+  const acciones = (puedeConfirmarse ||
+        asigna ||
+        puedeCompletarse ||
+        puedeCancelarse ||
+        puedeMoverse ||
+        puedeNoVenir ||
+        puedeReactivarse ||
+        agendaOtra) ? (
+      <div
+        className={cn(
+          "grid gap-2",
+          // En el celular, al pie de la hoja y de a dos; el último, si queda solo, a lo ancho.
+          escritorio ? "px-1 pb-1" : "grid-cols-2 [&>*:last-child:nth-child(odd)]:col-span-2"
+        )}
+      >
+        {ofreceCobro && (
+          <Boton href={direccionParaCobrar(cita.id)} tamano="sm" className="w-full">
+            {frases.cobrar}
+          </Boton>
+        )}
+        {puedeConfirmarse && (
+          <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "confirmada")}>
+            Confirmar reserva
+          </Boton>
+        )}
+        {puedeReactivarse && (
+          <Boton
+            tamano="sm"
+            className="w-full"
+            disabled={reactivando}
+            aria-busy={reactivando}
+            // La primera vez se confirma; con advertencias a la vista, "Reactivar igual" va directo.
+            onClick={() => (advertencias.length > 0 ? void pedirReactivar(true) : setConfirmandoReactivar(true))}
+          >
+            {advertencias.length > 0 ? reactivacion.botonIgual : reactivacion.boton}
+          </Boton>
+        )}
+        {asigna && (
+          <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
+            {frases.profesional.asignar}
+          </Boton>
+        )}
+        {puedeMoverse && (
+          <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onMover(cita)}>
+            Cambiar fecha y hora
+          </Boton>
+        )}
+        {agendaOtra && (
+          <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onAgendarOtra(cita)}>
+            {frases.agendarOtra}
+          </Boton>
+        )}
+        {puedeCompletarse && (
+          <Boton tamano="sm" variante={ofreceCobro ? "secundario" : undefined} className="w-full" onClick={pedirCompletar}>
+            {frases.marcarCompletada}
+          </Boton>
+        )}
+        {puedeNoVenir && (
+          <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => void onCambiarEstado(cita.id, "no-asistio")}>
+            {frases.noVino}
+          </Boton>
+        )}
+        {puedeCancelarse && (
+          <BotonPrimario
+            variante="peligro"
+            anchoCompleto
+            tamaño="sm"
+            onClick={pedirCancelar}
+          >
+            {frases.cancelarCita}
+          </BotonPrimario>
+        )}
+      </div>
+  ) : null
+
   const contenido = (
     <>
       {/* La alerta de alergias va primero: es lo que hay que ver antes de atender. Mientras se revisa, se dice. */}
@@ -485,74 +562,7 @@ export function PanelDeCita({
         </Aviso>
       )}
 
-      {(puedeConfirmarse ||
-        asigna ||
-        puedeCompletarse ||
-        puedeCancelarse ||
-        puedeMoverse ||
-        puedeNoVenir ||
-        puedeReactivarse ||
-        agendaOtra) && (
-        <div className="grid gap-2 px-1 pb-1">
-          {ofreceCobro && (
-            <Boton href={direccionParaCobrar(cita.id)} tamano="sm" className="w-full">
-              {frases.cobrar}
-            </Boton>
-          )}
-          {puedeConfirmarse && (
-            <Boton tamano="sm" className="w-full" onClick={() => void onCambiarEstado(cita.id, "confirmada")}>
-              Confirmar reserva
-            </Boton>
-          )}
-          {puedeReactivarse && (
-            <Boton
-              tamano="sm"
-              className="w-full"
-              disabled={reactivando}
-              aria-busy={reactivando}
-              // La primera vez se confirma; con advertencias a la vista, "Reactivar igual" va directo.
-              onClick={() => (advertencias.length > 0 ? void pedirReactivar(true) : setConfirmandoReactivar(true))}
-            >
-              {advertencias.length > 0 ? reactivacion.botonIgual : reactivacion.boton}
-            </Boton>
-          )}
-          {asigna && (
-            <Boton tamano="sm" className="w-full" onClick={() => onAsignar(cita)}>
-              {frases.profesional.asignar}
-            </Boton>
-          )}
-          {puedeMoverse && (
-            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onMover(cita)}>
-              Cambiar fecha y hora
-            </Boton>
-          )}
-          {agendaOtra && (
-            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => onAgendarOtra(cita)}>
-              {frases.agendarOtra}
-            </Boton>
-          )}
-          {puedeCompletarse && (
-            <Boton tamano="sm" variante={ofreceCobro ? "secundario" : undefined} className="w-full" onClick={pedirCompletar}>
-              {frases.marcarCompletada}
-            </Boton>
-          )}
-          {puedeNoVenir && (
-            <Boton tamano="sm" variante="secundario" className="w-full" onClick={() => void onCambiarEstado(cita.id, "no-asistio")}>
-              {frases.noVino}
-            </Boton>
-          )}
-          {puedeCancelarse && (
-            <BotonPrimario
-              variante="peligro"
-              anchoCompleto
-              tamaño="sm"
-              onClick={pedirCancelar}
-            >
-              {frases.cancelarCita}
-            </BotonPrimario>
-          )}
-        </div>
-      )}
+      {escritorio && acciones}
     </>
   )
 
@@ -591,10 +601,8 @@ export function PanelDeCita({
           }
           bloqueado={completando}
           alCerrar={() => setConfirmandoCompletar(false)}
-        >
-          <div className="space-y-5">
-            {errorAlCompletar && <Aviso>{errorAlCompletar}</Aviso>}
-            {/* En el teléfono uno debajo del otro, con el recomendado arriba (como `ModalConfirmar`). */}
+          pie={
+            // En el teléfono uno debajo del otro, con el recomendado arriba (como `ModalConfirmar`).
             <div className="flex flex-col-reverse gap-3 sm:flex-row">
               {ofreceCobro ? (
                 <>
@@ -622,7 +630,9 @@ export function PanelDeCita({
                 </>
               )}
             </div>
-          </div>
+          }
+        >
+          {errorAlCompletar && <Aviso>{errorAlCompletar}</Aviso>}
         </MarcoDeModal>
       )}
     </AnimatePresence>
@@ -647,7 +657,7 @@ export function PanelDeCita({
   if (!escritorio) {
     return (
       <>
-        <MarcoDeModal titulo={frases.detalleDeLaCita} antetitulo="Agenda" alCerrar={onCerrar}>
+        <MarcoDeModal titulo={frases.detalleDeLaCita} antetitulo="Agenda" alCerrar={onCerrar} pie={acciones}>
           <div ref={panel} tabIndex={-1} className="flex flex-col gap-3 focus:outline-none">
             {aviso && <Aviso>{aviso}</Aviso>}
             {contenido}

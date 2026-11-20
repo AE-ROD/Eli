@@ -8,7 +8,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { formatearPorcentaje, leerComisiones, type DatosDeComisiones } from "../_datos"
@@ -72,7 +72,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
       <div role="status" className="space-y-4">
         <span className="sr-only">Cargando las comisiones…</span>
         {[0, 1].map((tarjeta) => (
-          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
+          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
             <Esqueleto className="h-6 w-1/3" />
             <Esqueleto className="w-1/2" />
           </div>
@@ -84,7 +84,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
   const sinConfigurar = datos.miembros.filter((miembro) => miembro.porcentaje === null)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       {error && <Aviso>{error}</Aviso>}
 
       {sinConfigurar.length > 0 && (
@@ -105,7 +105,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
           Cuando invites a alguien desde Equipo, aquí le pones su porcentaje.
         </EstadoVacio>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 lg:gap-4 xl:grid-cols-2">
           {datos.miembros.map((miembro) => (
             <TarjetaDeMiembro key={miembro.id} miembro={miembro} servicios={datos.servicios} onCambio={alCambiar} />
           ))}
@@ -127,7 +127,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
 function ProductosSoloLectura({ productos }: { productos: DatosDeComisiones["productos"] }) {
   const idDelTitulo = useId()
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Productos"

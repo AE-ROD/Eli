@@ -11,7 +11,7 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { leerMonto } from "@/lib/dinero"
@@ -65,7 +65,7 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Adelantos, vales y ajustes"
@@ -87,9 +87,9 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
       {pendientes.length === 0 ? (
         <EstadoVacio className="mt-5">No hay nada pendiente de descontar ni de sumar.</EstadoVacio>
       ) : (
-        <ul className="mt-5 divide-y divide-borde/60">
+        <ul className="mt-4 divide-y divide-borde/60 lg:mt-5">
           {pendientes.map((movimiento) => (
-            <li key={movimiento.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+            <li key={movimiento.id} className="flex items-center justify-between gap-3 py-3 text-sm lg:flex-wrap">
               <div className="min-w-0">
                 <p>
                   <span className="font-medium">{movimiento.miembro}</span> · {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
@@ -99,7 +99,8 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
                   {fechaParaLeer(movimiento.fecha)} · registró {movimiento.registradoPor}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              {/* En el celular, el monto arriba y "Anular" debajo, a la derecha: el texto no se aprieta. */}
+              <div className="flex items-center gap-2 max-lg:shrink-0 max-lg:flex-col max-lg:items-end max-lg:gap-0">
                 <span className="tabular-nums font-medium">
                   {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
                 </span>
@@ -167,6 +168,7 @@ function ModalRegistrar({
   const idDelMonto = useId()
   const idDeLaFecha = useId()
   const idDelMotivo = useId()
+  const idDelFormulario = useId()
   const [miembroId, setMiembroId] = useState(miembros[0]?.id ?? "")
   const opciones = opcionesDeMovimiento(tipos)
   const idDeLaAyuda = useId()
@@ -207,8 +209,20 @@ function ModalRegistrar({
       descripcion="Elige qué pasó y escribe el monto sin signo: la app sabe si suma o resta."
       bloqueado={guardando}
       alCerrar={alCerrar}
+      // En el celular, fijos al pie de la hoja. En el computador, el `lg:-mt-1`
+      // los deja a los 16 px de antes del formulario (el marco deja 20).
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:-mt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            Registrar
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={guardar} className="space-y-4">
+      <form id={idDelFormulario} onSubmit={guardar} className="space-y-4">
         <Selector
           etiqueta="Para quién"
           value={miembroId}
@@ -256,14 +270,6 @@ function ModalRegistrar({
           <input id={idDelMotivo} value={motivo} onChange={(evento) => setMotivo(evento.target.value)} maxLength={300} className={CAMPO} />
         </div>
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            Registrar
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

@@ -158,6 +158,30 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
       ancho="lg"
       bloqueado={cerrando}
       alCerrar={alCerrar}
+      // Con la vista previa a la vista: en el celular quedan fijos al pie de la
+      // hoja, debajo de "Le pagas $X", que va arriba del cuerpo. El `lg:pt-1`
+      // deja en el computador los 24 px de antes sobre lo último del cuerpo.
+      pie={
+        vista ? (
+          <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+            <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={cerrando}>
+              Cancelar
+            </BotonPrimario>
+            <BotonPrimario
+              type="button"
+              anchoCompleto
+              cargando={cerrando}
+              disabled={cargando || !!motivoParaNoCerrar}
+              onClick={() => {
+                setErrorAlCerrar("")
+                setConfirmando(true)
+              }}
+            >
+              Cerrar liquidación
+            </BotonPrimario>
+          </div>
+        ) : undefined
+      }
     >
       {respuesta && !respuesta.resultado.ok ? (
         <Aviso accion={<BotonPrimario tamaño="sm" variante="secundario" onClick={() => setReintentos((n) => n + 1)}>Reintentar</BotonPrimario>}>
@@ -171,16 +195,16 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           ))}
         </div>
       ) : (
-        <div className={cargando ? "space-y-6 opacity-60" : "space-y-6"} aria-busy={cargando}>
+        <div className={cargando ? "space-y-5 opacity-60 lg:space-y-6" : "space-y-5 lg:space-y-6"} aria-busy={cargando}>
           <div className="rounded-campo bg-superficie p-4 text-center squircle" aria-live="polite">
-            <p className="text-2xl font-semibold tabular-nums">{frases.resumen(vista.totales.totalCents, miembro.nombre)}</p>
+            <p className="text-2xl font-semibold text-balance tabular-nums">{frases.resumen(vista.totales.totalCents, miembro.nombre)}</p>
             <p className="mt-1 text-sm text-texto-2">Es lo que suma este período, con descuentos y extras ya restados o sumados.</p>
           </div>
 
-          <details className="rounded-campo border border-borde p-4 squircle">
-            <summary className="flex min-h-11 cursor-pointer items-center font-medium">
+          <details className="rounded-campo border border-borde p-4 squircle max-lg:px-3.5 max-lg:py-2">
+            <summary className="flex min-h-11 cursor-pointer flex-wrap items-center font-medium">
               Ver el detalle
-              <span className="ml-2 text-sm font-normal text-texto-2">(qué se cobró y cada descuento o extra)</span>
+              <span className="text-sm font-normal text-texto-2 max-lg:basis-full lg:ml-2">(qué se cobró y cada descuento o extra)</span>
             </summary>
             <div className="mt-4 space-y-6">
               <section className="space-y-2">
@@ -304,7 +328,7 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
             <FilaDeTotal concepto="Total a pagar" centavos={vista.totales.totalCents} fuerte />
           </dl>
           {vista.totales.ajustesCents !== 0 && (
-            <p className="-mt-4 text-sm text-texto-2">Ajustes: correcciones de algo ya cobrado, que suman o restan.</p>
+            <p className="-mt-3 text-sm text-texto-2 lg:-mt-4">Ajustes: correcciones de algo ya cobrado, que suman o restan.</p>
           )}
 
           <div className="space-y-2">
@@ -329,23 +353,6 @@ export function ModalDeCierre({ miembro, alCerrar }: Props) {
           )}
           {errorAlCerrar && <Aviso>{errorAlCerrar}</Aviso>}
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
-            <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={cerrando}>
-              Cancelar
-            </BotonPrimario>
-            <BotonPrimario
-              type="button"
-              anchoCompleto
-              cargando={cerrando}
-              disabled={cargando || !!motivoParaNoCerrar}
-              onClick={() => {
-                setErrorAlCerrar("")
-                setConfirmando(true)
-              }}
-            >
-              Cerrar liquidación
-            </BotonPrimario>
-          </div>
         </div>
       )}
     </MarcoDeModal>

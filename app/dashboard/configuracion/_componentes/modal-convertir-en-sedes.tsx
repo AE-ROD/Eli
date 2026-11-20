@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, useId } from "react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -63,9 +63,28 @@ export function ModalConvertirEnSedes({ direccionDelNegocio, comunaDelNegocio, a
     alConvertir(resultado.datos)
   }
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
-    <MarcoDeModal titulo={convertir.titulo} descripcion={convertir.modal.descripcion} ancho="lg" bloqueado={guardando} alCerrar={alCerrar}>
-      <form ref={formulario} onSubmit={crear} noValidate className="space-y-6">
+    <MarcoDeModal
+      titulo={convertir.titulo}
+      descripcion={convertir.modal.descripcion}
+      ancho="lg"
+      bloqueado={guardando}
+      alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-2">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
+            {convertir.modal.cancelar}
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            {convertir.modal.crear}
+          </BotonPrimario>
+        </div>
+      }
+    >
+      <form id={idDelFormulario} ref={formulario} onSubmit={crear} noValidate className="space-y-6">
         <fieldset className="min-w-0 space-y-4">
           <legend className="font-serif text-xl font-medium text-navy">{convertir.modal.principal.leyenda}</legend>
           <p className="text-sm text-pretty text-texto-2">{convertir.modal.principal.ayuda}</p>
@@ -79,14 +98,6 @@ export function ModalConvertirEnSedes({ direccionDelNegocio, comunaDelNegocio, a
         </fieldset>
 
         {aviso && <Aviso>{aviso}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
-            {convertir.modal.cancelar}
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {convertir.modal.crear}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

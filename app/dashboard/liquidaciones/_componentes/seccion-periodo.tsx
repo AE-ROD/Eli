@@ -7,7 +7,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Selector } from "@/components/comunes/selector"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import {
   DIAS_DE_LA_SEMANA,
   NOMBRES_DE_PERIODO,
@@ -55,7 +55,7 @@ export function SeccionPeriodo({ inicial, editable }: { inicial: ConfiguracionDe
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Período"

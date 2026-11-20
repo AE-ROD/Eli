@@ -55,6 +55,7 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
   const frases = frasesDeLaAgenda(vocabularioDe(useRubroDelPanel()).palabras)
   const idBase = useId()
   const idDeHoraDesde = `${idBase}-hora-desde`
+  const idDelFormulario = `${idBase}-formulario`
   const idDeHoraHasta = `${idBase}-hora-hasta`
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -103,8 +104,19 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
       descripcion={frases.descripcionDelBloqueo}
       bloqueado={guardando}
       alCerrar={onCerrar}
+      pie={
+        // `lg:pt-1`: en el computador, la misma separación de antes.
+        <div className="flex gap-3 lg:pt-1">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" form={idDelFormulario} className="w-full" cargando={guardando}>
+            Bloquear
+          </Boton>
+        </div>
+      }
     >
-      <form onSubmit={guardar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={guardar} className="space-y-5">
         {eligeAQuien && avisoDeEquipo && <Aviso>{avisoDeEquipo}</Aviso>}
 
         {eligeAQuien ? (
@@ -182,15 +194,6 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
         />
 
         {error && <Aviso>{error}</Aviso>}
-
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            Bloquear
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

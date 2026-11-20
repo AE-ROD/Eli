@@ -86,7 +86,21 @@ function MarcaDeSede({ nombre }: { nombre: string }) {
   )
 }
 
-function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
+/**
+ * El color de la barrita de una fila de cita (el inicio en el celular): el
+ * pastel fuerte de su estado. Es sólo para el ojo: el estado va dicho en
+ * palabras al lado.
+ */
+const BARRA_DE_ESTADO: Record<CitaEnTarjeta["estado"], string> = {
+  pendiente: "bg-texto-2/40",
+  confirmada: "bg-azul",
+  "en-progreso": "bg-naranja",
+  completada: "bg-lima",
+  cancelada: "bg-error",
+  "no-asistio": "bg-navy/40",
+}
+
+export function EstadoDeLaCita({ estado, porConfirmar = false }: { estado: CitaEnTarjeta["estado"]; porConfirmar?: boolean }) {
   const { tarjetaDeCita } = frasesDelPanel(vocabularioDe(useRubroDelPanel()).palabras)
   // El endpoint no restringe el string: un estado desconocido se muestra tal cual, sin color.
   const conocido = ESTADOS[estado]
@@ -208,5 +222,33 @@ export function TarjetaCita({ cita, compacta = false, onClick }: PropsDeTarjetaC
         <span className="block rounded-[14px] bg-superficie p-2.5 text-[13px] text-texto-2 squircle">{cita.notas}</span>
       )}
     </Contenedor>
+  )
+}
+
+/**
+ * Una cita como fila de una lista, para el celular: la hora, una barrita del
+ * color del estado, quién viene y a qué, y el estado en palabras. Sin fondo
+ * propio: va dentro de una tarjeta blanca, con un divisor entre filas.
+ */
+export function FilaDeCita({ cita }: { cita: CitaEnTarjeta }) {
+  const barra = cita.porConfirmar && cita.estado === "pendiente" ? "bg-navy" : (BARRA_DE_ESTADO[cita.estado] ?? "bg-borde")
+  return (
+    <div className="flex min-h-14 min-w-0 items-center gap-3 px-3 py-2.5 text-navy">
+      <span className="w-11 shrink-0 text-sm font-semibold tabular-nums">{cita.horaInicio}</span>
+      <span aria-hidden="true" className={cn("w-1 self-stretch rounded-full", barra)} />
+      <span className="min-w-0 flex-1 contain-inline-size">
+        <span className={cn("block truncate text-[15px] font-medium", cita.estado === "cancelada" && "line-through")}>
+          {cita.nombreCliente}
+        </span>
+        <span className="block truncate text-[13px] text-texto-2">
+          {cita.servicio}
+          {cita.sede && ` · ${cita.sede}`}
+        </span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <EstadoDeLaCita estado={cita.estado} porConfirmar={cita.porConfirmar} />
+        {cita.sinProfesional && <MarcaSinProfesional />}
+      </span>
+    </div>
   )
 }

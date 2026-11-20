@@ -9,7 +9,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import type { ResumenDeLiquidacion } from "@/lib/liquidacion"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -76,7 +76,7 @@ export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Pr
   const sinNada = vista.liquidaciones.length === 0 && !vista.hayMas && !cargando && !error
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta id={idDelTitulo} titulo="Historial" subtitulo="Cada liquidación con su comprobante" icono={{ figura: History }} />
       {liquidaciones.length === 0 && vista.miembro === "" && sinNada ? (
         <EstadoVacio className="mt-5">Todavía no se cerró ninguna liquidación.</EstadoVacio>
@@ -127,8 +127,14 @@ export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Pr
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{liquidacion.miembro}</p>
                       <p className="text-sm text-texto-2">{liquidacion.texto}</p>
+                      {/* En el celular el estado va debajo del período: así el nombre y el total no se aprietan. */}
+                      <span className="mt-1 flex lg:hidden">
+                        <InsigniaDeEstado estado={liquidacion.estado} />
+                      </span>
                     </div>
-                    <InsigniaDeEstado estado={liquidacion.estado} />
+                    <span className="flex max-lg:hidden">
+                      <InsigniaDeEstado estado={liquidacion.estado} />
+                    </span>
                     <span className={cn("tabular-nums font-medium", liquidacion.estado === "anulada" && "text-texto-2 line-through")}>
                       {pesos(liquidacion.totalCents)}
                     </span>

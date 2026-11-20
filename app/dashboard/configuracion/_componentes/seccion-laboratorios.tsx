@@ -9,7 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { LARGO_MAXIMO_DEL_CONTACTO, LARGO_MAXIMO_DEL_NOMBRE } from "@/lib/edicion-de-protesis"
 import { cn } from "@/lib/utils"
@@ -55,7 +55,7 @@ export function SeccionLaboratorios({ laboratoriosIniciales }: PropsDeSeccionLab
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
@@ -175,14 +175,27 @@ function ModalLaboratorio({ laboratorio, alGuardar, alCerrar }: PropsDeModalLabo
     alGuardar(resultado.datos)
   }
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <MarcoDeModal
       titulo={laboratorio ? "Editar laboratorio" : "Nuevo laboratorio"}
       descripcion={laboratorio ? "Las prótesis que ya lo tienen siguen nombrándolo." : undefined}
       bloqueado={guardando}
       alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            {laboratorio ? "Guardar" : "Agregar laboratorio"}
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={guardar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={guardar} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre"
           placeholder="Ej.: Laboratorio Dental Andes"
@@ -203,14 +216,6 @@ function ModalLaboratorio({ laboratorio, alGuardar, alCerrar }: PropsDeModalLabo
           onChange={(evento) => setContacto(evento.target.value)}
         />
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {laboratorio ? "Guardar" : "Agregar laboratorio"}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

@@ -38,6 +38,7 @@ import { ListaDeInicio } from "./_componentes/lista-de-inicio"
 import { QrDelLocal } from "./_componentes/qr-del-local"
 import { InvitarNegocios } from "./_componentes/invitar-negocios"
 import { InicioDeLaClinica } from "./_componentes/inicio-de-la-clinica"
+import { NumerosDelDia } from "./_componentes/numeros-del-dia"
 
 /**
  * La agenda abre el modal de cita nueva al llegar con `?nueva=1`, y lo saca de
@@ -121,7 +122,11 @@ export default function PaginaPanel() {
         }}
       />
 
-      <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
+      {/*
+        En columna con `gap` (lo mismo que el `space-y` de antes): así, en el
+        celular, la invitación plegada baja con `order` debajo del enlace.
+      */}
+      <div className="flex flex-col gap-4 px-4 pt-3 pb-10 sm:gap-6 sm:px-6 lg:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
 
         {!rolConocido ? (
@@ -135,15 +140,25 @@ export default function PaginaPanel() {
           </>
         ) : (
           <>
+            {/* En el celular, las tres cifras del día en chico y arriba de todo; en el computador, las tarjetas grandes de abajo. */}
+            {!sinEstadisticas && <NumerosDelDia estadisticas={estadisticas} className="lg:hidden" />}
+
             {clinica && <InicioDeLaClinica gestionaSillones={puedeGestionarSillones(actorDeSesion(sesion))} />}
 
             {listaDeInicio && mostrarListaDeInicio(listaDeInicio) && <ListaDeInicio pasos={listaDeInicio.pasos} />}
 
-            {invitacion && <InvitarNegocios datos={invitacion} />}
+            {/* En el celular, plegada en una fila y después del enlace de reservas. */}
+            {invitacion && (
+              <div className="max-lg:order-1">
+                <InvitarNegocios datos={invitacion} />
+              </div>
+            )}
 
             {!sinEstadisticas && (
               <>
-                <EstadisticasDelNegocio estadisticas={estadisticas} />
+                <div className="max-lg:hidden">
+                  <EstadisticasDelNegocio estadisticas={estadisticas} />
+                </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
                   <CitasDeHoy citas={citasDeHoy} zona={estadisticas?.zona} className="lg:col-span-2" />
@@ -164,7 +179,7 @@ export default function PaginaPanel() {
             )}
 
             {!sinEstadisticas && (
-              <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 max-lg:order-2 sm:gap-6 lg:grid-cols-2">
                 <CitasPorHora citas={citasDeHoy} zona={estadisticas?.zona} />
                 <ResumenDelNegocio estadisticas={estadisticas} />
               </div>

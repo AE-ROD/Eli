@@ -10,7 +10,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { CampoHora } from "@/components/panel/campo-hora"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import {
   MAX_FRANJAS_DE_HORA_VALLE,
   PORCENTAJE_MAXIMO_DE_HORA_VALLE,
@@ -123,7 +123,7 @@ export function FormularioHoraValle({
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

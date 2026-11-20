@@ -8,7 +8,7 @@ import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -108,7 +108,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
   const sinConfigurar = miembro.porcentaje === null
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={miembro.nombre}
@@ -124,7 +124,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         </Aviso>
       )}
 
-      <form onSubmit={guardar} className="mt-5 flex flex-wrap items-end gap-3" noValidate>
+      <form onSubmit={guardar} className="mt-4 flex flex-wrap items-end gap-3 lg:mt-5" noValidate>
         <div className="min-w-0">
           <label htmlFor={idDelCampo} className={CLASES_DE_ETIQUETA}>
             % por defecto
@@ -163,7 +163,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         {frases.seAplicaATodos}
       </p>
 
-      <h3 className="mt-6 text-sm font-semibold">{frases.excepcionesPor}</h3>
+      <h3 className="mt-5 text-sm font-semibold lg:mt-6">{frases.excepcionesPor}</h3>
       {miembro.excepciones.length === 0 ? (
         <p className="mt-2 text-sm text-texto-2">{frases.sinExcepciones}</p>
       ) : (
@@ -189,8 +189,9 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
       )}
 
       {serviciosLibres.length > 0 && (
+        // En el celular, el servicio a lo ancho y debajo el % con "Agregar".
         <form onSubmit={agregarExcepcion} className="mt-4 flex flex-wrap items-end gap-3" noValidate>
-          <div className="min-w-0 flex-1 basis-48">
+          <div className="min-w-0 flex-1 basis-48 max-lg:basis-full">
             <label htmlFor={idDelServicio} className={CLASES_DE_ETIQUETA}>
               {frases.etiquetaDelServicio}
             </label>
@@ -211,7 +212,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
               ))}
             </select>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 max-lg:flex-1">
             <label htmlFor={idDeLaExcepcion} className={CLASES_DE_ETIQUETA}>
               %
             </label>
@@ -225,7 +226,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
                 setErrorDeExcepcion("")
               }}
               aria-invalid={errorDeExcepcion ? true : undefined}
-              className={cn(CAMPO, "mt-2 w-24", errorDeExcepcion && CAMPO_CON_ERROR)}
+              className={cn(CAMPO, "mt-2 lg:w-24", errorDeExcepcion && CAMPO_CON_ERROR)}
             />
           </div>
           <Boton type="submit" tamano="sm" variante="secundario" icono={<Plus aria-hidden="true" />} cargando={agregando}>

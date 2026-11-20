@@ -7,7 +7,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { TarjetaCita } from "@/components/panel/tarjeta-cita"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -46,7 +46,7 @@ function ListaCitasDelDia({ citas, zona }: { citas: CitaDelDia[]; zona?: string 
   const { palabras } = vocabularioDe(useRubroDelPanel())
   const frases = frasesDelInicio(palabras).vistaDelProfesional
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={citas.length > 0 ? frases.tusCitasDeHoy : frases.sinCitas}
@@ -125,7 +125,7 @@ export function VistaDiaProfesional({ estadisticas }: PropsDeVistaDiaProfesional
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={citasHoy === 0 ? "Tu día está libre" : frases.resumenDelDia(citasHoy)}

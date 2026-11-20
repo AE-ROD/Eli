@@ -4,7 +4,7 @@ import { useId, useState } from "react"
 import { Camera } from "lucide-react"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { SelectorDeFoto } from "@/components/panel/selector-de-foto"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -34,7 +34,7 @@ export function SeccionMiFoto({ miembroId, nombre, fotoInicial, apareceEnLaPagin
   const [fotoUrl, setFotoUrl] = useState(fotoInicial)
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

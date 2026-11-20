@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
 import { BarraSuperior } from "@/components/panel/barra-superior"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { leerLiquidacion } from "@/lib/liquidacion"
 import { NOMBRES_DE_MOVIMIENTO } from "@/lib/movimientos"
 import { nombreDeMedio } from "@/lib/medios-de-pago"
@@ -42,6 +42,13 @@ const IMPRESION = `
 
 const momento = (iso: string, zona: string) =>
   new Date(iso).toLocaleString("es-CL", { timeZone: zona, dateStyle: "medium", timeStyle: "short", ...HORA_24 })
+
+/**
+ * En la pantalla del celular las tablas se dibujan como filas compactas; al
+ * imprimir (la hoja es más angosta que `lg`) va siempre la tabla.
+ */
+const SOLO_CELULAR = "lg:hidden print:hidden"
+const SIN_CELULAR = "max-lg:not-print:hidden"
 
 const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
@@ -83,7 +90,26 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
         <BarraSuperior titulo="Comprobante" subtitulo={`${detalle.miembro} · ${detalle.texto}`} mostrarBusqueda={false} />
       </div>
 
-      <div className="max-w-3xl space-y-4 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-3xl space-y-4 px-4 pt-4 pb-12 sm:px-6 lg:pt-8">
+        {/* En el celular, lo primero es cuánto se paga: el comprobante lo dice recién al final. */}
+        <div data-no-imprimir className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, SOLO_CELULAR)}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-texto-2">{anulada ? "Total a pagar (anulada)" : "Total a pagar"}</p>
+            <InsigniaDeEstado estado={detalle.estado} />
+          </div>
+          <p className="mt-1 text-[32px] leading-[1.1] font-medium tracking-[-1px] tabular-nums">
+            {pesos(anulada ? 0 : t.totalCents)}
+          </p>
+          {anulada && (
+            <p className="mt-1 text-sm text-texto-2">
+              Al cerrarse sumaba{" "}
+              <s>
+                <span className="sr-only">Anulado: </span>
+                {pesos(t.totalCents)}
+              </s>
+            </p>
+          )}
+        </div>
         <div data-no-imprimir>
           <AccionesDelComprobante
             id={detalle.id}
@@ -104,7 +130,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
           />
         </div>
 
-        <article data-comprobante className={cn(TARJETA_DEL_PANEL, "space-y-8 p-5 sm:p-8")}>
+        <article data-comprobante className={cn(TARJETA_DEL_PANEL, "space-y-6 p-4 sm:p-8 lg:space-y-8 print:space-y-8")}>
           <header className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -161,39 +187,62 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
             ) : detalle.lineas.length === 0 ? (
               <p className="text-sm text-texto-2">{frases.comprobante.noIncluye}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] text-sm">
-                  <thead>
-                    <tr className="border-b border-borde">
-                      <th className={CABECERA}>Fecha</th>
-                      <th className={CABECERA}>{frases.cliente}</th>
-                      <th className={CABECERA}>Detalle</th>
-                      <th className={cn(CABECERA, "text-right")}>Precio</th>
-                      <th className={cn(CABECERA, "text-right")}>%</th>
-                      <th className={cn(CABECERA, "pr-0 text-right")}>Comisión</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detalle.lineas.map((linea) => (
-                      <tr key={linea.id} className="border-b border-borde/60">
-                        <td className={cn(CELDA, "whitespace-nowrap")}>{fechaParaLeer(linea.fecha)}</td>
-                        <td className={CELDA}>{linea.cliente}</td>
-                        <td className={CELDA}>
+              <>
+                <ul className={cn("divide-y divide-borde/60 border-y border-borde text-sm", SOLO_CELULAR)}>
+                  {detalle.lineas.map((linea) => (
+                    <li key={linea.id} className="py-2.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="min-w-0 font-medium break-words">
                           {linea.detalle}
-                          {linea.tipo === "producto" && <span className="text-texto-2"> (producto)</span>}
-                        </td>
-                        <td className={cn(CELDA, "text-right tabular-nums")}>{pesos(linea.precioCents)}</td>
-                        <td className={cn(CELDA, "text-right tabular-nums")}>
-                          {linea.porcentaje === null ? "—" : porcentaje(linea.porcentaje)}
-                        </td>
-                        <td className={cn(CELDA, "pr-0 text-right tabular-nums")}>
+                          {linea.tipo === "producto" && <span className="font-normal text-texto-2"> (producto)</span>}
+                        </p>
+                        <p className="shrink-0 font-semibold tabular-nums">
                           {linea.comisionCents === null ? "—" : pesos(linea.comisionCents)}
-                        </td>
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-[13px] text-texto-2">
+                        {fechaParaLeer(linea.fecha)} · {linea.cliente} ·{" "}
+                        <span className="tabular-nums">
+                          {linea.porcentaje === null ? "—" : porcentaje(linea.porcentaje)} de {pesos(linea.precioCents)}
+                        </span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <div className={cn("overflow-x-auto", SIN_CELULAR)}>
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="border-b border-borde">
+                        <th className={CABECERA}>Fecha</th>
+                        <th className={CABECERA}>{frases.cliente}</th>
+                        <th className={CABECERA}>Detalle</th>
+                        <th className={cn(CABECERA, "text-right")}>Precio</th>
+                        <th className={cn(CABECERA, "text-right")}>%</th>
+                        <th className={cn(CABECERA, "pr-0 text-right")}>Comisión</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {detalle.lineas.map((linea) => (
+                        <tr key={linea.id} className="border-b border-borde/60">
+                          <td className={cn(CELDA, "whitespace-nowrap")}>{fechaParaLeer(linea.fecha)}</td>
+                          <td className={CELDA}>{linea.cliente}</td>
+                          <td className={CELDA}>
+                            {linea.detalle}
+                            {linea.tipo === "producto" && <span className="text-texto-2"> (producto)</span>}
+                          </td>
+                          <td className={cn(CELDA, "text-right tabular-nums")}>{pesos(linea.precioCents)}</td>
+                          <td className={cn(CELDA, "text-right tabular-nums")}>
+                            {linea.porcentaje === null ? "—" : porcentaje(linea.porcentaje)}
+                          </td>
+                          <td className={cn(CELDA, "pr-0 text-right tabular-nums")}>
+                            {linea.comisionCents === null ? "—" : pesos(linea.comisionCents)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
 

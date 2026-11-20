@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { BotonIcono } from "@/components/comunes/boton-icono"
@@ -31,6 +32,8 @@ interface PropsDeControlesDeAgenda {
   onSiguiente: () => void
   onHoy: () => void
   onVista: (v: UnidadDeTiempo) => void
+  /** Lo que va al final de la fila de las flechas (el menú ⋯ del celular). */
+  extra?: ReactNode
 }
 
 function formatoFecha(fecha: Date, vista: UnidadDeTiempo): string {
@@ -54,13 +57,14 @@ export function ControlesDeAgenda({
   onSiguiente,
   onHoy,
   onVista,
+  extra,
 }: PropsDeControlesDeAgenda) {
   const pasos = PASOS[vista]
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 px-4 pt-4 pb-3 sm:px-6 sm:pt-6 sm:pb-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex shrink-0 items-center gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-3 pt-3 pb-2 sm:px-6 sm:pt-6 sm:pb-4 lg:gap-y-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-3 lg:gap-x-4">
+        <div className={cn("flex shrink-0 items-center gap-2", extra && "max-lg:w-full")}>
           <BotonIcono
             etiqueta={pasos.anterior}
             icono={<ChevronLeft aria-hidden="true" strokeWidth={1.75} />}
@@ -76,13 +80,14 @@ export function ControlesDeAgenda({
             tamano="sm"
             onClick={onSiguiente}
           />
+          {extra && <div className="ml-auto">{extra}</div>}
         </div>
         {/*
           Se anuncia al cambiar: quien no ve el calendario sabe a qué día,
           semana o mes pasó. `first-letter` y no `capitalize`, que ponía
           mayúscula en cada palabra ("Martes, 6 De Octubre").
         */}
-        <h2 id={idDelTitulo} aria-live="polite" className="titulo-3 min-w-0 font-serif break-words first-letter:uppercase">
+        <h2 id={idDelTitulo} aria-live="polite" className="titulo-3 min-w-0 font-serif break-words first-letter:uppercase max-lg:text-lg max-lg:leading-tight">
           {formatoFecha(fechaActual, vista)}
         </h2>
       </div>
@@ -102,9 +107,9 @@ export function ControlesDeAgenda({
               aria-pressed={elegida}
               onClick={() => onVista(id)}
               className={cn(
-                // 36px a la vista; el ::after lleva el área que se toca a 44.
-                "relative inline-flex h-9 flex-1 items-center justify-center rounded-full px-4 text-sm font-medium sm:flex-none",
-                "after:absolute after:inset-x-0 after:-inset-y-1 anillo-foco transition-colors duration-150 ease-suave",
+                // 36px a la vista (32 en el celular); el ::after lleva el área que se toca a 44.
+                "relative inline-flex h-8 flex-1 items-center justify-center rounded-full px-4 text-[13px] font-medium sm:flex-none lg:h-9 lg:text-sm",
+                "after:absolute after:inset-x-0 after:-inset-y-1.5 lg:after:-inset-y-1 anillo-foco transition-colors duration-150 ease-suave",
                 elegida ? "bg-navy text-white" : "text-navy hover:bg-borde"
               )}
             >

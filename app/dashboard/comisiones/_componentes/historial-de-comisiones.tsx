@@ -8,7 +8,7 @@ import { Selector } from "@/components/comunes/selector"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { formatearHora } from "@/lib/fechas"
 import { fechaDelNegocio, fechaParaLeer } from "@/lib/periodos-de-liquidacion"
@@ -100,7 +100,7 @@ export function HistorialDeComisionesTarjeta({ miembros, version, zona }: PropsD
 
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "overflow-hidden")}>
-      <div className="space-y-4 p-5 sm:p-6">
+      <div className={cn(RELLENO_DE_TARJETA, "space-y-4")}>
         <EncabezadoDeTarjeta
           id={idDelTitulo}
           titulo="Historial de cambios"

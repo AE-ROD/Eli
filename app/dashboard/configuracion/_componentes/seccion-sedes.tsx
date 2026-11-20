@@ -8,7 +8,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { moverEnLaLista } from "@/lib/orden-de-lista"
 import { ordenarSedes } from "@/lib/sedes"
@@ -96,7 +96,7 @@ function LlamadoASedes({ direccionDelNegocio, comunaDelNegocio, enfocarAlMontar,
   }, [enfocarAlMontar, idDelBoton])
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
@@ -253,7 +253,7 @@ function AdministradorDeSedes({ sedes, alCambiar, recienConvertida }: PropsDeAdm
   }
 
   return (
-    <section ref={seccion} tabIndex={-1} aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 outline-none sm:p-6")}>
+    <section ref={seccion} tabIndex={-1} aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "outline-none")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

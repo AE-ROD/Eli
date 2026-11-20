@@ -159,6 +159,7 @@ interface PropsDeModalPagar {
 }
 
 function ModalPagar({ id, miembro, periodo, totalCents, alCerrar, alTerminar }: PropsDeModalPagar) {
+  const idDelFormulario = useId()
   const [medio, setMedio] = useState("transferencia")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -183,8 +184,19 @@ function ModalPagar({ id, miembro, periodo, totalCents, alCerrar, alTerminar }: 
       descripcion={`${periodo}: ${pesos(totalCents)}. Queda registrado con qué se pagó, quién lo marcó y cuándo. Después no se puede anular.`}
       bloqueado={guardando}
       alCerrar={alCerrar}
+      // En el celular, fijos al pie de la hoja; el de enviar nombra el formulario porque queda fuera de él.
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            Marcar pagada {pesos(totalCents)}
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={confirmar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={confirmar} className="space-y-5">
         <Selector
           etiqueta="Con qué se pagó"
           value={medio}
@@ -192,14 +204,6 @@ function ModalPagar({ id, miembro, periodo, totalCents, alCerrar, alTerminar }: 
           opciones={MEDIOS_DE_PAGO.map((m) => ({ valor: m.id, texto: m.nombre }))}
         />
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            Marcar pagada {pesos(totalCents)}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )
@@ -219,6 +223,7 @@ function ModalAnularLiquidacion({
   alTerminar: () => void
 }) {
   const idDelMotivo = useId()
+  const idDelFormulario = useId()
   // "Las prestaciones…" en una clínica dental; "Los servicios…" en los demás rubros.
   const frases = frasesDeLasLiquidaciones(vocabularioDe(useRubroDelPanel()).palabras)
   const [motivo, setMotivo] = useState("")
@@ -246,8 +251,19 @@ function ModalAnularLiquidacion({
       descripcion={frases.anular.descripcion(conProtesis, conPropinas)}
       bloqueado={guardando}
       alCerrar={alCerrar}
+      // En el celular, fijos al pie de la hoja; el de enviar nombra el formulario porque queda fuera de él.
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} variante="peligro" anchoCompleto cargando={guardando}>
+            Anular
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={confirmar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={confirmar} className="space-y-5">
         <div className="space-y-2">
           <label htmlFor={idDelMotivo} className={CLASES_DE_ETIQUETA}>
             Motivo
@@ -263,14 +279,6 @@ function ModalAnularLiquidacion({
           />
         </div>
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" variante="peligro" anchoCompleto cargando={guardando}>
-            Anular
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

@@ -55,6 +55,9 @@ import { ModalNuevaCita } from "./_componentes/modal-nueva-cita"
 import { ModalMoverCita } from "./_componentes/modal-mover-cita"
 import { ModalBloquearHorario } from "./_componentes/modal-bloquear-horario"
 import { ModalBloqueo } from "./_componentes/modal-bloqueo"
+import { ListaDelDia } from "./_componentes/lista-del-dia"
+import { MenuDeLaAgenda } from "./_componentes/menu-de-la-agenda"
+import { TiraDeDias } from "./_componentes/tira-de-dias"
 import { ListaDeEsperaDelDia } from "./_componentes/lista-de-espera-del-dia"
 import { useZonaDelNegocio } from "./_componentes/zona-del-negocio"
 import { useSedesDeLaAgenda } from "./_componentes/sedes-de-la-agenda"
@@ -152,6 +155,14 @@ export default function PaginaAgenda() {
     setCargando(false)
   }, [])
 
+  // En el celular la agenda abre en el día (una lista con los huecos libres):
+  // la semana no entra en 390 px. En el computador, la semana de siempre. Se
+  // decide al montar: en el servidor no hay pantalla.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- el ancho sólo se conoce en el navegador
+    if (!window.matchMedia("(min-width: 64rem)").matches) setModo("dia")
+  }, [])
+
   // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga cuando cambia lo que se está mirando
   useEffect(() => { recargar(fecha, modo) }, [fecha, modo, recargar])
 
@@ -234,13 +245,13 @@ export default function PaginaAgenda() {
   // se conservaba el anterior, el buscador volvía vacío con el cliente de
   // antes todavía elegido por debajo (A1).
   // `cliente`: el que ya viene elegido (al llegar con `?cliente=<id>`).
-  const abrirModal = (cliente?: { id: string; nombre: string }) => {
+  // `horas`: desde un hueco libre de la lista del día, la hora de ese hueco.
+  const abrirModal = (cliente?: { id: string; nombre: string }, horas?: { inicio: string; fin: string }) => {
     setAvisoDelModal("")
     setSillonOcupadoEnElModal(false)
     setAdvertenciasDeNuevaCita([])
-    const borrador = cliente
-      ? { ...citaEnBlanco(fecha), clienteId: cliente.id, clienteNombre: cliente.nombre }
-      : citaEnBlanco(fecha)
+    const enBlanco = horas ? { ...citaEnBlanco(fecha), horaInicio: horas.inicio, horaFin: horas.fin } : citaEnBlanco(fecha)
+    const borrador = cliente ? { ...enBlanco, clienteId: cliente.id, clienteNombre: cliente.nombre } : enBlanco
     // En la clínica, el borrador lleva el sillón (vacío: sin sillón); en otro rubro, ni la clave.
     // Con varias sedes, la sede (vacía: todavía sin elegir); con una o ninguna, ni la clave.
     setNuevaCita({ ...(conSillones ? { ...borrador, sillonId: "" } : borrador), ...sedeDelBorrador(modoDeSedes) })
@@ -340,11 +351,12 @@ export default function PaginaAgenda() {
         accionPrincipal={{ texto: frases.nuevaCita, onClick: () => abrirModal() }}
       />
 
-      <div className="space-y-4 px-4 pt-6 pb-10 sm:space-y-6 sm:px-6">
+      <div className="space-y-4 px-4 pt-3 pb-10 sm:space-y-6 sm:px-6 lg:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
 
+        {/* En el celular, "Bloquear horario" va en el menú ⋯ de la tarjeta del calendario. */}
         {puedeBloquear && (
-          <div className="flex justify-end">
+          <div className="flex justify-end max-lg:hidden">
             <Boton
               variante="secundario"
               tamano="sm"
@@ -371,7 +383,28 @@ export default function PaginaAgenda() {
               onSiguiente={() => setFecha((actual) => desplazarFecha(actual, modo, 1))}
               onHoy={() => setFecha(hoyEn(zona))}
               onVista={setModo}
+              extra={
+                puedeBloquear && (
+                  <MenuDeLaAgenda
+                    className="lg:hidden"
+                    opciones={[
+                      {
+                        texto: "Bloquear horario",
+                        icono: <Ban aria-hidden="true" strokeWidth={1.75} />,
+                        onElegir: () => setBloquearAbierto(true),
+                      },
+                    ]}
+                  />
+                )
+              }
             />
+
+            {/* En el celular, la vista Día lleva arriba los siete días de la semana. */}
+            {modo === "dia" && (
+              <div className="px-3 pb-2 lg:hidden">
+                <TiraDeDias fecha={fecha} onElegir={setFecha} />
+              </div>
+            )}
 
             {modo === "semana" && (
               <VistaSemana
@@ -402,16 +435,34 @@ export default function PaginaAgenda() {
                 avisoDeSillones={avisoDeSillones}
               />
             )}
+            {/* El día: hora por hora en el computador; en el celular, una lista con los huecos libres. */}
             {modo === "dia" && !clinica && (
-              <VistaDia
-                fecha={fecha}
-                citas={citas}
-                horario={horario}
-                bloqueos={bloqueos}
-                onSeleccionar={abrirCita}
-                onSeleccionarBloqueo={setBloqueoAbierto}
-                destacarSinProfesional={conProfesionales}
-              />
+              <>
+                <div className="max-lg:hidden">
+                  <VistaDia
+                    fecha={fecha}
+                    citas={citas}
+                    horario={horario}
+                    bloqueos={bloqueos}
+                    onSeleccionar={abrirCita}
+                    onSeleccionarBloqueo={setBloqueoAbierto}
+                    destacarSinProfesional={conProfesionales}
+                  />
+                </div>
+                <div className="lg:hidden">
+                  <ListaDelDia
+                    fecha={fecha}
+                    citas={citas}
+                    horario={horario}
+                    bloqueos={bloqueos}
+                    cargando={cargando}
+                    onSeleccionar={abrirCita}
+                    onSeleccionarBloqueo={setBloqueoAbierto}
+                    onAgendarEn={(inicio, fin) => abrirModal(undefined, { inicio, fin })}
+                    destacarSinProfesional={conProfesionales}
+                  />
+                </div>
+              </>
             )}
             {modo === "mes" && (
               <VistaMes

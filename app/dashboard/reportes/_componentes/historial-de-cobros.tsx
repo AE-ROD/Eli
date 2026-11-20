@@ -75,6 +75,69 @@ export function MediosDeLaFila({ pagos }: { pagos: FilaDeReporte["pagos"] }) {
   )
 }
 
+/**
+ * Una atención del historial como tarjeta del celular, en vez de fila de una
+ * tabla de 780 px que había que deslizar de costado: a quién y, a la derecha,
+ * el total (al profesional, que no ve totales, la hora); debajo cuándo y en
+ * qué turno, qué se hizo y cómo se pagó, y "Anular" al final.
+ */
+function TarjetaDeCobro({
+  fila,
+  delNegocio,
+  resaltar,
+  onAnular,
+  deshabilitado,
+}: {
+  fila: FilaDeReporte
+  delNegocio: boolean
+  resaltar: boolean
+  onAnular?: (fila: FilaDeReporte) => void
+  deshabilitado: boolean
+}) {
+  return (
+    <li className="space-y-2 px-4 py-3.5 text-sm">
+      <div className="flex items-baseline justify-between gap-3 text-[15px]">
+        <p className="min-w-0 font-medium break-words">{fila.cliente.nombre}</p>
+        {delNegocio ? (
+          <p className="shrink-0 font-semibold tabular-nums">
+            {fila.total !== undefined ? formatearMonto(fila.total) : "—"}
+          </p>
+        ) : (
+          <p className="shrink-0 text-texto-2 tabular-nums">{formatearHora(fila.cobradaEn)}</p>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-texto-2">
+        <time dateTime={fila.cobradaEn}>
+          {diaCorto(fila.cobradaEn)}, {formatearHora(fila.cobradaEn)}
+        </time>
+        <Insignia>{nombreDeTurno(fila.turno)}</Insignia>
+      </div>
+      <Servicios fila={fila} resaltar={resaltar} />
+      {delNegocio && (
+        <div className="flex gap-2">
+          <span className="shrink-0 text-texto-2">Pago:</span>
+          <MediosDeLaFila pagos={fila.pagos} />
+        </div>
+      )}
+      {onAnular && (
+        <div className="flex justify-end">
+          <Boton
+            variante="fantasma"
+            tamano="sm"
+            onClick={() => onAnular(fila)}
+            disabled={deshabilitado}
+            aria-label={`Anular el cobro de ${fila.cliente.nombre} del ${diaCorto(fila.cobradaEn)} a ${horaConArticulo(fila.cobradaEn)}`}
+            className="px-2.5 text-error hover:bg-error/8"
+          >
+            <Ban aria-hidden="true" className="size-4" strokeWidth={1.75} />
+            Anular
+          </Boton>
+        </div>
+      )}
+    </li>
+  )
+}
+
 /** Cuando el período no tiene nada: el ícono del reporte en lima, qué pasó y qué probar. */
 export function SinFilas({ icono, titulo, children }: { icono: typeof Receipt; titulo: string; children: string }) {
   return (
@@ -139,7 +202,7 @@ export function HistorialDeCobros({
       // La fila fija de arriba del teléfono mide 68 px: el principio de la sección no queda debajo.
       className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 lg:scroll-mt-6")}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 lg:px-6 lg:pb-4 lg:pt-6">
         <h2
           id={idDelTitulo}
           ref={titulo}
@@ -161,93 +224,114 @@ export function HistorialDeCobros({
         // absolute`. Sin un ancestro posicionado dentro del scroll se ubicaban
         // respecto de la página, fuera del contenedor que recorta, y la
         // estiraban: en el teléfono la página entera se corría de costado.
-        <div className="relative overflow-x-auto">
-          <table className={cn("w-full text-sm", anchoMinimo)}>
-            <caption className="sr-only">
-              Atenciones cobradas, página {pagina} de {paginas}
-            </caption>
-            <thead>
-              <tr className="border-y border-borde bg-crema text-left">
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Cobrada
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  Turno
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  {frases.cliente}
-                </th>
-                <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                  {frases.servicios}
-                </th>
-                {delNegocio && (
-                  <>
-                    <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
-                      Total
-                    </th>
-                    <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                      Medios
-                    </th>
-                  </>
-                )}
-                {anula && (
+        // En el celular la tabla no se dibuja: van las tarjetas de arriba.
+        <>
+          <ul
+            aria-label={`Atenciones cobradas, página ${pagina} de ${paginas}`}
+            className={cn(
+              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave lg:hidden",
+              actualizando && "opacity-60"
+            )}
+          >
+            {reporte.filas.map((fila) => (
+              <TarjetaDeCobro
+                key={fila.id}
+                fila={fila}
+                delNegocio={delNegocio}
+                resaltar={resaltarCoincidencias}
+                onAnular={anula ? onAnular : undefined}
+                deshabilitado={actualizando}
+              />
+            ))}
+          </ul>
+          <div className="relative overflow-x-auto max-lg:hidden">
+            <table className={cn("w-full text-sm", anchoMinimo)}>
+              <caption className="sr-only">
+                Atenciones cobradas, página {pagina} de {paginas}
+              </caption>
+              <thead>
+                <tr className="border-y border-borde bg-crema text-left">
                   <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
-                    <span className="sr-only">Acciones</span>
+                    Cobrada
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody
-              className={cn(
-                "divide-y divide-borde transition-opacity duration-200 ease-suave",
-                actualizando && "opacity-60"
-              )}
-            >
-              {reporte.filas.map((fila) => (
-                <tr key={fila.id}>
-                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
-                    <time dateTime={fila.cobradaEn}>
-                      <span className="block font-medium">{diaCorto(fila.cobradaEn)}</span>
-                      <span className="block text-texto-2 tabular-nums">{formatearHora(fila.cobradaEn)}</span>
-                    </time>
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
-                    <Insignia>{nombreDeTurno(fila.turno)}</Insignia>
-                  </td>
-                  <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
-                  <td className={CLASES_DE_CELDA}>
-                    <Servicios fila={fila} resaltar={resaltarCoincidencias} />
-                  </td>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    Turno
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    {frases.cliente}
+                  </th>
+                  <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                    {frases.servicios}
+                  </th>
                   {delNegocio && (
                     <>
-                      <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
-                        {fila.total !== undefined ? formatearMonto(fila.total) : "—"}
-                      </td>
-                      <td className={CLASES_DE_CELDA}>
-                        <MediosDeLaFila pagos={fila.pagos} />
-                      </td>
+                      <th scope="col" className={cn(ENCABEZADO_DE_COLUMNA, "text-right")}>
+                        Total
+                      </th>
+                      <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                        Medios
+                      </th>
                     </>
                   )}
                   {anula && (
-                    <td className={cn(CLASES_DE_CELDA, "py-2.5 text-right")}>
-                      <Boton
-                        variante="fantasma"
-                        tamano="sm"
-                        onClick={() => onAnular(fila)}
-                        disabled={actualizando}
-                        aria-label={`Anular el cobro de ${fila.cliente.nombre} del ${diaCorto(fila.cobradaEn)} a ${horaConArticulo(fila.cobradaEn)}`}
-                        className="px-2.5 text-error hover:bg-error/8"
-                      >
-                        <Ban aria-hidden="true" className="size-4" strokeWidth={1.75} />
-                        Anular
-                      </Boton>
-                    </td>
+                    <th scope="col" className={ENCABEZADO_DE_COLUMNA}>
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody
+                className={cn(
+                  "divide-y divide-borde transition-opacity duration-200 ease-suave",
+                  actualizando && "opacity-60"
+                )}
+              >
+                {reporte.filas.map((fila) => (
+                  <tr key={fila.id}>
+                    <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
+                      <time dateTime={fila.cobradaEn}>
+                        <span className="block font-medium">{diaCorto(fila.cobradaEn)}</span>
+                        <span className="block text-texto-2 tabular-nums">{formatearHora(fila.cobradaEn)}</span>
+                      </time>
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "whitespace-nowrap")}>
+                      <Insignia>{nombreDeTurno(fila.turno)}</Insignia>
+                    </td>
+                    <td className={cn(CLASES_DE_CELDA, "font-medium break-words")}>{fila.cliente.nombre}</td>
+                    <td className={CLASES_DE_CELDA}>
+                      <Servicios fila={fila} resaltar={resaltarCoincidencias} />
+                    </td>
+                    {delNegocio && (
+                      <>
+                        <td className={cn(CLASES_DE_CELDA, "text-right font-semibold whitespace-nowrap tabular-nums")}>
+                          {fila.total !== undefined ? formatearMonto(fila.total) : "—"}
+                        </td>
+                        <td className={CLASES_DE_CELDA}>
+                          <MediosDeLaFila pagos={fila.pagos} />
+                        </td>
+                      </>
+                    )}
+                    {anula && (
+                      <td className={cn(CLASES_DE_CELDA, "py-2.5 text-right")}>
+                        <Boton
+                          variante="fantasma"
+                          tamano="sm"
+                          onClick={() => onAnular(fila)}
+                          disabled={actualizando}
+                          aria-label={`Anular el cobro de ${fila.cliente.nombre} del ${diaCorto(fila.cobradaEn)} a ${horaConArticulo(fila.cobradaEn)}`}
+                          className="px-2.5 text-error hover:bg-error/8"
+                        >
+                          <Ban aria-hidden="true" className="size-4" strokeWidth={1.75} />
+                          Anular
+                        </Boton>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <Paginador nombre="Páginas del historial" pagina={pagina} paginas={paginas} actualizando={actualizando} onPagina={irA} />

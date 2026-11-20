@@ -7,7 +7,7 @@ import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { cambiarMensajesAClientes, type EstadoDeMensajes, type InterruptoresDeMensajes } from "../_datos"
@@ -100,7 +100,7 @@ export function SeccionMensajesAClientes({ inicial }: { inicial: EstadoDeMensaje
   const { mes } = inicial
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

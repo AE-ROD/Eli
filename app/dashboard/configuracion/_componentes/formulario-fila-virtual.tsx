@@ -9,7 +9,7 @@ import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { TOPE_DE_FILA_MAXIMO, TOPE_DE_FILA_MINIMO } from "@/lib/fila-virtual"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import { cn } from "@/lib/utils"
@@ -94,7 +94,7 @@ export function FormularioFilaVirtual({ slug, nombreDelNegocio, activaInicial, t
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

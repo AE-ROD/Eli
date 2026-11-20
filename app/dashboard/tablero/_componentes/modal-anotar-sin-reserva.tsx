@@ -20,6 +20,7 @@ import {
 } from "../_datos"
 import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
+import { BotonesDelPie } from "./botones-del-pie"
 import { EditorDeServicios, filaVacia } from "./editor-de-servicios"
 
 /** Lo que acepta el servidor para un cliente nuevo. */
@@ -78,6 +79,7 @@ export function ModalAnotarSinReserva({
   onCerrar,
 }: PropsDeModalAnotarSinReserva) {
   const idBase = useId()
+  const idDelFormulario = `${idBase}-formulario`
   // "Paciente", "Sala de espera" y "prestación" en una clínica dental; la concordancia la arma `frasesDelTablero`.
   const rubro = useRubroDelPanel()
   // Memorizadas: la búsqueda de más abajo depende de ellas y no debe repetirse en cada dibujo.
@@ -184,8 +186,13 @@ export function ModalAnotarSinReserva({
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
+      pie={
+        <BotonesDelPie formulario={idDelFormulario} onCancelar={onCerrar} guardando={guardando} mientrasGuarda="Anotando">
+          Anotar en espera
+        </BotonesDelPie>
+      }
     >
-      <form onSubmit={anotar} noValidate className="space-y-6">
+      <form id={idDelFormulario} onSubmit={anotar} noValidate className="space-y-6">
         {/* ── Cliente ── */}
         <fieldset className="space-y-3">
           <legend className="mb-3 text-sm font-semibold">{frases.anotar.cliente}</legend>
@@ -412,15 +419,6 @@ export function ModalAnotarSinReserva({
             {aviso}
           </Aviso>
         )}
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <Boton type="button" variante="secundario" onClick={onCerrar} disabled={guardando} className="w-full">
-            Cancelar
-          </Boton>
-          <Boton type="submit" cargando={guardando} aria-label={guardando ? "Anotando" : undefined} className="w-full">
-            Anotar en espera
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

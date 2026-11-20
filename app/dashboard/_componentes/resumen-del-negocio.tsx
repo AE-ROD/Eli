@@ -3,7 +3,7 @@
 import { useId } from "react"
 import { FONDO_FUERTE } from "@/components/comunes/colores-de-modulo"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -52,7 +52,7 @@ export function ResumenDelNegocio({ estadisticas }: PropsDeResumenDelNegocio) {
   ]
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <h2 id={idDelTitulo} className={TITULO_DE_TARJETA}>
         {conIngresos ? frases.resumenDelNegocio.titulo : "Tu resumen"}
       </h2>

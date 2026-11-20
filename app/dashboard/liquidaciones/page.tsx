@@ -116,7 +116,7 @@ export default async function PaginaLiquidaciones() {
         mostrarBusqueda={false}
       />
 
-      <div className="max-w-4xl space-y-6 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-4xl space-y-4 px-4 pt-4 pb-12 sm:px-6 lg:space-y-6 lg:pt-8">
         {/* Sin fecha no se liquida: va primero, para que la dueña la vea antes que nada. */}
         {!liquidarDesde && fechaFijada}
         <SeccionEquipo miembros={equipo} puedeCerrar={puedeCerrarLiquidacion(actor) && !!liquidarDesde} />

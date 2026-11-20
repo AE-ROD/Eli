@@ -10,7 +10,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { formatearMonto } from "@/lib/dinero"
 import { HORA_24, formatearHora } from "@/lib/fechas"
 import { veLaLineaDePropinas } from "@/lib/permisos"
@@ -56,18 +56,28 @@ function Renglon({
   termino,
   valor,
   fuerte = false,
+  grande = false,
   tono,
 }: {
   termino: string
   valor: string
   fuerte?: boolean
+  /** En el celular, una fila de 48 px con el monto en 18 px: las cifras de la caja abierta se leen de un vistazo. */
+  grande?: boolean
   /** `error`: el valor en rojo (falta plata). */
   tono?: "error"
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2">
-      <dt className="text-texto-2">{termino}</dt>
-      <dd className={cn("text-right tabular-nums", fuerte ? "font-semibold" : "font-medium", tono === "error" && "text-error")}>
+    <div className={cn("flex items-baseline justify-between gap-4 py-2", grande && "max-lg:min-h-12 max-lg:items-center max-lg:py-2.5")}>
+      <dt className={cn("text-texto-2", grande && "max-lg:text-[15px]")}>{termino}</dt>
+      <dd
+        className={cn(
+          "text-right tabular-nums",
+          fuerte ? "font-semibold" : "font-medium",
+          grande && "max-lg:text-lg",
+          tono === "error" && "text-error"
+        )}
+      >
         {valor}
       </dd>
     </div>
@@ -137,7 +147,7 @@ export function PantallaDeCaja() {
         {error}
       </Aviso>
     ) : (
-      <div role="status" className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
+      <div role="status" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
         <span className="sr-only">Cargando la caja…</span>
         <Esqueleto className="h-6 w-1/3" />
         <Esqueleto />
@@ -261,7 +271,7 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Caja abierta"
@@ -286,9 +296,9 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
       )}
 
       <dl className="mt-4 divide-y divide-borde border-y border-borde text-sm">
-        <Renglon termino="Efectivo cobrado" valor={formatearMonto(abierta.efectivoCobrado)} />
+        <Renglon termino="Efectivo cobrado" valor={formatearMonto(abierta.efectivoCobrado)} grande />
         {veLaLineaDePropinas(rubro, abierta.propinasEfectivo) && (
-          <Renglon termino="Propinas en efectivo" valor={formatearMonto(abierta.propinasEfectivo)} />
+          <Renglon termino="Propinas en efectivo" valor={formatearMonto(abierta.propinasEfectivo)} grande />
         )}
       </dl>
       <OtrosMedios desglose={abierta.desglose} />
@@ -326,11 +336,12 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
 
           <div aria-live="polite">
             <dl className="divide-y divide-borde border-y border-borde text-sm">
-              <Renglon termino="Debería haber" valor={cuenta.esperado === null ? "—" : formatearMonto(cuenta.esperado)} />
+              <Renglon termino="Debería haber" valor={cuenta.esperado === null ? "—" : formatearMonto(cuenta.esperado)} grande />
               <Renglon
                 termino="Diferencia"
                 valor={cuenta.diferencia === null ? "—" : cuenta.diferencia === 0 ? "Cuadra" : conSigno(cuenta.diferencia)}
                 fuerte
+                grande
                 tono={cuenta.diferencia !== null && cuenta.diferencia < 0 ? "error" : undefined}
               />
             </dl>
@@ -427,7 +438,8 @@ function CampoDeMonto(props: {
         onChange={(evento) => onCambio(evento.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-ayuda${error ? ` ${id}-error` : ""}`}
-        className={cn(CAMPO, "mt-2", error && CAMPO_CON_ERROR)}
+        // En el celular, el monto en 18 px y 48 de alto: se lee al contar la plata, y con 16 px o más el iPhone no acerca la vista al tocarlo.
+        className={cn(CAMPO, "mt-2 tabular-nums max-lg:min-h-12 max-lg:text-lg max-lg:font-semibold", error && CAMPO_CON_ERROR)}
       />
       <p id={`${id}-ayuda`} className="mt-1 text-xs text-texto-2">
         {ayuda}
@@ -455,14 +467,14 @@ function CierresAnteriores({
   const rubro = useRubroDelPanel()
   return (
     <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "overflow-hidden")}>
-      <div className="p-5 sm:p-6">
+      <div className={RELLENO_DE_TARJETA}>
         <EncabezadoDeTarjeta id={idDelTitulo} titulo="Cierres anteriores" icono={{ figura: History }} />
         {estado.cierres.length === 0 ? (
           <EstadoVacio className="mt-4">Todavía no se cerró la caja.</EstadoVacio>
         ) : (
           <ol aria-busy={cargando} className={cn("mt-4 space-y-3", cargando && "opacity-60")}>
             {estado.cierres.map((cierre) => (
-              <li key={cierre.id} className="rounded-[20px] border border-borde p-4 text-sm squircle">
+              <li key={cierre.id} className="rounded-[20px] border border-borde p-3.5 text-sm squircle sm:p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="font-medium">
                     {momento(cierre.desde, zona)} – {finDelPeriodo(cierre.desde, cierre.hasta, zona)}
@@ -477,9 +489,10 @@ function CierresAnteriores({
                   </p>
                 </div>
                 {/* Sin la columna de propinas en una clínica dental, salvo que el cierre tenga plata en ella. */}
+                {/* En el celular, una fila por cifra (el concepto a la izquierda y el monto a la derecha); desde sm, en columnas. */}
                 <dl
                   className={cn(
-                    "mt-2 grid grid-cols-2 gap-x-4",
+                    "mt-2 grid grid-cols-1 gap-x-4 max-sm:divide-y max-sm:divide-borde",
                     veLaLineaDePropinas(rubro, cierre.propinasEfectivo) ? "sm:grid-cols-5" : "sm:grid-cols-4"
                   )}
                 >

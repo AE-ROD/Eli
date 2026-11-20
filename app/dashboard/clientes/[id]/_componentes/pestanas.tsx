@@ -28,7 +28,9 @@ interface PropsDePestanas<Id extends string> {
  * el color.
  *
  * Cada pestaña mide 40px; el `::after` la lleva a 44 para el dedo. En el
- * teléfono la fila se desplaza de lado si no entra, dentro de su píldora.
+ * celular la fila se desplaza de lado si no entra, dentro de su píldora (sin
+ * barra de desplazamiento), con pestañas más compactas, y queda pegada bajo la
+ * barra de arriba al bajar por la ficha.
  */
 export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa, alCambiar }: PropsDePestanas<Id>) {
   const lista = useRef<HTMLDivElement>(null)
@@ -61,7 +63,7 @@ export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa
       role="tablist"
       aria-label={etiqueta}
       onKeyDown={alTeclear}
-      className="flex max-w-full gap-1 overflow-x-auto rounded-[18px] bg-tarjeta p-1 shadow-sm squircle sm:w-fit"
+      className="flex max-w-full gap-1 overflow-x-auto rounded-[18px] bg-tarjeta p-1 shadow-sm squircle sm:w-fit max-lg:[scrollbar-width:none] max-lg:sticky max-lg:top-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] max-lg:z-20"
     >
       {pestanas.map(({ id, texto }) => {
         const elegida = activa === id
@@ -76,7 +78,7 @@ export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "relative h-10 shrink-0 rounded-[14px] px-4 text-[15px] whitespace-nowrap squircle anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
+              "relative h-10 shrink-0 rounded-[14px] px-4 text-[15px] whitespace-nowrap squircle anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5 max-lg:px-3 max-lg:text-sm",
               "transition-colors duration-150 ease-suave",
               elegida ? "bg-lila-suave font-semibold text-navy" : "font-medium text-navy hover:bg-superficie"
             )}

@@ -9,7 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { deCentavos } from "@/lib/atenciones"
@@ -229,7 +229,7 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
       <div role="status" className="space-y-4">
         <span className="sr-only">Cargando lo por pagar al laboratorio…</span>
         {[0, 1].map((tarjeta) => (
-          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
+          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
             <Esqueleto className="h-6 w-1/3" />
             <Esqueleto className="w-1/2" />
           </div>
@@ -241,7 +241,7 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
   const { porPagar, pagos } = datos
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       {/* No se pudo volver a leer: lo de abajo es lo de antes y puede no estar al día. */}
       {error && (
         <Aviso
@@ -263,7 +263,7 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
         )}
       </div>
 
-      <section aria-labelledby={idTotal} className={cn(TARJETA_DEL_PANEL, "space-y-2 p-5 sm:p-6")}>
+      <section aria-labelledby={idTotal} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-2")}>
         <h2 id={idTotal} className="text-sm text-texto-2">
           Por pagar al laboratorio
         </h2>
@@ -291,7 +291,7 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
         ))
       )}
 
-      <section aria-labelledby={idHistorial} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <section aria-labelledby={idHistorial} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta
           id={idHistorial}
           titulo="Pagos al laboratorio"
@@ -399,7 +399,7 @@ function TarjetaDeLaboratorio({ deUno, zona, elegidas, onAlternar, onPagar }: Pr
   const montoElegido = elegidasAca.reduce((suma, linea) => suma + linea.tecnicoCents, 0)
 
   return (
-    <section aria-labelledby={idTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idTitulo}
         titulo={
@@ -469,6 +469,7 @@ interface PropsDeModalDePago {
 /** Confirmar el pago al laboratorio: cuánto, cuántos abonos y con qué medio. */
 function ModalDePago({ pagando, trabajando, aviso, onPagar, onCerrar }: PropsDeModalDePago) {
   const idDelMedio = useId()
+  const idDelFormulario = useId()
   const [medio, setMedio] = useState("transferencia")
 
   const enviar = (evento: FormEvent<HTMLFormElement>) => {
@@ -492,8 +493,25 @@ function ModalDePago({ pagando, trabajando, aviso, onPagar, onCerrar }: PropsDeM
       }
       bloqueado={trabajando}
       alCerrar={onCerrar}
+      // En el celular, fijos al pie de la hoja; el de enviar nombra el formulario porque queda fuera de él.
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <Boton type="button" variante="secundario" className="w-full" disabled={trabajando} onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton
+            type="submit"
+            form={idDelFormulario}
+            className="w-full"
+            cargando={trabajando}
+            aria-label={trabajando ? "Registrando el pago" : undefined}
+          >
+            Marcar pagado {pesos(pagando.montoCents)}
+          </Boton>
+        </div>
+      }
     >
-      <form onSubmit={enviar} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={enviar} className="space-y-5">
         <div>
           <label htmlFor={idDelMedio} className={ETIQUETA}>
             Medio de pago
@@ -519,15 +537,6 @@ function ModalDePago({ pagando, trabajando, aviso, onPagar, onCerrar }: PropsDeM
         </Aviso>
 
         {aviso && <Aviso>{aviso}</Aviso>}
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={trabajando} onClick={onCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={trabajando} aria-label={trabajando ? "Registrando el pago" : undefined}>
-            Marcar pagado {pesos(pagando.montoCents)}
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

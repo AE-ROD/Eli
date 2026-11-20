@@ -43,21 +43,32 @@ const PALABRAS_NEUTRAS = vocabularioDe(null).palabras
 const CUADRICULA = "grid grid-cols-1 gap-3 sm:gap-4 @xl:grid-cols-2 @4xl:grid-cols-3"
 const LISTA = "space-y-3"
 
+/**
+ * En el celular (por debajo de `lg`) la cuadrícula y la lista son lo mismo:
+ * una sola tarjeta blanca con una fila de 64 px por cliente, separadas por
+ * una línea (`block` deja sin efecto las columnas y el espacio de arriba).
+ */
+const FILAS_DEL_CELULAR =
+  "max-lg:block max-lg:space-y-0 max-lg:divide-y max-lg:divide-borde max-lg:rounded-[24px] max-lg:bg-tarjeta max-lg:shadow-sm max-lg:squircle"
+
 function EsqueletoDeClientes({ vista, cargando }: { vista: "grid" | "lista"; cargando: string }) {
   return (
     <div aria-busy="true">
       <span className="sr-only">{cargando}</span>
-      <ul aria-hidden="true" className={vista === "grid" ? CUADRICULA : LISTA}>
+      <ul aria-hidden="true" className={cn(vista === "grid" ? CUADRICULA : LISTA, FILAS_DEL_CELULAR)}>
         {Array.from({ length: 6 }).map((_, i) => (
-          <li key={i} className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle">
-            <div className="flex items-center gap-3">
-              <Esqueleto forma="circulo" />
+          <li
+            key={i}
+            className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle max-lg:flex max-lg:min-h-16 max-lg:items-center max-lg:rounded-none max-lg:bg-transparent max-lg:px-3.5 max-lg:py-2 max-lg:shadow-none"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Esqueleto forma="circulo" className="max-lg:size-10" />
               <div className="min-w-0 flex-1 space-y-2.5">
                 <Esqueleto className="h-3.5 w-2/3" />
                 <Esqueleto className="w-1/2" />
               </div>
             </div>
-            <Esqueleto className="mt-6 w-4/5" />
+            <Esqueleto className="mt-6 w-4/5 max-lg:hidden" />
           </li>
         ))}
       </ul>
@@ -92,7 +103,7 @@ export function ListaClientes({
         </div>
       ) : (
         <>
-          <ul className={cn(vista === "grid" ? CUADRICULA : LISTA)}>
+          <ul className={cn(vista === "grid" ? CUADRICULA : LISTA, FILAS_DEL_CELULAR)}>
             {clientes.map((cliente) => (
               <li key={cliente.id} className="min-w-0">
                 <TarjetaCliente

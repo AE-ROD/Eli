@@ -11,7 +11,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { deCentavos } from "@/lib/atenciones"
 import { formatearMonto } from "@/lib/dinero"
 import { fechaRelativa } from "@/lib/fechas"
@@ -139,7 +139,7 @@ function SillonesAhora({
   const propias = datos?.alcance === "propias"
 
   return (
-    <section aria-labelledby={idDelTitulo} aria-busy={!datos || undefined} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6", className)}>
+    <section aria-labelledby={idDelTitulo} aria-busy={!datos || undefined} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, className)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Sillones ahora"
@@ -156,7 +156,7 @@ function SillonesAhora({
         }
       />
 
-      <div className="mt-5">
+      <div className="mt-4 lg:mt-5">
         {!datos ? (
           <TarjetasCargando />
         ) : datos.sillones.length === 0 ? (
@@ -217,7 +217,7 @@ function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora
   return (
     <article
       className={cn(
-        "flex h-full flex-col gap-1 rounded-[24px] p-4 text-navy squircle",
+        "flex h-full flex-col gap-1 rounded-[20px] p-3 text-navy squircle lg:rounded-[24px] lg:p-4",
         atendiendo ? "bg-naranja-suave" : "bg-superficie"
       )}
     >
@@ -225,7 +225,7 @@ function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora
         <h3 className="font-semibold break-words">{sillon.nombre}</h3>
         <span className="inline-flex h-6 items-center rounded-full bg-tarjeta px-2.5 text-xs font-medium">{estado}</span>
       </div>
-      <p className="mt-1 text-lg leading-snug font-medium break-words">{titular}</p>
+      <p className="mt-1 text-base leading-snug font-medium break-words lg:text-lg">{titular}</p>
       {atendiendo && sillon.actual ? (
         <>
           <p className="text-sm break-words">{sillon.actual.titulo}</p>
@@ -292,7 +292,7 @@ function SalaDeEspera({
         }`
 
   return (
-    <section aria-labelledby={idDelTitulo} aria-busy={!datos || undefined} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} aria-busy={!datos || undefined} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={frases.enLaSalaDeEspera}
@@ -300,7 +300,7 @@ function SalaDeEspera({
         icono={{ figura: ICONOS_DE_MODULO.tablero, color: "naranja" }}
       />
       {sala && (
-        <div className="mt-5">
+        <div className="mt-4 lg:mt-5">
           {sala.lista.length === 0 ? (
             <EstadoVacio>Cuando alguien llegue, aparece aquí.</EstadoVacio>
           ) : (
@@ -453,7 +453,7 @@ function PresupuestosPorResponder({ datos }: { datos: DatosDelInicio }) {
         }`
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Presupuestos por responder"

@@ -1,8 +1,10 @@
 "use client"
 
 import { useEffect, useEffectEvent, useId, useRef, type ReactNode, type RefObject } from "react"
+import Link from "next/link"
 import { motion } from "framer-motion"
 import {
+  ArrowLeft,
   CalendarClock,
   CalendarDays,
   CalendarPlus,
@@ -15,6 +17,7 @@ import {
   MessageCircle,
   Pencil,
   Phone,
+  PhoneCall,
   Trash2,
   X,
 } from "lucide-react"
@@ -218,7 +221,18 @@ export function PanelDetalleCliente({
 
   const contenido = (
     <>
-      {/* Cabecera */}
+      {/* Cabecera. En el celular (la hoja), una fila compacta pegada arriba con las acciones rápidas. */}
+      {comoHoja ? (
+        <EncabezadoDelCelular
+          nombre={cliente.nombre}
+          idDelNombre={idDelNombre}
+          telefono={contacto.telefono}
+          whatsapp={whatsapp}
+          rutaParaAgendar={rutaParaAgendar}
+          textoAgendar={ficha.agendar}
+          alVolver={cerrar}
+        />
+      ) : (
       <div className="flex items-start gap-3 pt-1 pl-2">
         <AvatarUsuario nombre={cliente.nombre} tamaño="xl" />
         <div className="min-w-0 flex-1 pt-1">
@@ -237,6 +251,7 @@ export function PanelDetalleCliente({
           <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
         </button>
       </div>
+      )}
 
       {/* Clínica dental: la alerta de alergias y el acceso a la ficha clínica, lo primero. */}
       {fichaClinica && (
@@ -276,6 +291,8 @@ export function PanelDetalleCliente({
 
       {/* Datos de contacto */}
       <section aria-label={ficha.datos} className={BLOQUE}>
+        {/* En la hoja la etiqueta no entra en la cabecera compacta: va acá, arriba de los datos. */}
+        {comoHoja && cliente.etiqueta && <EtiquetaDeCliente etiqueta={cliente.etiqueta} className="mb-3" />}
         <ul className="space-y-3 text-sm">
           <li className="flex items-start gap-3">
             <Mail className="mt-0.5 size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
@@ -323,11 +340,14 @@ export function PanelDetalleCliente({
           seguir, como "Escribirle" en "Se están yendo": lo manda la persona,
           no Eli. Sin teléfono ni correo con forma válida, no hay enlace.
         */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2 empty:hidden">
+          {/* En la hoja, Agendar y WhatsApp ya están en la cabecera: acá queda el correo. */}
+          {!comoHoja && (
           <Boton href={rutaParaAgendar} tamano="sm" className="min-w-36 flex-1" icono={<CalendarPlus aria-hidden="true" strokeWidth={1.75} />}>
             {ficha.agendar}
           </Boton>
-          {whatsapp && (
+          )}
+          {whatsapp && !comoHoja && (
             <a
               href={whatsapp}
               target="_blank"
@@ -463,8 +483,8 @@ function enfocables(nodo: HTMLElement): HTMLElement[] {
 }
 
 /**
- * La ficha por debajo de `lg`: una hoja que sube desde abajo (en el teléfono,
- * de todo el ancho; desde `sm`, centrada), sobre un velo navy. Es un diálogo:
+ * La ficha por debajo de `lg`: a pantalla completa, con la cabecera compacta
+ * pegada arriba (volver, el nombre y las acciones rápidas). Es un diálogo:
  * al abrirse el foco entra, Tab da la vuelta adentro, Escape y el velo la
  * cierran, y al cerrarse el foco vuelve a la tarjeta que la abrió. Va por
  * debajo de los modales del panel (z-40 contra z-50): editar o eliminar se
@@ -549,7 +569,7 @@ function HojaDeLaFicha({
 
   return (
     <motion.div
-      className="fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-6"
+      className="fixed inset-0 z-40 flex"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -563,10 +583,70 @@ function HojaDeLaFicha({
         aria-modal="true"
         aria-labelledby={idDelTitulo}
         tabIndex={-1}
-        className="relative flex max-h-[92dvh] w-full flex-col gap-3 overflow-y-auto overscroll-contain rounded-t-panel bg-superficie p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-navy shadow-md squircle focus:outline-none sm:max-h-[calc(100dvh-3rem)] sm:max-w-lg sm:rounded-panel"
+        className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto overscroll-contain bg-superficie px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-navy focus:outline-none sm:px-6"
       >
         {children}
       </div>
     </motion.div>
+  )
+}
+
+/** Los botones de sólo ícono de la cabecera del celular: 44 × 44, lo mínimo para un dedo. */
+const BOTON_DE_ICONO =
+  "grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-borde"
+
+/**
+ * La cabecera de la ficha en el celular: volver a la lista, el avatar chico,
+ * el nombre (hasta dos renglones) y, como íconos de 44 px, llamar, WhatsApp y
+ * agendar. Pegada arriba mientras se baja por la ficha. Lo que no tiene con
+ * qué (sin teléfono, sin WhatsApp válido) no aparece.
+ */
+function EncabezadoDelCelular({
+  nombre,
+  idDelNombre,
+  telefono,
+  whatsapp,
+  rutaParaAgendar,
+  textoAgendar,
+  alVolver,
+}: {
+  nombre: string
+  idDelNombre: string
+  telefono: string | null
+  whatsapp: string | null
+  rutaParaAgendar: string
+  textoAgendar: string
+  alVolver: () => void
+}) {
+  return (
+    <div className="sticky top-0 z-10 -mx-3 flex min-h-14 items-center gap-1.5 border-b border-borde bg-superficie px-1.5 pt-[env(safe-area-inset-top)] sm:-mx-6 sm:px-4">
+      <button type="button" onClick={alVolver} aria-label="Volver a la lista" className={BOTON_DE_ICONO}>
+        <ArrowLeft className="size-5" aria-hidden="true" strokeWidth={1.75} />
+      </button>
+      <AvatarUsuario nombre={nombre} tamaño="sm" />
+      <h2 id={idDelNombre} className="ml-1 line-clamp-2 min-w-0 flex-1 text-[17px] leading-tight font-semibold break-words">
+        {nombre}
+      </h2>
+      {telefono && (
+        <a href={`tel:${telefono}`} aria-label={`Llamar a ${nombre}`} title="Llamar" className={BOTON_DE_ICONO}>
+          <PhoneCall className="size-5" aria-hidden="true" strokeWidth={1.75} />
+        </a>
+      )}
+      {whatsapp && (
+        <a
+          href={whatsapp}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`WhatsApp: escribirle a ${nombre}`}
+          title="WhatsApp"
+          className={BOTON_DE_ICONO}
+        >
+          <MessageCircle className="size-5" aria-hidden="true" strokeWidth={1.75} />
+        </a>
+      )}
+      <Link href={rutaParaAgendar} aria-label={`${textoAgendar}: ${nombre}`} title={textoAgendar} className={BOTON_DE_ICONO}>
+        <CalendarPlus className="size-5" aria-hidden="true" strokeWidth={1.75} />
+      </Link>
+    </div>
   )
 }

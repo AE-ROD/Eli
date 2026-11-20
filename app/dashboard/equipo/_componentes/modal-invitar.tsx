@@ -99,6 +99,9 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
     onInvitado()
   }
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <AnimatePresence>
       {abierto && (
@@ -107,6 +110,18 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
           antetitulo="Equipo"
           bloqueado={enviando}
           alCerrar={cerrar}
+          // Los botones van en el pie: en el celular quedan fijos abajo de la hoja.
+          pie={
+            exito ? (
+              <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario" className="lg:mt-1">
+                Cerrar
+              </BotonPrimario>
+            ) : (
+              <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={enviando} icono={<Mail className="h-4 w-4" />}>
+                Enviar invitación
+              </BotonPrimario>
+            )
+          }
         >
           {exito ? (
             <div>
@@ -115,12 +130,9 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
                 <strong className="font-medium break-words text-navy">{nombre}</strong> recibirá un correo en{" "}
                 <strong className="font-medium break-all text-navy">{email}</strong> con el enlace para crear su cuenta.
               </p>
-              <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario" className="mt-6">
-                Cerrar
-              </BotonPrimario>
             </div>
           ) : (
-            <form onSubmit={enviar} className="space-y-5">
+            <form id={idDelFormulario} onSubmit={enviar} className="space-y-5">
               <CampoFormulario
                 etiqueta="Nombre"
                 type="text"
@@ -155,10 +167,6 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
                   {error}
                 </Aviso>
               )}
-
-              <BotonPrimario type="submit" anchoCompleto cargando={enviando} icono={<Mail className="h-4 w-4" />}>
-                Enviar invitación
-              </BotonPrimario>
             </form>
           )}
         </MarcoDeModal>

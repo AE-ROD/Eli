@@ -50,6 +50,8 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
   // Si no cargó, no se ofrece guardar: se guardaría "Todos" sin que nadie lo eligiera.
   const [errorDeCarga, setErrorDeCarga] = useState("")
   const idDeLaLista = useId()
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
 
   useEffect(() => {
     let vigente = true
@@ -99,6 +101,14 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
       descripcion={frases.descripcion}
       bloqueado={guardando}
       alCerrar={alCerrar}
+      // Con la lista ya cargada, «Guardar» va en el pie: en el celular queda fijo abajo de la hoja.
+      pie={
+        cargando || errorDeCarga ? undefined : (
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando} icono={<Check className="h-4 w-4" />}>
+            {frases.guardar}
+          </BotonPrimario>
+        )
+      }
     >
       {cargando ? (
         <div aria-busy="true" className="grid h-32 place-items-center">
@@ -108,7 +118,7 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
       ) : errorDeCarga ? (
         <Aviso>{errorDeCarga}</Aviso>
       ) : (
-        <form onSubmit={guardar} className="space-y-5">
+        <form id={idDelFormulario} onSubmit={guardar} className="space-y-5">
           <fieldset className="min-w-0">
             <legend className={cn(CLASES_DE_ETIQUETA, "mb-2")}>{frases.queHace}</legend>
             <label className={cn(FILA, "font-medium")}>
@@ -145,10 +155,6 @@ export function ModalServiciosDelMiembro({ miembro, alCerrar, alGuardar }: Props
           </fieldset>
 
           {error && <Aviso>{error}</Aviso>}
-
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando} icono={<Check className="h-4 w-4" />}>
-            {frases.guardar}
-          </BotonPrimario>
         </form>
       )}
     </MarcoDeModal>

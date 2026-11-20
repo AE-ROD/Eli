@@ -6,7 +6,7 @@ import { Antetitulo } from "@/components/comunes/antetitulo"
 import { Boton } from "@/components/comunes/boton"
 import { Aviso } from "@/components/panel/aviso"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
 import { COLOR_DE_CORONA, COLOR_DEL_CONTORNO } from "@/components/panel/odontograma/colores"
 import type { OpcionesDeProtesisRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import type { MarcaDelOdontograma } from "@/lib/odontograma"
@@ -162,9 +162,9 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
     : `${tratante?.nombre ?? nombreDeQuienMira} (tú)`
 
   return (
-    <form onSubmit={crear} noValidate aria-label="Nueva prótesis" className="flex flex-wrap items-start gap-6">
-      <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-6">
-        <section aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, "p-4 sm:p-6")}>
+    <form onSubmit={crear} noValidate aria-label="Nueva prótesis" className="flex flex-wrap items-start gap-4 lg:gap-6">
+      <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-4 lg:gap-6">
+        <section aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
               <Antetitulo>Nueva prótesis</Antetitulo>
@@ -339,7 +339,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
           </div>
         </section>
 
-        <section aria-labelledby={`${id}-tono`} className={cn(TARJETA_DEL_PANEL, "p-4 sm:p-6")}>
+        <section aria-labelledby={`${id}-tono`} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
           <h3 id={`${id}-tono`} className={TITULO_DE_TARJETA}>
             Tono
           </h3>
@@ -353,7 +353,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
         </section>
       </div>
 
-      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-6">
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-4 lg:gap-6">
         <section aria-labelledby={`${id}-material`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
           <h3 id={`${id}-material`} className={TITULO_DE_TARJETA}>
             Material

@@ -12,7 +12,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MarcoDeModal } from "@/components/panel/marco-de-modal"
 import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { aCentavos, deCentavos, esPrecioValido } from "@/lib/atenciones"
@@ -153,7 +153,7 @@ export function RepartoDeProtesisConfig() {
       <div role="status" className="space-y-4">
         <span className="sr-only">Cargando el reparto de prótesis…</span>
         {[0, 1].map((tarjeta) => (
-          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
+          <div key={tarjeta} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
             <Esqueleto className="h-6 w-1/3" />
             <Esqueleto className="w-1/2" />
           </div>
@@ -202,13 +202,13 @@ export function RepartoDeProtesisConfig() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       {error && <Aviso>{error}</Aviso>}
       <p role="status" className="sr-only">
         {anuncio}
       </p>
 
-      <section aria-labelledby={idComo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <section aria-labelledby={idComo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta id={idComo} titulo="Cómo se calcula" />
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           <li className="rounded-[24px] bg-superficie p-4 squircle">
@@ -227,7 +227,7 @@ export function RepartoDeProtesisConfig() {
         </p>
       </section>
 
-      <section aria-labelledby={idMateriales} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <section aria-labelledby={idMateriales} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta
           id={idMateriales}
           titulo="Reglas por material"
@@ -279,7 +279,7 @@ export function RepartoDeProtesisConfig() {
         )}
       </section>
 
-      <section aria-labelledby={idExcepciones} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <section aria-labelledby={idExcepciones} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta
           id={idExcepciones}
           titulo={frases.excepcionesPor}
@@ -556,8 +556,18 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
       bloqueado={guardando}
       ancho="lg"
       alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" form={`${id}-formulario`} className="w-full" cargando={guardando}>
+            {material ? "Guardar regla" : "Agregar material"}
+          </Boton>
+        </div>
+      }
     >
-      <form onSubmit={guardar} noValidate className="space-y-5">
+      <form id={`${id}-formulario`} onSubmit={guardar} noValidate className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre"
           placeholder="Ej.: Acrílico termocurado"
@@ -653,14 +663,6 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
         />
 
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            {material ? "Guardar regla" : "Agregar material"}
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )
@@ -742,8 +744,18 @@ function ModalExcepcion({ excepcion, materiales, odontologos, frases, alGuardar,
       bloqueado={guardando}
       ancho="lg"
       alCerrar={alCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" form={`${id}-formulario`} className="w-full" cargando={guardando}>
+            {excepcion ? "Guardar regla" : "Agregar excepción"}
+          </Boton>
+        </div>
+      }
     >
-      <form onSubmit={guardar} noValidate className="space-y-5">
+      <form id={`${id}-formulario`} onSubmit={guardar} noValidate className="space-y-5">
         {!excepcion && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -797,14 +809,6 @@ function ModalExcepcion({ excepcion, materiales, odontologos, frases, alGuardar,
         <CamposDeReparto escrito={reparto} alCambiar={setReparto} intentado={intentado} montoDelEjemplo={delMaterial?.precioCents} />
 
         {error && <Aviso>{error}</Aviso>}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
-            Cancelar
-          </Boton>
-          <Boton type="submit" className="w-full" cargando={guardando}>
-            {excepcion ? "Guardar regla" : "Agregar excepción"}
-          </Boton>
-        </div>
       </form>
     </MarcoDeModal>
   )

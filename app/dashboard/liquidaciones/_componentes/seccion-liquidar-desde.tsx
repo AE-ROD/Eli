@@ -7,7 +7,7 @@ import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CLASES_DE_ETIQUETA } from "@/components/comunes/estilos-de-campo"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { fechaParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import { guardarLiquidarDesde } from "../_datos"
@@ -58,7 +58,7 @@ export function SeccionLiquidarDesde({ liquidarDesde, hoy, editable, bloqueada }
     : "Todavía no se eligió desde qué fecha se liquida"
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta id={idDelTitulo} titulo="Liquidar desde" subtitulo={subtitulo} icono={{ figura: CalendarCheck }} />
       {!liquidarDesde && !editable && (
         <Aviso tono="info" className="mt-4">

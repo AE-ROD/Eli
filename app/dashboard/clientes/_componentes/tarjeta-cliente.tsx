@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { CalendarDays, Contact, Mail, Phone } from "lucide-react"
+import { CalendarDays, ChevronRight, Contact, Mail, Phone } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { fechaRelativa } from "@/lib/fechas"
@@ -114,7 +114,9 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
     "@container block h-full w-full rounded-[24px] bg-tarjeta p-4 text-left text-navy shadow-sm squircle anillo-foco",
     "cursor-pointer transition-[box-shadow,background-color] duration-200 ease-suave hover:shadow-md",
     // La abierta, con el lila de Clientes. Sólo marca: el nombre está en la ficha.
-    seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila"
+    seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila",
+    // En el celular, una fila compacta de la lista (que es una sola tarjeta con divisiones): sin sombra ni radio propios.
+    "max-lg:flex max-lg:min-h-16 max-lg:items-center max-lg:gap-3 max-lg:rounded-none max-lg:bg-transparent max-lg:px-3.5 max-lg:py-2 max-lg:shadow-none max-lg:hover:shadow-none"
   )
 
   if (rutaDeLaFicha) {
@@ -122,18 +124,18 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
       // El botón de los datos va al lado del enlace y no adentro: un botón dentro de un enlace no se puede usar.
       <div className="relative h-full">
         <Link href={rutaDeLaFicha} className={cn(clases, "pr-14 lg:hidden")}>
-          <ContenidoDeLaTarjeta cliente={cliente} />
+          <FilaDelCelular cliente={cliente} />
         </Link>
         <button
           type="button"
           onClick={onClick}
           aria-label={`Datos y notas de ${cliente.nombre}`}
           title="Datos y notas"
-          className="absolute top-2 right-2 grid size-11 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie lg:hidden"
+          className="absolute top-1/2 right-1.5 grid size-11 -translate-y-1/2 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie lg:hidden"
         >
           <Contact className="size-5" aria-hidden="true" strokeWidth={1.75} />
         </button>
-        <button type="button" onClick={onClick} className={cn(clases, "hidden lg:block")}>
+        <button type="button" onClick={onClick} className={cn(clases, "max-lg:hidden")}>
           <ContenidoDeLaTarjeta cliente={cliente} />
         </button>
       </div>
@@ -142,8 +144,36 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
 
   return (
     <button type="button" onClick={onClick} className={clases}>
-      <ContenidoDeLaTarjeta cliente={cliente} />
+      <FilaDelCelular cliente={cliente} />
+      {/* Desde lg, la tarjeta de siempre. */}
+      <span className="block h-full max-lg:hidden">
+        <ContenidoDeLaTarjeta cliente={cliente} />
+      </span>
     </button>
+  )
+}
+
+/**
+ * El cliente en el celular (por debajo de `lg`): una fila de 64 px con el
+ * avatar chico, el nombre y, en una línea, el teléfono y la última visita.
+ * La flecha dice que se abre algo. Todo `span`, como la tarjeta.
+ */
+function FilaDelCelular({ cliente }: { cliente: ClienteEnTarjeta }) {
+  const datos = [cliente.telefono !== "Sin teléfono" ? cliente.telefono : null, `Última: ${cliente.ultimaVisita}`]
+    .filter(Boolean)
+    .join(" · ")
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-3 lg:hidden">
+      <AvatarUsuario nombre={cliente.nombre} imagenUrl={cliente.imagenUrl} tamaño="md" />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-[15px] font-semibold">{cliente.nombre}</span>
+          {cliente.etiqueta && <EtiquetaDeCliente etiqueta={cliente.etiqueta} className="shrink-0" />}
+        </span>
+        <span className="mt-0.5 block truncate text-[13px] text-texto-2 tabular-nums">{datos}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-texto-2" aria-hidden="true" strokeWidth={1.75} />
+    </span>
   )
 }
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { Package, Percent } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
@@ -36,14 +37,27 @@ export function ModalProducto({
   // Los ejemplos, del oficio del negocio: una cera para el pelo no se vende en una clínica dental.
   const rubro = useRubroDelPanel()
   const ejemplos = ejemplosDe(rubro)
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <MarcoDeModal
       titulo={modoEdicion ? "Editar producto" : "Nuevo producto"}
       antetitulo="Productos"
       bloqueado={guardando}
       alCerrar={onCerrar}
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            {modoEdicion ? "Guardar cambios" : "Crear producto"}
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta="Nombre del producto"
           placeholder={textoDeEjemplo(ejemplos.productos)}
@@ -88,15 +102,6 @@ export function ModalProducto({
         )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
-
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {modoEdicion ? "Guardar cambios" : "Crear producto"}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

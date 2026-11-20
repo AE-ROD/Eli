@@ -8,7 +8,7 @@ import { Interruptor } from "@/components/comunes/interruptor"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { GuiaPlegable } from "@/components/panel/guia-plegable"
 import { pedir, conJson, type Resultado } from "@/lib/peticiones"
 import {
@@ -88,7 +88,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}

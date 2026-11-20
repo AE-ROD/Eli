@@ -37,7 +37,8 @@ import { citasParaAgendar, cuandoEsLaCita, leerValor } from "../_formato"
 import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
 
 /**
- * Los dos botones del pie de cada modal: en el teléfono, el que confirma arriba.
+ * Los dos botones del pie de cada modal: en el teléfono, el que confirma arriba,
+ * fijos al pie de la hoja.
  * `esperando`: todavía falta algo para poder confirmar (lo que se elige está cargando).
  *
  * Los modales que crean algo (versión, etapa, prestación) y el del valor
@@ -47,13 +48,26 @@ import type { UsuarioDeLaFicha } from "./ficha-del-paciente"
  * desvanece, en vez de volver a habilitarse y crear otro igual. Sólo un error
  * suelta el candado.
  */
-function PieDelModal({ texto, guardando, esperando = false, alCerrar }: { texto: string; guardando: boolean; esperando?: boolean; alCerrar: () => void }) {
+function PieDelModal({
+  texto,
+  form,
+  guardando,
+  esperando = false,
+  alCerrar,
+}: {
+  texto: string
+  /** El id del `<form>`: el pie va en el `pie` del marco, fuera de él (en el celular, fijo abajo de la hoja). */
+  form: string
+  guardando: boolean
+  esperando?: boolean
+  alCerrar: () => void
+}) {
   return (
-    <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
+    <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
       <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
         Cancelar
       </Boton>
-      <Boton type="submit" className="w-full" cargando={guardando || esperando}>
+      <Boton type="submit" form={form} className="w-full" cargando={guardando || esperando}>
         {texto}
       </Boton>
     </div>
@@ -167,8 +181,9 @@ export function ModalNuevaVersion({ pacienteId, versionVigente, conOdontograma, 
       bloqueado={guardando}
       ancho="lg"
       alCerrar={alCerrar}
+      pie={<PieDelModal texto={versionVigente === null ? "Armar el plan" : `Armar la versión ${versionVigente + 1}`} guardando={guardando} form={`${id}-formulario`} alCerrar={alCerrar} />}
     >
-      <form onSubmit={armar} className="space-y-5">
+      <form id={`${id}-formulario`} onSubmit={armar} className="space-y-5">
         <fieldset>
           <legend className={ETIQUETA}>Con qué empieza</legend>
           <div className="space-y-2">
@@ -198,7 +213,6 @@ export function ModalNuevaVersion({ pacienteId, versionVigente, conOdontograma, 
         </fieldset>
 
         {aviso && <Aviso>{aviso}</Aviso>}
-        <PieDelModal texto={versionVigente === null ? "Armar el plan" : `Armar la versión ${versionVigente + 1}`} guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -230,8 +244,14 @@ export function ModalNuevaEtapa({ pacienteId, alTerminar, alCerrar }: { paciente
   }
 
   return (
-    <MarcoDeModal titulo="Agregar etapa" descripcion="Una etapa son tratamientos que se hacen juntos y se aprueban juntos. Va al final del plan, por aprobar." bloqueado={guardando} alCerrar={alCerrar}>
-      <form onSubmit={agregar} className="space-y-5" noValidate>
+    <MarcoDeModal
+      titulo="Agregar etapa"
+      descripcion="Una etapa son tratamientos que se hacen juntos y se aprueban juntos. Va al final del plan, por aprobar."
+      bloqueado={guardando}
+      alCerrar={alCerrar}
+      pie={<PieDelModal texto="Agregar etapa" guardando={guardando} form={`${id}-formulario`} alCerrar={alCerrar} />}
+    >
+      <form id={`${id}-formulario`} onSubmit={agregar} className="space-y-5" noValidate>
         <div>
           <label htmlFor={`${id}-nombre`} className={ETIQUETA}>
             Nombre de la etapa
@@ -247,7 +267,6 @@ export function ModalNuevaEtapa({ pacienteId, alTerminar, alCerrar }: { paciente
           />
         </div>
         {aviso && <Aviso>{aviso}</Aviso>}
-        <PieDelModal texto="Agregar etapa" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -468,8 +487,9 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
       bloqueado={guardando}
       ancho="lg"
       alCerrar={alCerrar}
+      pie={<PieDelModal texto="Agregar prestación" guardando={guardando} form={`${id}-formulario`} alCerrar={alCerrar} />}
     >
-      <form onSubmit={agregar} className="space-y-5" noValidate>
+      <form id={`${id}-formulario`} onSubmit={agregar} className="space-y-5" noValidate>
         <CamposDePiezaYCaras
           id={id}
           pieza={pieza}
@@ -564,7 +584,6 @@ export function ModalPrestacion({ pacienteId, etapa, usuario, alTerminar, alCerr
           </Aviso>
         ))}
         {aviso && <Aviso>{aviso}</Aviso>}
-        <PieDelModal texto="Agregar prestación" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -641,8 +660,15 @@ export function ModalEditarPrestacion({ pacienteId, prestacion, nombre: titulo, 
   }
 
   return (
-    <MarcoDeModal titulo="Editar prestación" antetitulo={titulo} bloqueado={guardando} ancho="lg" alCerrar={alCerrar}>
-      <form onSubmit={guardar} className="space-y-5" noValidate>
+    <MarcoDeModal
+      titulo="Editar prestación"
+      antetitulo={titulo}
+      bloqueado={guardando}
+      ancho="lg"
+      alCerrar={alCerrar}
+      pie={<PieDelModal texto="Guardar cambios" guardando={guardando} form={`${id}-formulario`} alCerrar={alCerrar} />}
+    >
+      <form id={`${id}-formulario`} onSubmit={guardar} className="space-y-5" noValidate>
         <CamposDePiezaYCaras
           id={id}
           pieza={pieza}
@@ -674,7 +700,6 @@ export function ModalEditarPrestacion({ pacienteId, prestacion, nombre: titulo, 
           )}
         </div>
         {aviso && <Aviso>{aviso}</Aviso>}
-        <PieDelModal texto="Guardar cambios" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -725,8 +750,14 @@ export function ModalValor({ pacienteId, prestacion, nombre, alTerminar, alCerra
   }
 
   return (
-    <MarcoDeModal titulo={falta ? "Completar el valor" : "Cambiar el valor"} descripcion={nombre} bloqueado={guardando} alCerrar={alCerrar}>
-      <form onSubmit={guardar} className="space-y-5" noValidate>
+    <MarcoDeModal
+      titulo={falta ? "Completar el valor" : "Cambiar el valor"}
+      descripcion={nombre}
+      bloqueado={guardando}
+      alCerrar={alCerrar}
+      pie={<PieDelModal texto="Guardar valor" guardando={guardando} form={`${id}-formulario`} alCerrar={alCerrar} />}
+    >
+      <form id={`${id}-formulario`} onSubmit={guardar} className="space-y-5" noValidate>
         <CampoDeValor
           id={id}
           valor={valor}
@@ -739,7 +770,6 @@ export function ModalValor({ pacienteId, prestacion, nombre, alTerminar, alCerra
           }}
         />
         {aviso && <Aviso>{aviso}</Aviso>}
-        <PieDelModal texto="Guardar valor" guardando={guardando} alCerrar={alCerrar} />
       </form>
     </MarcoDeModal>
   )
@@ -808,8 +838,27 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
   }
 
   return (
-    <MarcoDeModal titulo="¿En qué cita se hace?" descripcion={nombre} bloqueado={guardando} alCerrar={alCerrar}>
-      <form onSubmit={agendar} className="space-y-5">
+    <MarcoDeModal
+      titulo="¿En qué cita se hace?"
+      descripcion={nombre}
+      bloqueado={guardando}
+      alCerrar={alCerrar}
+      pie={
+        citas !== null && citas.length === 0 ? (
+          <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+            <Boton type="button" variante="secundario" className="w-full" onClick={alCerrar}>
+              Cerrar
+            </Boton>
+            <Boton href={`/dashboard/agenda?nueva=1&cliente=${encodeURIComponent(pacienteId)}`} className="w-full">
+              Ir a la agenda
+            </Boton>
+          </div>
+        ) : (
+          <PieDelModal texto="Marcar agendada" guardando={guardando} esperando={citas === null && !errorDeCitas} form={`${id}-formulario`} alCerrar={alCerrar} />
+        )
+      }
+    >
+      <form id={`${id}-formulario`} onSubmit={agendar} className="space-y-5">
         {errorDeCitas ? (
           <Aviso
             accion={
@@ -859,18 +908,6 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
         )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
-        {citas !== null && citas.length === 0 ? (
-          <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-            <Boton type="button" variante="secundario" className="w-full" onClick={alCerrar}>
-              Cerrar
-            </Boton>
-            <Boton href={`/dashboard/agenda?nueva=1&cliente=${encodeURIComponent(pacienteId)}`} className="w-full">
-              Ir a la agenda
-            </Boton>
-          </div>
-        ) : (
-          <PieDelModal texto="Marcar agendada" guardando={guardando} esperando={citas === null && !errorDeCitas} alCerrar={alCerrar} />
-        )}
       </form>
     </MarcoDeModal>
   )

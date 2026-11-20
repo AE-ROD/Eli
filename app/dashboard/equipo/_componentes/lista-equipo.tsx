@@ -9,7 +9,7 @@ import { Insignia } from "@/components/comunes/insignia"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, TITULO_DE_TARJETA, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { nombreDelRol } from "@/lib/nombres-de-roles"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -76,7 +76,7 @@ export function ListaEquipo({
 
   if (miembros.length === 0 && invitaciones.length === 0) {
     return (
-      <div className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+      <div className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EstadoVacio
           icono={<CuadroDeIcono icono={UsersRound} color="turquesa" tamano="lg" />}
           titulo={frases.sinNadie.titulo}

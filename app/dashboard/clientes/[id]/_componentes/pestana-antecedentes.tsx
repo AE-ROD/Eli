@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent } from "react"
 import { Boton } from "@/components/comunes/boton"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
-import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import {
   MAXIMO_DE_ALERGIAS,
   MAXIMO_DE_ANTECEDENTES,
@@ -79,7 +79,7 @@ export function PestanaAntecedentes({ pacienteId, ficha, editable, zona, hoy, al
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "max-w-3xl p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "max-w-3xl")}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Antecedentes"

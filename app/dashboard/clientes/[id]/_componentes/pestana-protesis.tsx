@@ -7,7 +7,7 @@ import { Esqueleto } from "@/components/comunes/esqueleto"
 import { Aviso } from "@/components/panel/aviso"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import type { OpcionesDeProtesisRespuesta, ProtesisRespuesta } from "@/lib/edicion-de-protesis"
 import type { PlanRespuesta } from "@/lib/edicion-del-plan"
 import type { MarcaDelOdontograma } from "@/lib/odontograma"
@@ -159,8 +159,8 @@ export function PestanaProtesis({
   const vigente = plan?.plan ?? null
 
   return (
-    <div className="space-y-6">
-      <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <div className="space-y-4 lg:space-y-6">
+      <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta
           id={idDelTitulo}
           titulo="Prótesis"
@@ -258,7 +258,7 @@ export function PestanaProtesis({
         <div aria-busy="true" className="space-y-4">
           <span className="sr-only">Cargando prótesis...</span>
           {[0, 1].map((i) => (
-            <div key={i} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, "space-y-3 p-5 sm:p-6")}>
+            <div key={i} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-3")}>
               <Esqueleto className="h-6 w-2/3" />
               <Esqueleto className="w-1/2" />
               <Esqueleto className="w-4/5" />

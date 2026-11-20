@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
+import { AnimatePresence } from "framer-motion"
 import { Plus, Save, X } from "lucide-react"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
@@ -10,6 +11,7 @@ import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { FilaDeDia } from "@/components/panel/fila-de-dia"
 import { RangoDeHoras } from "@/components/panel/rango-de-horas"
 import type { FranjaHorario } from "@/lib/horario-dia"
+import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { guardarHorarioDeSede, type ChoqueDelServidor, type Sede } from "../_datos"
 import { frasesDeConfiguracion } from "../_frases"
@@ -28,6 +30,7 @@ import {
   textosDeChoquesDelServidor,
   type DiaDeLaSemana,
 } from "../_sedes"
+import { BarraParaGuardarEnElCelular, FilaDeDiaCompacta, HojaDeHorasDelDia, LISTAS_GRANDES } from "./horario-en-el-celular"
 
 interface PropsDeEditorDeHorarioDeSede {
   /** La sede, tal como está guardada. */
@@ -68,6 +71,8 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
   const [rechazo, setRechazo] = useState<{ mensaje: string; choques: ChoqueDelServidor[] } | null>(null)
   // Los elementos a los que debe ir el foco después del próximo dibujo: el primero que exista (una franja nueva, el botón que sobrevive).
   const pedirFoco = useRef<string[] | null>(null)
+  // En el celular, el día cuyas franjas se están cambiando en la hoja.
+  const [diaEnLaHoja, setDiaEnLaHoja] = useState<number | null>(null)
 
   const pendiente = huboCambios(guardada, semana)
   const problemas = problemasDeLaSemana(semana)
@@ -89,12 +94,17 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
     const candidatos = pedirFoco.current
     if (!candidatos) return
     pedirFoco.current = null
-    candidatos.map((id) => document.getElementById(id)).find((elemento) => elemento !== null)?.focus()
+    // Sólo lo que se ve: en el celular la grilla de escritorio está oculta, y al revés.
+    candidatos
+      .map((id) => document.getElementById(id))
+      .find((elemento) => elemento !== null && elemento.getClientRects().length > 0)
+      ?.focus()
   })
 
   const idDelInterruptor = (dia: number) => `${base}-dia-${dia}`
-  const idDelDesde = (dia: number, indice: number) => `${base}-dia-${dia}-franja-${indice}`
-  const idDeAgregar = (dia: number) => `${base}-agregar-${dia}`
+  // Los de la hoja del celular llevan otro prefijo: las dos versiones están en el DOM a la vez.
+  const idDelDesde = (dia: number, indice: number, enLaHoja = false) => `${base}${enLaHoja ? "-hoja" : ""}-dia-${dia}-franja-${indice}`
+  const idDeAgregar = (dia: number, enLaHoja = false) => `${base}${enLaHoja ? "-hoja" : ""}-agregar-${dia}`
 
   const cambiarFranjas = (dayOfWeek: number, cambiar: (franjas: FranjaHorario[]) => FranjaHorario[]) => {
     setSemana((previos) => previos.map((dia) => (dia.dayOfWeek === dayOfWeek ? { ...dia, franjas: cambiar(dia.franjas) } : dia)))
@@ -111,14 +121,16 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
     const nueva = franjaNueva(dia.franjas)
     if (!nueva) return
     cambiarFranjas(dia.dayOfWeek, (franjas) => [...franjas, nueva])
-    pedirFoco.current = [idDelDesde(dia.dayOfWeek, dia.franjas.length)]
+    pedirFoco.current = [idDelDesde(dia.dayOfWeek, dia.franjas.length, true), idDelDesde(dia.dayOfWeek, dia.franjas.length)]
   }
 
   const quitarFranja = (dia: DiaDeLaSemana, indice: number) => {
     cambiarFranjas(dia.dayOfWeek, (franjas) => franjas.filter((_, i) => i !== indice))
     // La franja que tenía el foco desaparece: pasa al botón de agregar, o al interruptor si el día queda apagado.
     pedirFoco.current =
-      dia.franjas.length > 1 ? [idDeAgregar(dia.dayOfWeek), idDelInterruptor(dia.dayOfWeek)] : [idDelInterruptor(dia.dayOfWeek)]
+      dia.franjas.length > 1
+        ? [idDeAgregar(dia.dayOfWeek, true), idDeAgregar(dia.dayOfWeek), idDelInterruptor(dia.dayOfWeek)]
+        : [idDeAgregar(dia.dayOfWeek, true), idDelInterruptor(dia.dayOfWeek)]
   }
 
   const guardar = async () => {
@@ -143,6 +155,67 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
   ]
     .filter(Boolean)
     .join(" ")
+
+  /** Las franjas de un día con sus horas, quitar y «Otro tramo»: en la grilla de escritorio y en la hoja del celular. */
+  function franjasDelDia(dia: DiaDeLaSemana, enLaHoja = false) {
+    const nombreDelDia = DIAS[dia.dayOfWeek]
+    const hayLugar = franjaNueva(dia.franjas) !== null
+    return (
+      <div className={cn("flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-1", enLaHoja && cn("gap-3", LISTAS_GRANDES))}>
+        {enLaHoja && dia.franjas.length === 0 && <p className="text-sm text-texto-2">{frases.sinAtencion}</p>}
+        {dia.franjas.map((franja, indice) => {
+          const problema = problemas.find((otro) => otro.dayOfWeek === dia.dayOfWeek && otro.indice === indice)
+          return (
+            // Sin identificador propio: el lugar de la franja es su clave (se reordena sólo al guardar).
+            <div key={indice} className="min-w-0">
+              <div className="flex w-full min-w-0 items-center gap-1">
+                <RangoDeHoras
+                  etiqueta={frases.franja(nombreDelDia, indice + 1, dia.franjas.length)}
+                  desde={franja.startTime}
+                  hasta={franja.endTime}
+                  alCambiarDesde={(valor) => cambiarHora(dia.dayOfWeek, indice, "startTime", valor)}
+                  alCambiarHasta={(valor) => cambiarHora(dia.dayOfWeek, indice, "endTime", valor)}
+                  idDelDesde={idDelDesde(dia.dayOfWeek, indice, enLaHoja)}
+                />
+                <BotonDeFila
+                  etiqueta={frases.quitarFranja(nombreDelDia, indice + 1)}
+                  titulo="Quitar"
+                  icono={<X className="size-4" aria-hidden="true" strokeWidth={1.75} />}
+                  onClick={() => quitarFranja(dia, indice)}
+                />
+              </div>
+              {problema && (
+                <div className="mt-1">
+                  <ErrorDeCampo id={`${base}${enLaHoja ? "-hoja" : ""}-error-${dia.dayOfWeek}-${indice}`}>{problema.mensaje}</ErrorDeCampo>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {hayLugar && (
+          <div>
+            <BotonPrimario
+              id={idDeAgregar(dia.dayOfWeek, enLaHoja)}
+              type="button"
+              variante="fantasma"
+              tamaño="sm"
+              icono={<Plus className="h-4 w-4" />}
+              aria-label={frases.agregarFranja(nombreDelDia)}
+              onClick={() => agregarFranja(dia)}
+            >
+              {frases.agregarFranjaVisible}
+            </BotonPrimario>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /** El resumen de las horas de un día, para su fila del celular: «09:00 – 13:00 · 15:00 – 19:00». */
+  const resumenDelDia = (dia: DiaDeLaSemana) => dia.franjas.map((franja) => `${franja.startTime} – ${franja.endTime}`).join(" · ")
+  const resumenParaLeer = (dia: DiaDeLaSemana) => dia.franjas.map((franja) => `de ${franja.startTime} a ${franja.endTime}`).join(" y ")
+
+  const diaDeLaHoja = semana.find((dia) => dia.dayOfWeek === diaEnLaHoja) ?? null
 
   return (
     <div role="group" aria-labelledby={idDelTitulo} className="rounded-campo bg-superficie p-4 squircle sm:p-5">
@@ -190,10 +263,26 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
         </Aviso>
       )}
 
-      <ul className="mt-4 divide-y divide-borde">
+      {/* En el celular, cada día en una fila compacta; sus franjas se cambian en una hoja (`horario-en-el-celular.tsx`). */}
+      <ul className="mt-3 divide-y divide-borde lg:hidden">
+        {semana.map((dia) => (
+          <FilaDeDiaCompacta
+            key={dia.dayOfWeek}
+            etiqueta={DIAS[dia.dayOfWeek]}
+            activo={dia.franjas.length > 0}
+            alAlternar={() => alternarDia(dia)}
+            resumen={resumenDelDia(dia)}
+            resumenParaLeer={resumenParaLeer(dia)}
+            conProblema={problemas.some((problema) => problema.dayOfWeek === dia.dayOfWeek)}
+            alAbrirLasHoras={() => setDiaEnLaHoja(dia.dayOfWeek)}
+            textoSinAtencion={frases.sinAtencion}
+          />
+        ))}
+      </ul>
+
+      <ul className="mt-4 divide-y divide-borde max-lg:hidden">
         {semana.map((dia) => {
           const nombreDelDia = DIAS[dia.dayOfWeek]
-          const hayLugar = franjaNueva(dia.franjas) !== null
           return (
             <FilaDeDia
               key={dia.dayOfWeek}
@@ -204,56 +293,29 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
               alineacion="arriba"
               textoSinAtencion={frases.sinAtencion}
             >
-              <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-1">
-                {dia.franjas.map((franja, indice) => {
-                  const problema = problemas.find((otro) => otro.dayOfWeek === dia.dayOfWeek && otro.indice === indice)
-                  return (
-                    // Sin identificador propio: el lugar de la franja es su clave (se reordena sólo al guardar).
-                    <div key={indice} className="min-w-0">
-                      <div className="flex w-full min-w-0 items-center gap-1">
-                        <RangoDeHoras
-                          etiqueta={frases.franja(nombreDelDia, indice + 1, dia.franjas.length)}
-                          desde={franja.startTime}
-                          hasta={franja.endTime}
-                          alCambiarDesde={(valor) => cambiarHora(dia.dayOfWeek, indice, "startTime", valor)}
-                          alCambiarHasta={(valor) => cambiarHora(dia.dayOfWeek, indice, "endTime", valor)}
-                          idDelDesde={idDelDesde(dia.dayOfWeek, indice)}
-                        />
-                        <BotonDeFila
-                          etiqueta={frases.quitarFranja(nombreDelDia, indice + 1)}
-                          titulo="Quitar"
-                          icono={<X className="size-4" aria-hidden="true" strokeWidth={1.75} />}
-                          onClick={() => quitarFranja(dia, indice)}
-                        />
-                      </div>
-                      {problema && (
-                        <div className="mt-1">
-                          <ErrorDeCampo id={`${base}-error-${dia.dayOfWeek}-${indice}`}>{problema.mensaje}</ErrorDeCampo>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {hayLugar && (
-                  <div>
-                    <BotonPrimario
-                      id={idDeAgregar(dia.dayOfWeek)}
-                      type="button"
-                      variante="fantasma"
-                      tamaño="sm"
-                      icono={<Plus className="h-4 w-4" />}
-                      aria-label={frases.agregarFranja(nombreDelDia)}
-                      onClick={() => agregarFranja(dia)}
-                    >
-                      {frases.agregarFranjaVisible}
-                    </BotonPrimario>
-                  </div>
-                )}
-              </div>
+              {franjasDelDia(dia)}
             </FilaDeDia>
           )
         })}
       </ul>
+
+      <AnimatePresence>
+        {diaDeLaHoja && (
+          <HojaDeHorasDelDia
+            key="hoja-del-dia"
+            dia={DIAS[diaDeLaHoja.dayOfWeek]}
+            descripcion={frases.titulo(sede.nombre)}
+            alCerrar={() => setDiaEnLaHoja(null)}
+          >
+            {franjasDelDia(diaDeLaHoja, true)}
+          </HojaDeHorasDelDia>
+        )}
+      </AnimatePresence>
+
+      {/* En el celular, con cambios sin guardar, «Guardar horario» queda fijo abajo. */}
+      <BarraParaGuardarEnElCelular visible={pendiente} guardando={guardando} deshabilitado={bloqueado} alGuardar={guardar}>
+        {frases.guardar}
+      </BarraParaGuardarEnElCelular>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <BotonPrimario
@@ -264,6 +326,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
           disabled={bloqueado || !pendiente}
           variante={pendiente ? "primario" : "secundario"}
           onClick={guardar}
+          className={cn(pendiente && "max-lg:hidden")}
         >
           {guardado && !pendiente ? frases.guardado : frases.guardar}
         </BotonPrimario>

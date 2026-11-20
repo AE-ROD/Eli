@@ -2,6 +2,7 @@
 
 import { Selector } from "@/components/comunes/selector"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { CAMPOS_DE_IMPORTACION, type CampoDeImportacion } from "@/lib/importar-clientes"
 import { vocabularioDe } from "@/lib/vocabulario"
@@ -40,7 +41,7 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-mapeo">
+      <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-mapeo">
         <div>
           <h2 id="titulo-mapeo" className="font-medium text-navy">
             Qué columna es cada dato
@@ -68,7 +69,7 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
         )}
       </Tarjeta>
 
-      <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-muestra">
+      <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-muestra">
         <div>
           <h2 id="titulo-muestra" className="font-medium text-navy">
             Vista previa
@@ -78,7 +79,30 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
             las primeras {Math.min(FILAS_DE_MUESTRA, datos.length)}.
           </p>
         </div>
-        <div className="overflow-x-auto">
+        {/*
+          En el celular (por debajo de lg) una tabla de muchas columnas sólo se
+          lee desplazándola de lado: cada fila va en su propia tarjeta, con el
+          nombre de cada columna al lado de su valor. Desde lg, la tabla.
+        */}
+        <ol aria-label="Primeras filas del archivo" className="space-y-2 lg:hidden">
+          {muestra.map((fila, numero) => (
+            <li key={numero} className="rounded-[16px] bg-superficie p-3 squircle">
+              <p className="text-xs font-medium text-texto-2">Fila {numero + 1}</p>
+              <dl className="mt-1.5 space-y-1.5 text-sm">
+                {cabecera.map((texto, indice) => (
+                  <div key={indice} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3">
+                    <dt className="min-w-0 text-texto-2">
+                      <span className="block truncate font-medium text-navy">{texto || `Columna ${indice + 1}`}</span>
+                      <span className="block truncate text-xs">{campoDeLaColumna(indice) ?? "No se importa"}</span>
+                    </dt>
+                    <dd className="min-w-0 break-words">{fila[indice] || "—"}</dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+        <div className="overflow-x-auto max-lg:hidden">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="border-b border-borde">

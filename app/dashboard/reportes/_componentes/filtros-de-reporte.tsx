@@ -1,13 +1,13 @@
 "use client"
 
-import { useId } from "react"
-import { LoaderCircle, RefreshCw } from "lucide-react"
+import { useId, useState } from "react"
+import { ChevronDown, LoaderCircle, RefreshCw } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ErrorDeCampo } from "@/components/comunes/error-de-campo"
 import { Selector } from "@/components/comunes/selector"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
-import { CAMPO_CON_ERROR, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { CAMPO_CON_ERROR, ETIQUETA, RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { MEDIOS_DE_PAGO } from "@/lib/medios-de-pago"
 import { PERIODOS, type PeriodoId } from "@/lib/periodos"
 import { TURNOS } from "@/lib/reportes"
@@ -63,6 +63,11 @@ const ANILLO_DE_LA_OPCION =
  * no encima del resumen, donde aparecía y desaparecía empujando todo para
  * abajo: el lugar está siempre, vacío cuando no hay nada que decir, y así el
  * lector de pantalla lo anuncia al cambiar.
+ *
+ * En el celular el período es una sola fila de píldoras que se desliza de
+ * costado, y los demás filtros quedan detrás de "Más filtros" (con cuántos hay
+ * elegidos): cuatro selectores ocupaban media pantalla antes de ver un número.
+ * Desde `lg` se ve todo, como siempre.
  */
 export function FiltrosDeReporte({
   filtros,
@@ -80,9 +85,14 @@ export function FiltrosDeReporte({
   const { filtros: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
   const id = (campo: string) => `${idBase}-${campo}`
   const delNegocio = alcance === "negocio"
+  /** Sólo en el celular: si se ven los filtros además del período. */
+  const [masFiltros, setMasFiltros] = useState(false)
+  const elegidos = [filtros.turno, delNegocio && filtros.profesional, filtros.servicio, delNegocio && filtros.medio].filter(
+    Boolean
+  ).length
 
   return (
-    <section aria-labelledby={id("titulo")} className={cn(TARJETA_DEL_PANEL, "space-y-5 p-5 sm:p-6")}>
+    <section aria-labelledby={id("titulo")} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4 lg:space-y-5")}>
       <div className="flex min-h-5 items-center justify-between gap-3">
         <h2 id={id("titulo")} className="antetitulo">
           Filtros
@@ -99,14 +109,15 @@ export function FiltrosDeReporte({
 
       <fieldset>
         <legend className={cn(ETIQUETA, "mb-2")}>Período</legend>
-        <div className="flex flex-wrap gap-2">
+        {/* En el celular, una fila que se desliza; el relleno de arriba y abajo deja ver el anillo del foco. */}
+        <div className="flex gap-2 max-lg:-mx-4 max-lg:overflow-x-auto max-lg:px-4 max-lg:py-1.5 lg:flex-wrap">
           {PERIODOS.map((periodo) => {
             const elegido = filtros.periodo === periodo.id
             return (
               <label
                 key={periodo.id}
                 className={cn(
-                  "inline-flex h-11 cursor-pointer items-center rounded-full px-4 text-sm font-medium",
+                  "inline-flex h-11 shrink-0 cursor-pointer items-center rounded-full px-4 text-sm font-medium whitespace-nowrap",
                   "transition-[background-color,color,box-shadow] duration-150 ease-suave",
                   ANILLO_DE_LA_OPCION,
                   elegido
@@ -129,7 +140,7 @@ export function FiltrosDeReporte({
         </div>
 
         {filtros.periodo === "personalizado" && (
-          <div className="mt-4 grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid max-w-xl grid-cols-2 gap-3 lg:gap-4">
             <CampoFormulario
               etiqueta="Desde"
               id={id("desde")}
@@ -155,7 +166,7 @@ export function FiltrosDeReporte({
             />
             {/* Un solo mensaje para las dos fechas: el rango es el que no sirve. */}
             {errorDeRango && (
-              <div role="alert" className="sm:col-span-2">
+              <div role="alert" className="col-span-2">
                 <ErrorDeCampo id={id("error-rango")}>{errorDeRango}</ErrorDeCampo>
               </div>
             )}
@@ -166,56 +177,78 @@ export function FiltrosDeReporte({
       {soloPeriodo ? (
         <p className="text-sm text-texto-2">Lo anulado se filtra solo por período, por la fecha en que se anuló.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Selector
-            etiqueta="Turno"
-            id={id("turno")}
-            value={filtros.turno}
-            onChange={(evento) => onCambiar({ turno: evento.target.value })}
-            opciones={TURNOS.map((turno) => ({ valor: turno.id, texto: turno.nombre }))}
+        <>
+          <button
+            type="button"
+            aria-expanded={masFiltros}
+            aria-controls={id("mas-filtros")}
+            onClick={() => setMasFiltros((previo) => !previo)}
+            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-boton px-1 text-sm font-medium text-navy anillo-foco lg:hidden"
           >
-            <option value="">Todo el día</option>
-          </Selector>
-
-          {/* Al profesional el reporte ya le muestra sólo lo suyo: elegirse a sí mismo no filtra nada. */}
-          {delNegocio && (
-            <Selector
-              etiqueta={frases.profesional}
-              id={id("profesional")}
-              value={filtros.profesional}
-              onChange={(evento) => onCambiar({ profesional: evento.target.value })}
-              opciones={(opciones?.profesionales ?? []).map((profesional) => ({
-                valor: profesional.id,
-                texto: profesional.nombre,
-              }))}
-            >
-              <option value="">{frases.todosLosProfesionales}</option>
-            </Selector>
-          )}
-
-          <Selector
-            etiqueta={frases.servicio}
-            id={id("servicio")}
-            value={filtros.servicio}
-            onChange={(evento) => onCambiar({ servicio: evento.target.value })}
-            opciones={(opciones?.servicios ?? []).map((servicio) => ({ valor: servicio.id, texto: servicio.nombre }))}
+            <span>
+              Más filtros
+              {elegidos > 0 && <span className="text-texto-2"> · {elegidos === 1 ? "1 elegido" : `${elegidos} elegidos`}</span>}
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={cn("size-5 transition-transform duration-150 ease-suave", masFiltros && "rotate-180")}
+              strokeWidth={2}
+            />
+          </button>
+          <div
+            id={id("mas-filtros")}
+            className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", !masFiltros && "max-lg:hidden")}
           >
-            <option value="">{frases.todosLosServicios}</option>
-          </Selector>
-
-          {/* Cómo pagó cada cliente es facturación del negocio: el profesional no lo ve. */}
-          {delNegocio && (
             <Selector
-              etiqueta="Medio de pago"
-              id={id("medio")}
-              value={filtros.medio}
-              onChange={(evento) => onCambiar({ medio: evento.target.value })}
-              opciones={MEDIOS_DE_PAGO.map((medio) => ({ valor: medio.id, texto: medio.nombre }))}
+              etiqueta="Turno"
+              id={id("turno")}
+              value={filtros.turno}
+              onChange={(evento) => onCambiar({ turno: evento.target.value })}
+              opciones={TURNOS.map((turno) => ({ valor: turno.id, texto: turno.nombre }))}
             >
-              <option value="">Todos</option>
+              <option value="">Todo el día</option>
             </Selector>
-          )}
-        </div>
+
+            {/* Al profesional el reporte ya le muestra sólo lo suyo: elegirse a sí mismo no filtra nada. */}
+            {delNegocio && (
+              <Selector
+                etiqueta={frases.profesional}
+                id={id("profesional")}
+                value={filtros.profesional}
+                onChange={(evento) => onCambiar({ profesional: evento.target.value })}
+                opciones={(opciones?.profesionales ?? []).map((profesional) => ({
+                  valor: profesional.id,
+                  texto: profesional.nombre,
+                }))}
+              >
+                <option value="">{frases.todosLosProfesionales}</option>
+              </Selector>
+            )}
+
+            <Selector
+              etiqueta={frases.servicio}
+              id={id("servicio")}
+              value={filtros.servicio}
+              onChange={(evento) => onCambiar({ servicio: evento.target.value })}
+              opciones={(opciones?.servicios ?? []).map((servicio) => ({ valor: servicio.id, texto: servicio.nombre }))}
+            >
+              <option value="">{frases.todosLosServicios}</option>
+            </Selector>
+
+            {/* Cómo pagó cada cliente es facturación del negocio: el profesional no lo ve. */}
+            {delNegocio && (
+              <Selector
+                etiqueta="Medio de pago"
+                id={id("medio")}
+                value={filtros.medio}
+                onChange={(evento) => onCambiar({ medio: evento.target.value })}
+                opciones={MEDIOS_DE_PAGO.map((medio) => ({ valor: medio.id, texto: medio.nombre }))}
+              >
+                <option value="">Todos</option>
+              </Selector>
+            )}
+          </div>
+        </>
       )}
 
       {errorDeOpciones && !soloPeriodo && (

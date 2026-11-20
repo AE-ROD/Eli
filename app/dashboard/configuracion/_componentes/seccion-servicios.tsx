@@ -10,7 +10,7 @@ import { ModalConfirmar } from "@/components/panel/modal-confirmar"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { TARJETA_DEL_PANEL, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { montoParaEscribir } from "@/lib/dinero"
 import {
   SIN_FILTRO_DE_LA_LISTA,
@@ -360,19 +360,21 @@ export function SeccionServicios({ serviciosIniciales, puedeMarcarUrgencia = fal
   }
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         nivel={3}
         titulo={frases.titulo}
         subtitulo={frases.subtitulo}
         icono={{ figura: Scissors }}
+        // En el celular los dos botones van debajo del título, a lo ancho y repartidos.
+        className="max-lg:[&>:last-child]:basis-full"
         accion={
-          <div className="flex flex-wrap items-center gap-2">
-            <Boton ref={botonDeCarga} variante="secundario" tamano="sm" icono={<ListPlus />} onClick={abrirCarga}>
+          <div className="flex flex-wrap items-center gap-2 max-lg:w-full max-lg:flex-nowrap">
+            <Boton ref={botonDeCarga} variante="secundario" tamano="sm" icono={<ListPlus />} onClick={abrirCarga} className="max-lg:flex-1">
               {frases.carga.boton}
             </Boton>
-            <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo}>
+            <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo} className="max-lg:flex-1">
               {frases.nuevo}
             </BotonPrimario>
           </div>

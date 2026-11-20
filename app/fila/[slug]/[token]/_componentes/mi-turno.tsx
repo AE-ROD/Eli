@@ -118,7 +118,7 @@ export function MiTurno({ slug, token, rubro = null }: { slug: string; token: st
     return (
       <>
         <EncabezadoDeReserva antetitulo="Fila virtual" titulo="No encontramos este turno" />
-        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-5 py-8 text-center sm:px-10 sm:py-10 md:mt-12">
           <CuadroDeIcono icono={SearchX} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">Revisa que el enlace esté completo, o vuelve a anotarte en la fila.</p>
         </Tarjeta>
@@ -145,7 +145,7 @@ export function MiTurno({ slug, token, rubro = null }: { slug: string; token: st
         bajada={textos ? textos.bajada : "Deja esta página abierta: se actualiza sola."}
       />
 
-      <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-6 px-6 py-8 text-center sm:p-10 md:mt-12">
+      <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-6 px-5 py-6 text-center sm:p-10 md:mt-12">
         <div>
           <p className="text-sm font-medium text-texto-2">Tu número</p>
           <p className="font-serif text-7xl leading-none font-medium tracking-[-2px] text-navy tabular-nums">{turno.numero}</p>

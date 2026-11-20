@@ -51,7 +51,7 @@ export default async function PaginaRepartoDeProtesis({
         mostrarBusqueda={false}
       />
 
-      <div className="max-w-5xl space-y-5 px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-5xl space-y-4 px-4 pt-4 pb-12 sm:px-6 lg:space-y-5 lg:pt-8">
         <Link
           href="/dashboard/comisiones"
           className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline"

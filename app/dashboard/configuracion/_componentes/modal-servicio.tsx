@@ -109,14 +109,28 @@ export function ModalServicio({
       ? OTRAS_DURACIONES
       : [...OTRAS_DURACIONES, form.duration].sort((a, b) => a - b)
 
+  // El pie queda fuera del <form>: su botón de envío lo nombra con `form`.
+  const idDelFormulario = useId()
+
   return (
     <MarcoDeModal
       titulo={frases.titulo(modoEdicion)}
       antetitulo={frases.antetitulo}
       bloqueado={guardando}
       alCerrar={onCerrar}
+      // En el teléfono, uno debajo del otro: lado a lado no entraban con "Guardar cambios".
+      pie={
+        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </BotonPrimario>
+          <BotonPrimario type="submit" form={idDelFormulario} anchoCompleto cargando={guardando}>
+            {modoEdicion ? "Guardar cambios" : frases.crear}
+          </BotonPrimario>
+        </div>
+      }
     >
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form id={idDelFormulario} onSubmit={onSubmit} className="space-y-5">
         <CampoFormulario
           etiqueta={frases.nombre}
           placeholder={textoDeEjemplo(ejemplos.servicios)}
@@ -291,16 +305,6 @@ export function ModalServicio({
         )}
 
         {aviso && <Aviso>{aviso}</Aviso>}
-
-        {/* En el teléfono, uno debajo del otro: lado a lado no entraban con "Guardar cambios". */}
-        <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
-          <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
-            Cancelar
-          </BotonPrimario>
-          <BotonPrimario type="submit" anchoCompleto cargando={guardando}>
-            {modoEdicion ? "Guardar cambios" : frases.crear}
-          </BotonPrimario>
-        </div>
       </form>
     </MarcoDeModal>
   )

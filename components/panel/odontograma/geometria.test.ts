@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest"
-import { carasDe, piezasDe } from "@/lib/odontograma"
+import { carasDe, esDelMaxilar, piezasDe } from "@/lib/odontograma"
 import {
   ANCHO_DE_LA_ARCADA,
   ALTO_DE_LA_ARCADA,
+  ESCALA_MINIMA,
+  LADO_PARA_EL_DEDO,
   LINEA_MEDIA,
   carasEnLaCruz,
+  escalaDeLaArcada,
+  franjaDeLaVista,
+  ladoMasChico,
   filasDeLaArcada,
   geometriaDeLaArcada,
   geometriaDePieza,
@@ -116,5 +121,44 @@ describe("carasEnLaCruz", () => {
     expect(carasEnLaCruz(21)).toEqual({ afuera: "V", adentro: "P", izquierda: "M", derecha: "D", centro: "I" })
     expect(carasEnLaCruz(36)).toEqual({ afuera: "V", adentro: "L", izquierda: "M", derecha: "D", centro: "O" })
     expect(carasEnLaCruz(83)).toEqual({ afuera: "V", adentro: "L", izquierda: "D", derecha: "M", centro: "I" })
+  })
+})
+
+describe("escalaDeLaArcada", () => {
+  it("en el computador, como siempre: hasta 1 y no menos que la mínima", () => {
+    expect(escalaDeLaArcada(1200, { celular: false, vista: "completa", denticion: "permanente" })).toBe(1)
+    expect(escalaDeLaArcada(310, { celular: false, vista: "completa", denticion: "permanente" })).toBe(ESCALA_MINIMA)
+    expect(escalaDeLaArcada(527, { celular: false, vista: "superior", denticion: "permanente" })).toBeCloseTo(527 / ANCHO_DE_LA_ARCADA)
+  })
+
+  it("en el celular, la boca entera entra a lo ancho de la caja", () => {
+    const escala = escalaDeLaArcada(310, { celular: true, vista: "completa", denticion: "permanente" })
+    expect(escala * ANCHO_DE_LA_ARCADA).toBeLessThanOrEqual(310)
+  })
+
+  it("en el celular, al acercar una arcada la pieza más chica mide lo de un dedo", () => {
+    for (const denticion of ["permanente", "temporal"] as const) {
+      for (const vista of ["superior", "inferior"] as const) {
+        const escala = escalaDeLaArcada(310, { celular: true, vista, denticion })
+        expect(ladoMasChico(denticion) * escala).toBeGreaterThanOrEqual(LADO_PARA_EL_DEDO)
+        for (const g of geometriaDeLaArcada(denticion)) expect(g.lado * escala).toBeGreaterThanOrEqual(LADO_PARA_EL_DEDO)
+      }
+    }
+  })
+
+  it("sin medida todavía, 1", () => {
+    expect(escalaDeLaArcada(0, { celular: true, vista: "superior", denticion: "permanente" })).toBe(1)
+  })
+})
+
+describe("franjaDeLaVista", () => {
+  it("cada arcada acercada muestra enteras todas sus piezas, y la boca entera, todo el dibujo", () => {
+    expect(franjaDeLaVista("completa")).toEqual({ desde: 0, hasta: ALTO_DE_LA_ARCADA })
+    for (const g of geometriaDeLaArcada("permanente").concat(geometriaDeLaArcada("temporal"))) {
+      const { desde, hasta } = franjaDeLaVista(esDelMaxilar(g.pieza) ? "superior" : "inferior")
+      // El cuadrado girado ocupa, como mucho, su diagonal; el número va 13 u más afuera.
+      expect(g.centro.y - g.lado * 0.71).toBeGreaterThanOrEqual(desde)
+      expect(g.centro.y + g.lado * 0.71).toBeLessThanOrEqual(hasta)
+    }
   })
 })

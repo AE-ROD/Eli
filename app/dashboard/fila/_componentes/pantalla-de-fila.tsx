@@ -102,22 +102,31 @@ export function PantallaDeFila() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-auto bg-crema text-navy">
-      <div className="flex items-center justify-between gap-3 px-6 pt-4">
-        <Link href="/dashboard/tablero" className={clasesDeBoton({ variante: "fantasma", tamano: "sm" })}>
+      {/*
+        En el celular: 16 px a los lados, el área segura del iPhone arriba y
+        abajo (la pantalla tapa todo, también la barra inferior) y los dos
+        botones de 44 px. Desde lg, como siempre: el `max` da los mismos 16 y
+        32 px donde no hay área segura.
+      */}
+      <div className="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
+        <Link
+          href="/dashboard/tablero"
+          className={cn(clasesDeBoton({ variante: "fantasma", tamano: "sm" }), "max-lg:h-11 max-lg:after:inset-y-0")}
+        >
           <ArrowLeft aria-hidden="true" className="size-4" strokeWidth={2} />
           {volverA}
         </Link>
-        <Boton variante="fantasma" tamano="sm" onClick={pantallaCompleta}>
+        <Boton variante="fantasma" tamano="sm" onClick={pantallaCompleta} className="max-lg:h-11 max-lg:after:inset-y-0">
           <Maximize aria-hidden="true" className="size-4" strokeWidth={2} />
           Pantalla completa
         </Boton>
       </div>
 
-      <div className="grid flex-1 gap-8 px-6 pt-4 pb-8 lg:grid-cols-[1.4fr_1fr] lg:px-12">
-        <section aria-labelledby="titulo-de-la-fila" className="flex min-w-0 flex-col gap-8">
+      <div className="grid flex-1 gap-6 px-4 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))] sm:gap-8 sm:px-6 lg:grid-cols-[1.4fr_1fr] lg:px-12">
+        <section aria-labelledby="titulo-de-la-fila" className="flex min-w-0 flex-col gap-6 sm:gap-8">
           <header>
             <Antetitulo>{pantalla?.negocio.nombre ?? " "}</Antetitulo>
-            <h1 id="titulo-de-la-fila" className="mt-2 font-serif text-5xl leading-none font-medium tracking-[-1.5px] lg:text-6xl">
+            <h1 id="titulo-de-la-fila" className="mt-2 font-serif text-4xl leading-none font-medium tracking-[-1.5px] sm:text-5xl lg:text-6xl">
               Fila de hoy
             </h1>
           </header>
@@ -175,8 +184,8 @@ export function PantallaDeFila() {
           </div>
         </section>
 
-        <aside className="flex flex-col items-center justify-center gap-5 rounded-[32px] bg-tarjeta p-8 text-center shadow-sm squircle">
-          <p className="font-serif text-4xl leading-tight font-medium tracking-[-1px] text-balance">Anótate desde tu celular</p>
+        <aside className="flex flex-col items-center justify-center gap-5 rounded-[32px] bg-tarjeta p-6 text-center shadow-sm squircle sm:p-8">
+          <p className="font-serif text-3xl leading-tight font-medium tracking-[-1px] text-balance sm:text-4xl">Anótate desde tu celular</p>
           {pantalla?.activa !== false && (
             <>
               <div className="w-full max-w-[22rem] rounded-[24px] bg-white p-3 shadow-[inset_0_0_0_2px_var(--color-navy)]">

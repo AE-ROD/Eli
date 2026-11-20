@@ -6,7 +6,7 @@ import { Boton } from "@/components/comunes/boton"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import type { EstadisticasDelPanel } from "../_datos"
@@ -23,7 +23,7 @@ export function ResumenDeClientes({ estadisticas }: PropsDeResumenDeClientes) {
   const frases = frasesDelInicio(vocabularioDe(useRubroDelPanel()).palabras).resumenDeClientes
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "flex flex-col p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "flex flex-col", RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={frases.titulo}

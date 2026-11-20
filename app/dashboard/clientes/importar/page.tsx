@@ -8,6 +8,7 @@ import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { Tarjeta } from "@/components/comunes/tarjeta"
+import { RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { actorDeSesion, puedeImportarExportarClientes } from "@/lib/permisos"
 import { decodificarCsv, leerCsv } from "@/lib/csv"
 import { vcardACsv } from "@/lib/vcard"
@@ -150,7 +151,7 @@ export default function PaginaImportarClientes() {
           <>
             {resumen && <ResumenDeImportacion resumen={resumen} palabras={palabras} />}
 
-            <Tarjeta como="section" className="space-y-4 p-5 sm:p-6" aria-labelledby="titulo-archivo">
+            <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-archivo">
               <div>
                 <h2 id="titulo-archivo" className="font-medium text-navy">
                   {resumen ? "Importar otro archivo" : "Elige el archivo"}

@@ -6,7 +6,7 @@ import { Calculator, Users } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { EstadoVacio } from "@/components/panel/estado-vacio"
-import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
+import { RELLENO_DE_TARJETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { periodoParaLeer } from "@/lib/periodos-de-liquidacion"
 import { cn } from "@/lib/utils"
 import { ModalDeCierre } from "./modal-de-cierre"
@@ -27,7 +27,7 @@ export function SeccionEquipo({ miembros, puedeCerrar }: { miembros: MiembroPara
   const [abierto, setAbierto] = useState<MiembroParaLiquidar | null>(null)
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-5 sm:p-6")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo="Equipo"

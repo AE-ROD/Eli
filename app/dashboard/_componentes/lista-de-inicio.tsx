@@ -9,6 +9,7 @@ import { Tarjeta } from "@/components/comunes/tarjeta"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { cuantosHechos, pasosDeInicioPara, textosDeLaLista, type PasosHechos } from "@/lib/lista-de-inicio"
+import { RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 
 /**
@@ -28,7 +29,7 @@ export function ListaDeInicio({ pasos }: { pasos: PasosHechos }) {
   const total = pasosDelRubro.length
 
   return (
-    <Tarjeta como="section" aria-labelledby={idDelTitulo} className="rounded-panel p-5 sm:p-6">
+    <Tarjeta como="section" aria-labelledby={idDelTitulo} className={cn("rounded-panel", RELLENO_DE_TARJETA)}>
       <EncabezadoDeTarjeta
         id={idDelTitulo}
         titulo={textos.titulo}

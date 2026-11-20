@@ -140,7 +140,7 @@ export function GestionDeCita({
     return (
       <>
         <EncabezadoDeReserva antetitulo={frases.tuCita} titulo="Este enlace no sirve" />
-        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-5 py-8 text-center sm:px-10 sm:py-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
             {frases.noSirve}
@@ -157,7 +157,7 @@ export function GestionDeCita({
     return (
       <>
         <EncabezadoDeReserva antetitulo={frases.tuCita} titulo={frases.errores.cargar} />
-        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-6 py-10 text-center sm:px-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 flex max-w-xl flex-col items-center gap-5 px-5 py-8 text-center sm:px-10 sm:py-10 md:mt-12">
           <CuadroDeIcono icono={CalendarX2} color="azul" tamano="lg" />
           <p className="cuerpo-xl text-pretty text-texto-2">
             {vista.mensaje}
@@ -182,7 +182,7 @@ export function GestionDeCita({
     return (
       <>
         <EncabezadoDeReserva ref={titulo} antetitulo={cita.negocio.nombre} titulo={frases.cancelada.titulo} bajada={frases.cancelada.bajada} />
-        <Tarjeta className="mx-auto mt-8 max-w-xl px-6 py-8 sm:p-10 md:mt-12">
+        <Tarjeta className="mx-auto mt-8 max-w-xl px-5 py-6 sm:p-10 md:mt-12">
           <ResumenDeLaCita cita={cita} terminoDelServicio={frases.terminoDelServicio} />
         </Tarjeta>
       </>
