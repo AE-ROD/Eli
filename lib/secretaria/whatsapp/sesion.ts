@@ -45,23 +45,29 @@ export function llavesEnLaBase(negocioId: string, canalId: string): SignalKeySto
   }
   return {
     get: get as SignalKeyStore["get"],
+    // En lote: al vincular, Baileys guarda cientos de llaves de una vez (812
+    // pre-keys); una consulta por llave no entra en el tiempo de una transacción.
     set: async (datos: SignalDataSet) => {
-      await prisma.$transaction(async (tx) => {
-        for (const [tipo, porId] of Object.entries(datos)) {
-          for (const [claveId, valor] of Object.entries(porId ?? {})) {
-            if (valor === null || valor === undefined) {
-              await tx.claveDeWhatsapp.deleteMany({ where: { businessId: negocioId, canalId, tipo, claveId } })
-              continue
-            }
-            const valorCifrado = guardar(valor)
-            await tx.claveDeWhatsapp.upsert({
-              where: { canalId_tipo_claveId: { canalId, tipo, claveId } },
-              create: { businessId: negocioId, canalId, tipo, claveId, valorCifrado },
-              update: { valorCifrado },
-            })
-          }
+      const porTipo = Object.entries(datos).map(([tipo, porId]) => {
+        const entradas = Object.entries(porId ?? {})
+        return {
+          tipo,
+          ids: entradas.map(([claveId]) => claveId),
+          filas: entradas
+            .filter(([, valor]) => valor !== null && valor !== undefined)
+            .map(([claveId, valor]) => ({ businessId: negocioId, canalId, tipo, claveId, valorCifrado: guardar(valor) })),
         }
       })
+      await prisma.$transaction(
+        async (tx) => {
+          for (const { tipo, ids, filas } of porTipo) {
+            if (ids.length === 0) continue
+            await tx.claveDeWhatsapp.deleteMany({ where: { businessId: negocioId, canalId, tipo, claveId: { in: ids } } })
+            if (filas.length > 0) await tx.claveDeWhatsapp.createMany({ data: filas })
+          }
+        },
+        { timeout: 30_000 }
+      )
     },
   }
 }

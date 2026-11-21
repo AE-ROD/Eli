@@ -51,7 +51,7 @@ vi.mock("@/lib/secretaria/modelo", () => ({
 const envio = vi.hoisted(() => {
   let siguiente = 1
   return {
-    enviarPorWhatsapp: vi.fn(async (_negocioId: string, _jid: string, _texto: string) => `ELI-${siguiente++}`),
+    enviarPorWhatsapp: vi.fn(async (_negocioId: string, _jid: string, _texto: string, _sigue?: () => Promise<boolean>) => ({ id: `ELI-${siguiente++}` }) as { id: string } | null),
   }
 })
 vi.mock("@/lib/secretaria/whatsapp/envio", () => envio)
@@ -277,6 +277,19 @@ describe("WhatsApp: la dueña responde desde su celular", () => {
     CONEXION.enviados.add("ELI-en-memoria")
     await escribe("56911111111", "¡Hola!", CONEXION, { deLaDueña: true, id: "ELI-en-memoria" })
     expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "bot" })
+  })
+
+  it("si la dueña toma el chat mientras la Secretaria escribe, esa respuesta no sale", async () => {
+    escenario()
+    crearMensaje.mockResolvedValue(texto("¡Hola! ¿Qué servicio buscas?"))
+    envio.enviarPorWhatsapp.mockImplementationOnce(async (_n, _j, _t, sigue) => {
+      // Mientras "escribe", la dueña responde desde su celular.
+      await escribe("56911111111", "Te atiendo yo", CONEXION, { deLaDueña: true })
+      return (await sigue!()) ? { id: "ELI-no" } : null
+    })
+    await escribe("56911111111", "hola")
+    expect(base.buscar("mensajeDeSecretaria", { rol: "assistant" })).toHaveLength(0)
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human" })
   })
 
   it("la dueña escribiéndole a alguien que no habló con la Secretaria no crea nada", async () => {
@@ -534,7 +547,7 @@ describe("Secretaria Eli: mensajes seguidos y fallas", () => {
     envio.enviarPorWhatsapp.mockRejectedValue(new Error("no conectado"))
     await escribe("56911111111", "hola")
     envio.enviarPorWhatsapp.mockReset()
-    envio.enviarPorWhatsapp.mockImplementation(async () => "ELI-x")
+    envio.enviarPorWhatsapp.mockImplementation(async () => ({ id: "ELI-x" }))
 
     expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human" })
     expect(email.enviarDerivacionDeSecretaria).toHaveBeenCalledTimes(1)

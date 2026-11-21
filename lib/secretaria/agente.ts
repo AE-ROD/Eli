@@ -145,7 +145,12 @@ interface Negocio {
 }
 
 /** Manda un texto a la clienta: por WhatsApp, o lo junta para la pantalla del simulador. */
-type Enviar = (texto: string) => Promise<void>
+/**
+ * Manda un texto a la clienta. Con `soloSiSigueConEli`, justo antes de mandarlo
+ * revisa que la conversación siga con la Secretaria (la dueña pudo tomarla
+ * mientras "escribía"); si no, no lo manda.
+ */
+type Enviar = (texto: string, opciones?: { soloSiSigueConEli?: boolean }) => Promise<void>
 
 /**
  * Cuánto dura el candado de una conversación que se está respondiendo. Si el
@@ -287,7 +292,7 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
       await derivar(negocio, conversacion, resultado.pedido, enviar, ahora)
       return { respuestas, estado: "human", derivada: true }
     }
-    await enviar(resultado.texto)
+    await enviar(resultado.texto, { soloSiSigueConEli: true })
     await prisma.conversacionDeSecretaria.updateMany({
       where: { id: conversacion.id, businessId: negocioId },
       data: { turnos: { increment: 1 }, ultimoMensajeAt: ahora },
@@ -313,11 +318,26 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
 }
 
 function enviarDeLaConversacion(conversacion: Conversacion, respuestas: string[]): Enviar {
-  return async (texto) => {
+  const sigueConEli = async () => {
+    const actual = await prisma.conversacionDeSecretaria.findFirst({
+      where: { id: conversacion.id, businessId: conversacion.businessId },
+      select: { estado: true },
+    })
+    return actual?.estado === "bot"
+  }
+  return async (texto, opciones) => {
     let waMessageId: string | null = null
     if (!conversacion.simulacion) {
       if (!conversacion.waJid) throw new Error("Conversación de WhatsApp sin chat")
-      waMessageId = await enviarPorWhatsapp(conversacion.businessId, conversacion.waJid, texto)
+      const enviado = await enviarPorWhatsapp(
+        conversacion.businessId,
+        conversacion.waJid,
+        texto,
+        opciones?.soloSiSigueConEli ? sigueConEli : undefined
+      )
+      // La dueña tomó el chat mientras la Secretaria "escribía": no se manda.
+      if (!enviado) return
+      waMessageId = enviado.id
     }
     respuestas.push(texto)
     await prisma.mensajeDeSecretaria.create({

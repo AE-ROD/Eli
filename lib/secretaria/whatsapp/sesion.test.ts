@@ -53,6 +53,20 @@ describe("sesión de WhatsApp en la base", () => {
     expect(base.buscar("claveDeWhatsapp", { tipo: "session" })).toHaveLength(0)
   })
 
+  it("las 812 llaves iniciales se guardan de una vez, y reescribir una no la duplica", async () => {
+    const { llavesEnLaBase } = await sesion()
+    const llaves = llavesEnLaBase(NEGOCIO, "canal-1")
+    const preKeys = Object.fromEntries(
+      Array.from({ length: 812 }, (_, i) => [String(i), { private: new Uint8Array([i % 256]), public: new Uint8Array([1]) }])
+    )
+    await llaves.set({ "pre-key": preKeys })
+    expect(base.buscar("claveDeWhatsapp")).toHaveLength(812)
+    await llaves.set({ "pre-key": { "7": { private: new Uint8Array([99]), public: new Uint8Array([1]) } } })
+    expect(base.buscar("claveDeWhatsapp")).toHaveLength(812)
+    const leida = (await llaves.get("pre-key", ["7"]))["7"] as { private: Uint8Array }
+    expect(Array.from(leida.private)).toEqual([99])
+  })
+
   it("borrar la sesión borra sólo la del negocio", async () => {
     const { borrarSesion, llavesEnLaBase, guardarCredenciales, credencialesNuevas } = await sesion()
     await llavesEnLaBase(NEGOCIO, "canal-1").set({ session: { x: new Uint8Array([1]) } })

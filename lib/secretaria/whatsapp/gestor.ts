@@ -14,7 +14,7 @@ import { registrarError } from "@/lib/registro-de-errores"
 import { enviarWhatsappDesconectado } from "@/lib/email"
 import { urlBase } from "@/lib/url-base"
 import { guardarMensajeEntrante, responder } from "@/lib/secretaria/agente"
-import { conexiones, type Conexion } from "@/lib/secretaria/whatsapp/registro"
+import { abriendo, conexiones, type Conexion } from "@/lib/secretaria/whatsapp/registro"
 import { borrarSesion, guardarCredenciales, leerCredenciales, llavesEnLaBase } from "@/lib/secretaria/whatsapp/sesion"
 import { contenidoDelMensaje, esChatUnoAUno, esReciente, telefonoDelJid } from "@/lib/secretaria/whatsapp/entrantes"
 
@@ -57,7 +57,17 @@ export function qrPendiente(negocioId: string): string | null {
  */
 export async function conectarWhatsapp(negocioId: string, intentos = 0): Promise<void> {
   const existente = conexiones.get(negocioId)
-  if (existente && !existente.cerrando) return
+  if ((existente && !existente.cerrando) || abriendo.has(negocioId)) return
+  // Se reserva antes del primer `await`: dos pedidos a la vez no abren dos conexiones con la misma sesión.
+  abriendo.add(negocioId)
+  try {
+    await abrirConexion(negocioId, intentos)
+  } finally {
+    abriendo.delete(negocioId)
+  }
+}
+
+async function abrirConexion(negocioId: string, intentos: number): Promise<void> {
   const canal = await prisma.canalDeWhatsapp.findUnique({
     where: { businessId: negocioId },
     select: { id: true, credencialesCifradas: true },
@@ -89,11 +99,15 @@ export async function conectarWhatsapp(negocioId: string, intentos = 0): Promise
     intentos,
     enviados: new Set(),
     envios: [],
+    guardando: Promise.resolve(),
   }
   conexiones.set(negocioId, conexion)
 
   socket.ev.on("creds.update", () => {
-    guardarCredenciales(negocioId, canal.id, credenciales).catch(err("guardando la sesión de WhatsApp"))
+    // En fila: dos guardados a la vez podrían quedar en desorden (y el viejo pisar al nuevo).
+    conexion.guardando = conexion.guardando
+      .then(() => guardarCredenciales(negocioId, canal.id, credenciales))
+      .catch(err("guardando la sesión de WhatsApp"))
   })
   socket.ev.on("connection.update", (cambio) => {
     alCambiarLaConexion(conexion, credenciales, cambio).catch(err("actualizando la conexión de WhatsApp"))
@@ -108,6 +122,12 @@ export async function conectarWhatsapp(negocioId: string, intentos = 0): Promise
 
 async function alCambiarLaConexion(conexion: Conexion, credenciales: AuthenticationCreds, cambio: Partial<ConnectionState>) {
   const { negocioId, canalId } = conexion
+  // Una conexión que ya no es la del negocio (se desconectó a propósito, o la
+  // reemplazó otra) no cambia nada: si no, su QR vencido borraría la sesión buena.
+  if (conexiones.get(negocioId) !== conexion) {
+    if (cambio.connection !== "close" && !conexion.cerrando) conexion.socket.end(undefined)
+    return
+  }
   if (cambio.qr) {
     conexion.qr = cambio.qr
     await prisma.canalDeWhatsapp.updateMany({
@@ -136,8 +156,10 @@ async function alCambiarLaConexion(conexion: Conexion, credenciales: Authenticat
   if (cambio.connection !== "close") return
   conexion.abierta = false
   conexion.qr = null
-  if (conexiones.get(negocioId) === conexion) conexiones.delete(negocioId)
+  conexiones.delete(negocioId)
   if (conexion.cerrando) return
+  // La conexión nueva lee las credenciales de la base: que esté guardado lo último.
+  await conexion.guardando
 
   const codigo = (cambio.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode
 
