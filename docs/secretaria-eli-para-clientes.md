@@ -79,7 +79,8 @@ Ajustes). Mientras está apagada puedes probarla en el **simulador** del panel
 
 - **Abre WhatsApp en tu celular al menos una vez cada dos semanas.** Si el
   celular pasa unos 14 días sin conectarse, WhatsApp desvincula los
-  dispositivos, y Eli también. Te avisamos antes.
+  dispositivos, y Eli también. Si pasa, te avisamos por correo y en el panel
+  para que vuelvas a escanear el QR.
 - Si cierras la sesión de Eli en *Dispositivos vinculados*, se desconecta al
   tiro. Para volver, escanea el QR de nuevo.
 
