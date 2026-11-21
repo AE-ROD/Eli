@@ -18,19 +18,19 @@ import { frasesDeEquipo } from "../_frases"
 import { MenuDeLaPersona } from "./menu-de-la-persona"
 
 /**
- * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde lg
+ * Una persona por fila: el avatar, el nombre con el correo y el rol. Desde `escritorio`
  * el rol va a la derecha y las acciones debajo, a la vista. En el celular la
  * fila es compacta: el rol baja debajo del correo, alineado con el texto, y
  * las acciones van en el menú ⋯ de la derecha (`MenuDeLaPersona`).
  */
 const FILA_DE_PERSONA =
-  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 lg:gap-x-4 lg:gap-y-2 lg:px-5 lg:py-3.5"
-const LUGAR_DEL_AVATAR = "row-span-2 self-center lg:row-span-1"
-const LUGAR_DEL_ROL = "col-start-2 row-start-2 justify-self-start lg:col-start-3 lg:row-start-1 lg:justify-self-end"
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 escritorio:gap-x-4 escritorio:gap-y-2 escritorio:px-5 escritorio:py-3.5"
+const LUGAR_DEL_AVATAR = "row-span-2 self-center escritorio:row-span-1"
+const LUGAR_DEL_ROL = "col-start-2 row-start-2 justify-self-start escritorio:col-start-3 escritorio:row-start-1 escritorio:justify-self-end"
 /** El ⋯ del celular, a la derecha de las dos líneas. */
-const LUGAR_DEL_MENU = "col-start-3 row-span-2 row-start-1 -mr-2 lg:hidden"
-/** Los botones de la persona, desde lg. */
-const LUGAR_DE_LAS_ACCIONES = "col-start-2 col-span-2 flex flex-wrap gap-2 max-lg:hidden"
+const LUGAR_DEL_MENU = "col-start-3 row-span-2 row-start-1 -mr-2 escritorio:hidden"
+/** Los botones de la persona, desde `escritorio`. */
+const LUGAR_DE_LAS_ACCIONES = "col-start-2 col-span-2 flex flex-wrap gap-2 max-escritorio:hidden"
 
 /**
  * El encargado lleva el turquesa del equipo; el profesional, gris. El nombre
@@ -167,7 +167,7 @@ export function ListaEquipo({
                     <Clock className="size-5" strokeWidth={1.75} />
                   </span>
                   <DatosDeLaPersona nombre={invitacion.name} email={invitacion.email} />
-                  <div className={cn(LUGAR_DEL_ROL, "flex flex-wrap items-center gap-x-2 gap-y-1 lg:flex-col lg:flex-nowrap lg:items-end lg:gap-1")}>
+                  <div className={cn(LUGAR_DEL_ROL, "flex flex-wrap items-center gap-x-2 gap-y-1 escritorio:flex-col escritorio:flex-nowrap escritorio:items-end escritorio:gap-1")}>
                     <InsigniaDelRol rol={invitacion.role} />
                     {vencida ? (
                       <Insignia tono="gris">Vencida</Insignia>
@@ -257,7 +257,7 @@ function ListaCargando() {
     <div aria-busy="true" className={cn(TARJETA_DEL_PANEL, "divide-y divide-borde")}>
       <span className="sr-only">Cargando el equipo...</span>
       {[0, 1, 2].map((fila) => (
-        <div key={fila} aria-hidden="true" className="flex items-center gap-4 px-4 py-3 lg:px-5 lg:py-3.5">
+        <div key={fila} aria-hidden="true" className="flex items-center gap-4 px-4 py-3 escritorio:px-5 escritorio:py-3.5">
           <Esqueleto forma="circulo" className="size-10" />
           <span className="flex min-w-0 flex-1 flex-col gap-2">
             <Esqueleto className="w-1/3" />

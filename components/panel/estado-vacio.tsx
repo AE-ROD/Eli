@@ -19,12 +19,12 @@ export function EstadoVacio({ icono, titulo, children, className }: PropsDeEstad
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-1 rounded-[20px] border-2 border-dashed border-borde px-4 py-5 text-center squircle lg:rounded-[24px] lg:py-6",
+        "flex flex-col items-center gap-1 rounded-[20px] border-2 border-dashed border-borde px-4 py-5 text-center squircle escritorio:rounded-[24px] escritorio:py-6",
         className
       )}
     >
       {icono && <div className="mb-2">{icono}</div>}
-      {titulo && <p className="text-[15px] font-medium text-navy lg:text-base">{titulo}</p>}
+      {titulo && <p className="text-[15px] font-medium text-navy escritorio:text-base">{titulo}</p>}
       <div className="max-w-sm text-sm text-pretty text-texto-2">{children}</div>
     </div>
   )

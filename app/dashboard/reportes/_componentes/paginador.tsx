@@ -31,7 +31,7 @@ export function Paginador({ nombre, pagina, paginas, actualizando, onPagina }: P
   const sinSiguiente = pagina >= paginas || actualizando
 
   return (
-    <nav aria-label={nombre} className="relative flex items-center justify-between gap-3 border-t border-borde px-4 py-3 lg:px-6 lg:py-4">
+    <nav aria-label={nombre} className="relative flex items-center justify-between gap-3 border-t border-borde px-4 py-3 escritorio:px-6 escritorio:py-4">
       <Boton
         variante="secundario"
         tamano="sm"

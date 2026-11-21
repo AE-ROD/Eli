@@ -23,11 +23,11 @@ import { SinConversacionAbierta } from "./sin-conversacion-abierta"
 const CONVERSACION_EN_BLANCO: DatosDeNuevaConversacion = { nombre: "", telefono: "" }
 
 /**
- * Desde lg la lista y la conversación van lado a lado; por debajo (el
- * celular), una u otra: la conversación abierta, a pantalla completa con su
+ * Desde `escritorio` (768 px, también la tablet) la lista y la conversación
+ * van lado a lado; por debajo (el celular), una u otra: la conversación abierta, a pantalla completa con su
  * botón para volver y el campo para escribir fijo abajo.
  */
-const CONSULTA_DE_DOS_COLUMNAS = "(min-width: 64rem)"
+const CONSULTA_DE_DOS_COLUMNAS = "(min-width: 48rem)"
 
 function resumen(cargando: boolean, cantidad: number): string {
   if (cargando) return "Cargando..."
@@ -132,12 +132,12 @@ export function PaginaChats() {
   }
 
   return (
-    // Desde lg, del alto de la pantalla: la lista y los mensajes se desplazan adentro, y el campo para escribir
+    // Desde `escritorio`, del alto de la pantalla: la lista y los mensajes se desplazan adentro, y el campo para escribir
     // queda a la vista. En el celular la lista sigue a la página, y la conversación abierta la tapa entera.
-    <div className="flex flex-col lg:h-dvh lg:min-h-[36rem]">
+    <div className="flex flex-col escritorio:h-dvh escritorio:min-h-[36rem]">
       <BarraSuperior titulo="Chats" subtitulo={resumen(cargandoLista, conversaciones.length)} mostrarBusqueda={false} />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4 pb-4 sm:px-6 sm:pb-6 lg:pt-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4 pb-4 sm:px-6 sm:pb-6 escritorio:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
 
         <div className={cn(TARJETA_DEL_PANEL, "flex min-h-0 flex-1 overflow-hidden")}>
@@ -149,7 +149,7 @@ export function PaginaChats() {
             onSeleccionar={abrirConversacion}
             onNueva={abrirModal}
             enfocarId={volverA}
-            className={activa ? "hidden lg:flex" : "flex"}
+            className={activa ? "hidden escritorio:flex" : "flex"}
           />
 
           {activa ? (
@@ -160,10 +160,10 @@ export function PaginaChats() {
               onEnviar={enviar}
               onVolver={volverALaLista}
               enfocarAlAbrir={enfocarConversacion}
-              className="flex max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:bg-tarjeta max-lg:pt-[env(safe-area-inset-top)]"
+              className="flex max-escritorio:fixed max-escritorio:inset-0 max-escritorio:z-40 max-escritorio:bg-tarjeta max-escritorio:pt-[env(safe-area-inset-top)]"
             />
           ) : (
-            <SinConversacionAbierta className="hidden lg:flex" />
+            <SinConversacionAbierta className="hidden escritorio:flex" />
           )}
         </div>
       </div>

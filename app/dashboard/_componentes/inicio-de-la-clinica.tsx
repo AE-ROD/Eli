@@ -156,7 +156,7 @@ function SillonesAhora({
         }
       />
 
-      <div className="mt-4 lg:mt-5">
+      <div className="mt-4 escritorio:mt-5">
         {!datos ? (
           <TarjetasCargando />
         ) : datos.sillones.length === 0 ? (
@@ -217,7 +217,7 @@ function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora
   return (
     <article
       className={cn(
-        "flex h-full flex-col gap-1 rounded-[20px] p-3 text-navy squircle lg:rounded-[24px] lg:p-4",
+        "flex h-full flex-col gap-1 rounded-[20px] p-3 text-navy squircle escritorio:rounded-[24px] escritorio:p-4",
         atendiendo ? "bg-naranja-suave" : "bg-superficie"
       )}
     >
@@ -225,7 +225,7 @@ function TarjetaDeSillon({ sillon, zona, ahora, propias }: { sillon: SillonAhora
         <h3 className="font-semibold break-words">{sillon.nombre}</h3>
         <span className="inline-flex h-6 items-center rounded-full bg-tarjeta px-2.5 text-xs font-medium">{estado}</span>
       </div>
-      <p className="mt-1 text-base leading-snug font-medium break-words lg:text-lg">{titular}</p>
+      <p className="mt-1 text-base leading-snug font-medium break-words escritorio:text-lg">{titular}</p>
       {atendiendo && sillon.actual ? (
         <>
           <p className="text-sm break-words">{sillon.actual.titulo}</p>
@@ -300,7 +300,7 @@ function SalaDeEspera({
         icono={{ figura: ICONOS_DE_MODULO.tablero, color: "naranja" }}
       />
       {sala && (
-        <div className="mt-4 lg:mt-5">
+        <div className="mt-4 escritorio:mt-5">
           {sala.lista.length === 0 ? (
             <EstadoVacio>Cuando alguien llegue, aparece aquí.</EstadoVacio>
           ) : (

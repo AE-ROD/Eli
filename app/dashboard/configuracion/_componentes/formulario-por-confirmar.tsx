@@ -130,7 +130,7 @@ export function FormularioPorConfirmar({ faltasIniciales }: { faltasIniciales: n
             />
           </div>
           <BotonPrimario
-            className="max-lg:w-full"
+            className="max-escritorio:w-full"
             type="submit"
             tamaño="sm"
             icono={<Save className="h-4 w-4" />}

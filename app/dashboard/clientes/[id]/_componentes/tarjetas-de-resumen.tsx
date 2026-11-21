@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { cuandoEsLaCita, etapaEnCurso, pesos } from "../_formato"
 
 /** Cada tarjeta del resumen: blanca, de radio 24, como en `Ficha.dc.html`. */
-const TARJETA = "rounded-[24px] bg-tarjeta px-[18px] py-4 shadow-sm squircle max-lg:rounded-[20px] max-lg:px-3.5 max-lg:py-3"
+const TARJETA = "rounded-[24px] bg-tarjeta px-[18px] py-4 shadow-sm squircle max-escritorio:rounded-[20px] max-escritorio:px-3.5 max-escritorio:py-3"
 
 export interface ProximaCita {
   /** ISO. */
@@ -42,9 +42,9 @@ export function TarjetasDeResumen({ alergias, proximaCita, plan, telefono, email
   const telefonoParaMostrar = mostrarTelefono(telefono)
 
   return (
-    <ul aria-label="Resumen del paciente" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 max-lg:grid-cols-2 max-lg:gap-2">
+    <ul aria-label="Resumen del paciente" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 max-escritorio:grid-cols-2 max-escritorio:gap-2">
       {alergias ? (
-        <li className="flex items-start gap-3 rounded-[24px] bg-naranja-suave px-[18px] py-4 squircle max-lg:col-span-2 max-lg:px-3.5 max-lg:py-3">
+        <li className="flex items-start gap-3 rounded-[24px] bg-naranja-suave px-[18px] py-4 squircle max-escritorio:col-span-2 max-escritorio:px-3.5 max-escritorio:py-3">
           <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
           <span className="min-w-0">
             <span className="block font-semibold">Alergias</span>
@@ -52,7 +52,7 @@ export function TarjetasDeResumen({ alergias, proximaCita, plan, telefono, email
           </span>
         </li>
       ) : (
-        <Tarjeta titulo="Alergias" valor="Sin alergias anotadas" className="max-lg:col-span-2" />
+        <Tarjeta titulo="Alergias" valor="Sin alergias anotadas" className="max-escritorio:col-span-2" />
       )}
 
       <Tarjeta
@@ -86,7 +86,7 @@ export function TarjetasDeResumen({ alergias, proximaCita, plan, telefono, email
 
       <Tarjeta
         titulo="Contacto"
-        className="max-lg:col-span-2"
+        className="max-escritorio:col-span-2"
         valor={telefonoParaMostrar || email || "Sin datos de contacto"}
         detalle={telefonoParaMostrar && email ? email : undefined}
         numeros={!!telefonoParaMostrar}
@@ -110,7 +110,7 @@ function Tarjeta({
 }) {
   return (
     // En el celular, de dos en fondo: la letra baja un punto para que entren.
-    <li className={cn(TARJETA, "max-lg:text-sm", className)}>
+    <li className={cn(TARJETA, "max-escritorio:text-sm", className)}>
       <span className="block text-[13px] text-texto-2">{titulo}</span>
       <span className={cn("mt-1 block font-medium break-words", numeros && "tabular-nums")}>{valor}</span>
       {detalle && <span className={cn("mt-0.5 block text-sm break-words text-texto-2", numeros && "tabular-nums")}>{detalle}</span>}

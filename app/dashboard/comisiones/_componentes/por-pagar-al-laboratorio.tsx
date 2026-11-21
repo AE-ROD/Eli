@@ -241,7 +241,7 @@ export function PorPagarAlLaboratorioConfig({ zona }: { zona: string }) {
   const { porPagar, pagos } = datos
 
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-4 escritorio:space-y-6">
       {/* No se pudo volver a leer: lo de abajo es lo de antes y puede no estar al día. */}
       {error && (
         <Aviso

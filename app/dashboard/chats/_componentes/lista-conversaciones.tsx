@@ -55,7 +55,7 @@ export function ListaConversaciones({
   )
 
   return (
-    <aside aria-label="Conversaciones" className={cn("min-h-0 w-full flex-col lg:w-80 lg:shrink-0 lg:border-r lg:border-borde", className)}>
+    <aside aria-label="Conversaciones" className={cn("min-h-0 w-full flex-col escritorio:w-72 lg:w-80 escritorio:shrink-0 escritorio:border-r escritorio:border-borde", className)}>
       <div className="flex items-center gap-2 border-b border-borde p-3">
         <div className="relative min-w-0 flex-1">
           <Search
@@ -69,7 +69,7 @@ export function ListaConversaciones({
             placeholder="Buscar conversación..."
             value={busqueda}
             onChange={(e) => onBusqueda(e.target.value)}
-            className={cn(CAMPO, "pl-10 max-lg:text-base")}
+            className={cn(CAMPO, "pl-10 max-escritorio:text-base")}
           />
         </div>
         <button

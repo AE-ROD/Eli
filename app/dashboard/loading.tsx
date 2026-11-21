@@ -24,7 +24,7 @@ export default function CargandoElPanel() {
         ancho con su borde de abajo, el botón del menú y el título. Misma forma,
         para que nada salte cuando llega la pantalla.
       */}
-      <div aria-hidden="true" className="border-b border-borde bg-tarjeta pt-[env(safe-area-inset-top)] lg:hidden">
+      <div aria-hidden="true" className="border-b border-borde bg-tarjeta pt-[env(safe-area-inset-top)] escritorio:hidden">
         <div className="flex h-14 items-center gap-2 px-2">
           <div className="size-11 rounded-boton bg-superficie" />
           <Esqueleto className="h-5 w-32" />
@@ -32,7 +32,7 @@ export default function CargandoElPanel() {
       </div>
 
       {/* En el celular el título va en la barra: el bloque del título sólo existe en el computador. */}
-      <div aria-hidden="true" className="hidden px-4 pt-5 sm:px-6 lg:block lg:pt-8">
+      <div aria-hidden="true" className="hidden px-4 pt-5 sm:px-6 escritorio:block escritorio:pt-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-x-6">
           <div className="min-w-0 flex-1 space-y-3">
             <Esqueleto className="h-3 w-24" />
@@ -42,7 +42,7 @@ export default function CargandoElPanel() {
         </div>
       </div>
 
-      <div aria-hidden="true" className="space-y-4 px-4 pt-4 pb-10 sm:space-y-6 sm:px-6 lg:pt-6">
+      <div aria-hidden="true" className="space-y-4 px-4 pt-4 pb-10 sm:space-y-6 sm:px-6 escritorio:pt-6">
         <div className={cn(TARJETA_DEL_PANEL, "space-y-4 p-5 sm:p-6")}>
           <Esqueleto className="h-5 w-1/3" />
           <Esqueleto />

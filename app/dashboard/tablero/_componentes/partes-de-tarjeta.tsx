@@ -96,7 +96,7 @@ export function Herramienta({ etiqueta, globo, icono: Icono, peligro = false, oc
       aria-disabled={ocupado || undefined}
       onClick={ocupado ? undefined : onClick}
       className={cn(
-        "w-9 px-0 after:-inset-x-1 max-lg:size-11 max-lg:after:inset-0",
+        "w-9 px-0 after:-inset-x-1 max-escritorio:size-11 max-escritorio:after:inset-0",
         peligro && "text-error hover:bg-error/8"
       )}
     >

@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils"
  * El contenido de cada vista del panel, al lado de la barra lateral.
  *
  * En el teléfono la barra es un cajón que se abre encima, así que el contenido
- * usa todo el ancho. Desde `lg` la barra es una isla fija de 240 px (76
- * colapsada) con 24 px de margen a la izquierda, y el contenido se corre eso
- * mismo; los 24 px que la separan del contenido son el relleno de cada vista.
+ * usa todo el ancho. Desde `escritorio` (768 px) la barra es una isla fija de
+ * 240 px (76 colapsada, y siempre colapsada hasta `lg` en la tablet) con 24 px
+ * de margen a la izquierda, y el contenido se corre eso mismo; los 24 px que la separan del contenido son el relleno de cada vista.
  *
  * El foco toma el pastel del módulo de la ruta (`halo-<módulo>`): cada página
  * lo hereda sin hacer nada, también sus modales. Inicio, chats y
@@ -34,7 +34,7 @@ export function ContenidoDelPanel({ children }: { children: ReactNode }) {
 
   return (
     <main inert={cajonAbierto} className={cn(
-        colapsada ? "lg:ml-[100px]" : "lg:ml-[264px]",
+        colapsada ? "escritorio:ml-[100px]" : "escritorio:ml-[264px]",
         ESPACIO_DE_LA_BARRA_INFERIOR,
         modulo && HALO_DE_MODULO[modulo]
       )}>

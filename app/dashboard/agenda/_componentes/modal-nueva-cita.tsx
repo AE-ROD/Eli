@@ -293,10 +293,10 @@ export function ModalNuevaCita({
       bloqueado={guardando}
       alCerrar={onCerrar}
       pie={
-        // `lg:pt-1`: en el computador, la misma separación de antes (el cuerpo deja 20 px y acá van 4 más).
-        <div className="flex gap-3 lg:pt-1">
+        // `escritorio:pt-1`: en el computador, la misma separación de antes (el cuerpo deja 20 px y acá van 4 más).
+        <div className="flex gap-3 escritorio:pt-1">
           {/* En el celular se cierra con la X de arriba: el botón de guardar ocupa el ancho, a mano del pulgar. */}
-          <Boton type="button" variante="secundario" className="w-full max-lg:hidden" disabled={guardando} onClick={onCerrar}>
+          <Boton type="button" variante="secundario" className="w-full max-escritorio:hidden" disabled={guardando} onClick={onCerrar}>
             Cancelar
           </Boton>
           {hayAdvertencias ? (
@@ -307,7 +307,7 @@ export function ModalNuevaCita({
             <Boton type="submit" form={idDelFormulario} className="w-full" cargando={guardando}>
               <span>
                 {frases.guardarCita}
-                {resumenDelBoton && <span className="lg:hidden"> · {resumenDelBoton}</span>}
+                {resumenDelBoton && <span className="escritorio:hidden"> · {resumenDelBoton}</span>}
               </span>
             </Boton>
           )}
@@ -411,7 +411,7 @@ export function ModalNuevaCita({
                 tope={MAX_SERVICIOS_POR_RESERVA}
               />
             )}
-            <div className={cn("max-h-72 overflow-y-auto p-0.5", filasEnElCelular && "max-lg:hidden")}>
+            <div className={cn("max-h-72 overflow-y-auto p-0.5", filasEnElCelular && "max-escritorio:hidden")}>
               <SelectorServicio
                 servicios={serviciosOfrecidos}
                 seleccionados={elegidos}
@@ -601,7 +601,7 @@ function FilasDeServicios({
 }) {
   const lleno = elegidos.length >= tope
   return (
-    <ul className="space-y-1.5 lg:hidden">
+    <ul className="space-y-1.5 escritorio:hidden">
       {servicios.map((servicio) => {
         const posicion = elegidos.findIndex((elegido) => elegido.id === servicio.id)
         const elegido = posicion >= 0

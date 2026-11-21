@@ -9,12 +9,12 @@ import { cn } from "@/lib/utils"
 /**
  * # El horario semanal en el celular
  *
- * Por debajo de `lg` cada día del horario es una fila compacta: el día, sus
+ * Por debajo de `escritorio` (768 px) cada día del horario es una fila compacta: el día, sus
  * horas en un botón («09:00 – 18:00») y el interruptor. Tocar las horas abre
  * una hoja (`HojaDeHorasDelDia`) con las listas de hora y minutos en grande.
- * Desde `lg` el horario se ve como siempre (`FilaDeDia` y `RangoDeHoras`):
- * quien lo usa dibuja las dos versiones y oculta una con `lg:hidden` /
- * `max-lg:hidden`. Lo usan «Horario» y el editor de la semana de cada sede.
+ * Desde `escritorio` el horario se ve como siempre (`FilaDeDia` y `RangoDeHoras`):
+ * quien lo usa dibuja las dos versiones y oculta una con `escritorio:hidden` /
+ * `max-escritorio:hidden`. Lo usan «Horario» y el editor de la semana de cada sede.
  */
 
 interface PropsDeFilaDeDiaCompacta {
@@ -149,7 +149,7 @@ export const LISTAS_GRANDES = "[&_select]:min-h-14 [&_select]:text-lg"
 /**
  * «Guardar» fijo abajo en el celular mientras hay cambios sin guardar, encima
  * de la barra inferior (64 px más el área segura). Se va con la sección: si su
- * grupo está plegado, tampoco se ve. Desde `lg` no existe.
+ * grupo está plegado, tampoco se ve. Desde `escritorio` no existe.
  */
 export function BarraParaGuardarEnElCelular({
   visible,
@@ -166,7 +166,7 @@ export function BarraParaGuardarEnElCelular({
 }) {
   if (!visible) return null
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-borde bg-crema/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-borde bg-crema/95 px-4 py-3 backdrop-blur-sm escritorio:hidden">
       <BotonPrimario
         type="button"
         anchoCompleto

@@ -120,7 +120,7 @@ export function ModalServicio({
       alCerrar={onCerrar}
       // En el teléfono, uno debajo del otro: lado a lado no entraban con "Guardar cambios".
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
             Cancelar
           </BotonPrimario>

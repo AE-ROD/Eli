@@ -64,7 +64,7 @@ function PieDelModal({
   alCerrar: () => void
 }) {
   return (
-    <div className="flex gap-3 lg:pt-1">
+    <div className="flex gap-3 escritorio:pt-1">
       <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
         Cancelar
       </Boton>
@@ -846,7 +846,7 @@ export function ModalAgendar({ pacienteId, prestacion, nombre, zona, hoy, alTerm
       alCerrar={alCerrar}
       pie={
         citas !== null && citas.length === 0 ? (
-          <div className="flex gap-3 lg:pt-1">
+          <div className="flex gap-3 escritorio:pt-1">
             <Boton type="button" variante="secundario" className="w-full" onClick={alCerrar}>
               Cerrar
             </Boton>

@@ -68,13 +68,13 @@ function Renglon({
   tono?: "error"
 }) {
   return (
-    <div className={cn("flex items-baseline justify-between gap-4 py-2", grande && "max-lg:min-h-12 max-lg:items-center max-lg:py-2.5")}>
-      <dt className={cn("text-texto-2", grande && "max-lg:text-[15px]")}>{termino}</dt>
+    <div className={cn("flex items-baseline justify-between gap-4 py-2", grande && "max-escritorio:min-h-12 max-escritorio:items-center max-escritorio:py-2.5")}>
+      <dt className={cn("text-texto-2", grande && "max-escritorio:text-[15px]")}>{termino}</dt>
       <dd
         className={cn(
           "text-right tabular-nums",
           fuerte ? "font-semibold" : "font-medium",
-          grande && "max-lg:text-lg",
+          grande && "max-escritorio:text-lg",
           tono === "error" && "text-error"
         )}
       >
@@ -439,7 +439,7 @@ function CampoDeMonto(props: {
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-ayuda${error ? ` ${id}-error` : ""}`}
         // En el celular, el monto en 18 px y 48 de alto: se lee al contar la plata, y con 16 px o más el iPhone no acerca la vista al tocarlo.
-        className={cn(CAMPO, "mt-2 tabular-nums max-lg:min-h-12 max-lg:text-lg max-lg:font-semibold", error && CAMPO_CON_ERROR)}
+        className={cn(CAMPO, "mt-2 tabular-nums max-escritorio:min-h-12 max-escritorio:text-lg max-escritorio:font-semibold", error && CAMPO_CON_ERROR)}
       />
       <p id={`${id}-ayuda`} className="mt-1 text-xs text-texto-2">
         {ayuda}

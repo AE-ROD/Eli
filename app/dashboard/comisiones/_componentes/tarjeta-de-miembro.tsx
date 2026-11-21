@@ -124,7 +124,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         </Aviso>
       )}
 
-      <form onSubmit={guardar} className="mt-4 flex flex-wrap items-end gap-3 lg:mt-5" noValidate>
+      <form onSubmit={guardar} className="mt-4 flex flex-wrap items-end gap-3 escritorio:mt-5" noValidate>
         <div className="min-w-0">
           <label htmlFor={idDelCampo} className={CLASES_DE_ETIQUETA}>
             % por defecto
@@ -163,7 +163,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
         {frases.seAplicaATodos}
       </p>
 
-      <h3 className="mt-5 text-sm font-semibold lg:mt-6">{frases.excepcionesPor}</h3>
+      <h3 className="mt-5 text-sm font-semibold escritorio:mt-6">{frases.excepcionesPor}</h3>
       {miembro.excepciones.length === 0 ? (
         <p className="mt-2 text-sm text-texto-2">{frases.sinExcepciones}</p>
       ) : (
@@ -191,7 +191,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
       {serviciosLibres.length > 0 && (
         // En el celular, el servicio a lo ancho y debajo el % con "Agregar".
         <form onSubmit={agregarExcepcion} className="mt-4 flex flex-wrap items-end gap-3" noValidate>
-          <div className="min-w-0 flex-1 basis-48 max-lg:basis-full">
+          <div className="min-w-0 flex-1 basis-48 max-escritorio:basis-full">
             <label htmlFor={idDelServicio} className={CLASES_DE_ETIQUETA}>
               {frases.etiquetaDelServicio}
             </label>
@@ -212,7 +212,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
               ))}
             </select>
           </div>
-          <div className="min-w-0 max-lg:flex-1">
+          <div className="min-w-0 max-escritorio:flex-1">
             <label htmlFor={idDeLaExcepcion} className={CLASES_DE_ETIQUETA}>
               %
             </label>
@@ -226,7 +226,7 @@ export function TarjetaDeMiembro({ miembro, servicios, onCambio }: PropsDeTarjet
                 setErrorDeExcepcion("")
               }}
               aria-invalid={errorDeExcepcion ? true : undefined}
-              className={cn(CAMPO, "mt-2 lg:w-24", errorDeExcepcion && CAMPO_CON_ERROR)}
+              className={cn(CAMPO, "mt-2 escritorio:w-24", errorDeExcepcion && CAMPO_CON_ERROR)}
             />
           </div>
           <Boton type="submit" tamano="sm" variante="secundario" icono={<Plus aria-hidden="true" />} cargando={agregando}>

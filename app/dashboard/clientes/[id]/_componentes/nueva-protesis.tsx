@@ -162,8 +162,8 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
     : `${tratante?.nombre ?? nombreDeQuienMira} (tú)`
 
   return (
-    <form onSubmit={crear} noValidate aria-label="Nueva prótesis" className="flex flex-wrap items-start gap-4 lg:gap-6">
-      <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-4 lg:gap-6">
+    <form onSubmit={crear} noValidate aria-label="Nueva prótesis" className="flex flex-wrap items-start gap-4 escritorio:gap-6">
+      <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-4 escritorio:gap-6">
         <section aria-labelledby={`${id}-titulo`} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
@@ -353,7 +353,7 @@ export function NuevaProtesis({ pacienteId, opciones, odontograma, esLaDuena, no
         </section>
       </div>
 
-      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-4 lg:gap-6">
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-4 escritorio:gap-6">
         <section aria-labelledby={`${id}-material`} className={cn(TARJETA_DEL_PANEL, "p-5")}>
           <h3 id={`${id}-material`} className={TITULO_DE_TARJETA}>
             Material

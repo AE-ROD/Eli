@@ -248,8 +248,9 @@ menú.
 
   Por eso esas secciones no llevan `scroll-mt-*`. El panel no usa nada de
   esto: tiene su propia barra fija y sus propios márgenes.
-- Breakpoints de Tailwind: `md` 768, `lg` 1024, `xl` 1280. Todo tiene que
-  funcionar de 360px a 1440px o más sin scroll horizontal.
+- Breakpoints de Tailwind: `md` 768, `lg` 1024, `xl` 1280. El panel suma
+  `escritorio` (768, ver "En el celular"). Todo tiene que funcionar de 360px
+  a 1440px o más sin scroll horizontal.
 
 ### Foco
 
@@ -335,8 +336,8 @@ pantallas vive en `components/panel/`:
 | `secciones-del-panel.ts` | Las secciones del panel (inicio, los cinco módulos de `lib/modulos.ts`, configuración y ayuda), con nombre, ruta y módulo, y `seccionDeLaRuta(ruta)`, que dice de qué sección es una página. De acá salen los enlaces de la barra lateral, el antetítulo de cada página y el halo del foco: una sección nueva se agrega acá. `seccionConNombreDelRubro` y `seccionesConNombreDelRubro` le dan a cada sección el nombre de su rubro (en una clínica dental, Clientes es "Pacientes" y Tablero, "Sala de espera") sin tocar su id, su ruta, su color ni su ícono; en cualquier otro rubro la devuelven igual |
 | `contexto-rubro.tsx` | `ProveedorDeRubro` y `useRubroDelPanel()`: el rubro del negocio para las piezas de cliente del panel. Lo pone el layout del panel con el rubro del actor del servidor, así la primera pintura ya dice "Pacientes" (con la sesión del navegador, que llega después, el antetítulo decía "Clientes" un instante); sin proveedor, el de la sesión. Las palabras salen de `vocabularioDe(useRubroDelPanel())` (`lib/vocabulario.ts`); qué se muestra lo sigue decidiendo `lib/permisos.ts` |
 | `icono-de-seccion.tsx` | `CuadroDeSeccion`: el ícono de una sección en su cuadro. El de un módulo es `IconoDeModulo`, en su pastel fuerte; el de las demás, gris. De 32px en la barra lateral y de 20px en el antetítulo |
-| `barra-lateral.tsx`, `contexto-barra-lateral.tsx` | La isla de la izquierda desde lg (240px, 76 colapsada, con la sección actual en la píldora de su pastel y `aria-current`) y, por debajo, el cajón del teléfono con su manejo del foco |
-| `barra-superior.tsx` | `BarraSuperior`: el encabezado de cada página (antetítulo con la sección de la ruta, título en serif, subtítulo y acción principal) y, por debajo de lg, la fila fija con el botón del menú. La búsqueda y la campana de notificaciones no se muestran hasta que existan (`mostrarBusqueda` ya no hace nada) |
+| `barra-lateral.tsx`, `contexto-barra-lateral.tsx` | La isla de la izquierda desde `escritorio` (240px, 76 colapsada y siempre colapsada entre 768 y 1023, con la sección actual en la píldora de su pastel y `aria-current`) y, por debajo, el cajón del teléfono con su manejo del foco |
+| `barra-superior.tsx` | `BarraSuperior`: el encabezado de cada página (antetítulo con la sección de la ruta, título en serif, subtítulo y acción principal) y, por debajo de `escritorio`, la fila fija con el botón del menú. La búsqueda y la campana de notificaciones no se muestran hasta que existan (`mostrarBusqueda` ya no hace nada) |
 | `contenido-del-panel.tsx` | El `<main>` de cada vista: deja el lugar de la barra y pone el `halo-<módulo>` de la ruta, así cada página y sus modales enfocan con su pastel sin hacer nada |
 | `marco-de-modal.tsx` | `MarcoDeModal`: velo navy, tarjeta blanca de radio 32, título en serif y la X. Se anuncia como diálogo, atrapa el foco, se cierra con Escape y devuelve el foco a lo que lo abrió, también si adentro un campo lleva `autoFocus`. Con dos abiertos (una confirmación encima de otro diálogo), sólo el de arriba atiende Escape, Tab y el foco (`pila-de-dialogos.ts`); si lo que lo abrió estaba en un diálogo que ya se fue (uno reemplazó a otro), al cerrar el foco va adonde iría aquél. Además de `titulo` y `alCerrar`: `descripcion`, `bloqueado` (mientras guarda no se cierra), `antetitulo` (el módulo o el paso) y `ancho` (`md` 448px por defecto, `lg` 672, `xl` 896) |
 | `aviso.tsx` | `Aviso`: un mensaje que no es de un campo, con ícono y fondo según el tono: `error` (por defecto, rojo, se anuncia con `role="alert"`), `info` (gris), `atencion` (naranja suave: lo que se ve está incompleto) y `listo` (lima suave: algo salió bien). Fuera del error no se anuncia salvo que se pida `rol="status"` o `rol="alert"`. `titulo` pone una primera línea en negrita, y `accion`, un botón como "Reintentar" a la derecha o debajo |
@@ -373,12 +374,13 @@ lo que sigue:
   color (en la cita y en Pacientes, un `Aviso` de tono `atencion`; en la
   ficha, la primera tarjeta del resumen). La excepción es el odontograma
   (abajo).
-- **La tarjeta del paciente es un enlace por debajo de lg.**
+- **La tarjeta del paciente es un enlace en el celular.**
   En una clínica, la tarjeta de Pacientes
   (`app/dashboard/clientes/_componentes/tarjeta-cliente.tsx`) lleva a la
-  ficha clínica por debajo de lg, donde no está la ficha de al lado
-  (`lg:hidden`); desde lg sigue siendo el botón que abre la de al lado, que
-  tiene "Abrir ficha clínica" (`hidden lg:block`). Se dibujan las dos y el
+  ficha clínica por debajo de `escritorio` (`escritorio:hidden`); desde ahí
+  sigue siendo el botón que abre la ficha (al lado desde `lg`, en una ventana
+  centrada en la tablet), que tiene "Abrir ficha clínica"
+  (`max-escritorio:hidden`). Se dibujan las dos y el
   CSS muestra una: el HTML del servidor ya es el correcto, sin esperar a
   medir la ventana.
 
@@ -486,8 +488,24 @@ dice adónde va el foco.
 
 ### En el celular
 
-Por debajo de `lg` (1024 px, el mismo corte en que la barra lateral pasa a
-cajón) el panel se acomoda para el pulgar; desde `lg` se ve igual que siempre.
+Por debajo de 768 px el panel se acomoda para el pulgar; desde 768 (la
+tablet, vertical u horizontal, y el computador) se ve como en el computador:
+barra lateral, ventanas centradas y las vistas de escritorio. El corte es un
+breakpoint propio del panel, `escritorio` (`--breakpoint-escritorio: 48rem`
+en `app/globals.css`, el mismo valor que `md`), y se escribe `escritorio:` y
+`max-escritorio:`; en el JS, `useEsEscritorio` y `CONSULTA_DE_ESCRITORIO`
+(`components/panel/ancho-de-escritorio.ts`) usan el mismo valor. Lo que
+sigue en `lg` (1024) es sólo de ancho, no de forma:
+
+- **La barra lateral entera** (240 px) desde `lg`; entre 768 y 1023 va
+  siempre contraída (76 px, sólo íconos y sin el botón de expandir:
+  `useCabeLaBarraEntera`).
+- **Lo que va al lado** desde `lg`: el detalle de la cita junto al
+  calendario y la ficha del cliente junto a la lista. En la tablet se abren
+  encima, como ventana centrada.
+- **Columnas de densidad**: las grillas de 2 o 3 columnas del inicio y los
+  reportes siguen en `lg`, para no apretarse en 768.
+
 La referencia completa está en el comentario de cabecera de
 `components/panel/barra-inferior.tsx`. En corto:
 
@@ -509,8 +527,8 @@ La referencia completa está en el comentario de cabecera de
   nombra con `form={id}`). Título de 20 px.
 - **Tamaños.** Letra de 14 a 16 px, filas de 44 a 56 px (`FILA_DE_LISTA`) y
   tarjetas con 16 px de relleno (`RELLENO_DE_TARJETA`, en vez de
-  `p-5 sm:p-6`). Lo que cambia en el celular se escribe con `max-lg:` o con el
-  valor base y su `lg:`, nunca tocando lo de `lg` y más.
+  `p-5 sm:p-6`). Lo que cambia en el celular se escribe con `max-escritorio:` o con
+  el valor base y su `escritorio:`, nunca tocando lo de 768 y más.
 
 ## Patrones de movimiento
 

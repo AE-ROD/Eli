@@ -124,7 +124,7 @@ interface PropsDeMarcoDeModal {
 /**
  * El marco de los modales del panel: un velo navy y una tarjeta blanca de
  * radio 32, con el título en la serif de los titulares y el botón de cerrar
- * arriba a la derecha. En el celular (por debajo de `lg`) es una hoja que sube
+ * arriba a la derecha. En el celular (por debajo de `escritorio`, 768 px) es una hoja que sube
  * desde abajo, con asa, hasta el 90 % del alto, el cuerpo que se desplaza y
  * los botones de `pie` fijos abajo (ver `barra-inferior.tsx`). Además, lo que un diálogo necesita para usarse con
  * teclado y lector de pantalla:
@@ -354,7 +354,7 @@ export function MarcoDeModal({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center escritorio:items-center escritorio:p-6"
       // En el celular, con el teclado abierto, la capa ocupa sólo lo que se ve:
       // la hoja se apoya encima del teclado y su pie (Guardar) no queda tapado.
       style={conTeclado ? { top: conTeclado.top, height: conTeclado.height, bottom: "auto" } : undefined}
@@ -392,19 +392,19 @@ export function MarcoDeModal({
           // alto se desplaza entero adentro, y lo que se sale de la tarjeta se
           // corta; el relleno deja lugar al anillo del foco de lo que va pegado
           // al borde, como un campo de ancho completo.
-          "lg:block lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto lg:rounded-panel lg:px-8 lg:pt-7 lg:pb-8 lg:squircle",
+          "escritorio:block escritorio:max-h-[calc(100dvh-3rem)] escritorio:overflow-y-auto escritorio:rounded-panel escritorio:px-8 escritorio:pt-7 escritorio:pb-8 escritorio:squircle",
           ANCHOS[ancho],
           // Por si el navegador no conoce `inert`: los clics pasan al velo.
           !presente && "pointer-events-none"
         )}
       >
-        <div onPointerDown={empezarArrastre} className="shrink-0 touch-none px-4 pt-2 lg:touch-auto lg:p-0">
+        <div onPointerDown={empezarArrastre} className="shrink-0 touch-none px-4 pt-2 escritorio:touch-auto escritorio:p-0">
           {/* El asa: dice que la hoja se puede bajar. Decorativa; para cerrar está la X. */}
-          <div aria-hidden="true" className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-borde lg:hidden" />
-          <div className="mb-4 flex items-start justify-between gap-3 lg:mb-6">
+          <div aria-hidden="true" className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-borde escritorio:hidden" />
+          <div className="mb-4 flex items-start justify-between gap-3 escritorio:mb-6">
             <div className="min-w-0 pt-1">
               {antetitulo && <Antetitulo className="mb-2">{antetitulo}</Antetitulo>}
-              <h2 id={idDelTitulo} className="titulo-3 font-serif text-balance break-words max-lg:text-xl max-lg:leading-tight">
+              <h2 id={idDelTitulo} className="titulo-3 font-serif text-balance break-words max-escritorio:text-xl max-escritorio:leading-tight">
                 {titulo}
               </h2>
               {descripcion && (
@@ -420,7 +420,7 @@ export function MarcoDeModal({
               disabled={bloqueado}
               aria-label="Cerrar"
               className={cn(
-                "-mr-2 -mt-1 grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle transition-colors duration-150 ease-suave hover:bg-superficie disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent lg:-mr-3",
+                "-mr-2 -mt-1 grid size-11 shrink-0 place-items-center rounded-[14px] text-navy squircle transition-colors duration-150 ease-suave hover:bg-superficie disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent escritorio:-mr-3",
                 ANILLO_DE_FOCO
               )}
             >
@@ -435,16 +435,16 @@ export function MarcoDeModal({
         */}
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 empty:hidden lg:overflow-visible lg:p-0",
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1 empty:hidden escritorio:overflow-visible escritorio:p-0",
             pie ? "pb-4" : "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-            pie && "lg:mb-5"
+            pie && "escritorio:mb-5"
           )}
         >
           {children}
         </div>
         {/* Los botones: en el celular, fijos abajo a la altura del pulgar; en el computador, al final, como siempre. */}
         {pie && (
-          <div className="shrink-0 border-t border-borde px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:border-0 lg:p-0">
+          <div className="shrink-0 border-t border-borde px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] escritorio:border-0 escritorio:p-0">
             {pie}
           </div>
         )}

@@ -44,14 +44,14 @@ const BOTON_DE_LA_FILA =
  * un campo que no busca o una campana que no avisa prometen algo que no hay.
  * Vuelven cuando existan.
  *
- * Por debajo de `lg` (el celular; ver `barra-inferior.tsx`) cambia la forma,
+ * Por debajo de `escritorio` (768 px, el celular; ver `barra-inferior.tsx`) cambia la forma,
  * no lo que la página le pasa:
  *
  * - el título va en una fila fija de 56 px arriba, junto al botón de menú y
  *   al avatar. Fija y no con el resto del encabezado: el foco vuelve a ese
  *   botón cuando el cajón se cierra, y si hubiera quedado arriba, fuera de la
  *   vista, la página saltaba al principio. El `<h1>` es ése; el del
- *   encabezado grande no se dibuja (`max-lg:hidden`), así hay uno solo;
+ *   encabezado grande no se dibuja (`max-escritorio:hidden`), así hay uno solo;
  * - no hay antetítulo (la sección ya está marcada en la barra inferior) y el
  *   subtítulo es una línea chica;
  * - la acción principal es un botón flotante abajo a la derecha, encima de la
@@ -76,20 +76,20 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal }: PropsDeBar
       */}
       <FilaDelTelefono titulo={titulo} />
 
-      <header className="px-4 pt-3 sm:px-6 lg:pt-8">
+      <header className="px-4 pt-3 sm:px-6 escritorio:pt-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-x-6">
           <div className="min-w-0">
             {seccion && (
-              <Antetitulo className="flex items-center gap-2 max-lg:hidden">
+              <Antetitulo className="flex items-center gap-2 max-escritorio:hidden">
                 <CuadroDeSeccion seccion={seccion} tamano="xs" fondoSinModulo="bg-borde" />
                 {seccion.nombre}
               </Antetitulo>
             )}
-            <h1 className={cn("titulo-seccion text-balance break-words text-navy max-lg:hidden", seccion && "mt-2.5")}>
+            <h1 className={cn("titulo-seccion text-balance break-words text-navy max-escritorio:hidden", seccion && "mt-2.5")}>
               {titulo}
             </h1>
             {subtitulo && (
-              <p className="text-[13px] leading-snug text-pretty text-texto-2 lg:mt-2 lg:text-base lg:leading-normal">
+              <p className="text-[13px] leading-snug text-pretty text-texto-2 escritorio:mt-2 escritorio:text-base escritorio:leading-normal">
                 {subtitulo}
               </p>
             )}
@@ -98,7 +98,7 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal }: PropsDeBar
           {/* Sin acción no queda un hueco a la derecha. */}
           {accionPrincipal && (
             <>
-              <div className="flex items-center gap-3 max-lg:hidden">
+              <div className="flex items-center gap-3 max-escritorio:hidden">
                 <Boton onClick={accionPrincipal.onClick} icono={<IconoDeLaAccion aria-hidden="true" />}>
                   {accionPrincipal.texto}
                 </Boton>
@@ -109,7 +109,7 @@ export function BarraSuperior({ titulo, subtitulo, accionPrincipal }: PropsDeBar
                 icono={<IconoDeLaAccion aria-hidden="true" />}
                 tamano="lg"
                 className={cn(
-                  "fixed z-30 max-w-[calc(100vw-2rem)] shadow-[0_8px_18px_rgb(7_26_49/0.25)] lg:hidden",
+                  "fixed z-30 max-w-[calc(100vw-2rem)] shadow-[0_8px_18px_rgb(7_26_49/0.25)] escritorio:hidden",
                   POSICION_DEL_BOTON_FLOTANTE
                 )}
               >
@@ -131,7 +131,7 @@ function FilaDelTelefono({ titulo }: { titulo: string }) {
   const nombreUsuario = sesion?.user?.name
 
   return (
-    <div className="sticky top-0 z-30 border-b border-borde bg-tarjeta pt-[env(safe-area-inset-top)] lg:hidden">
+    <div className="sticky top-0 z-30 border-b border-borde bg-tarjeta pt-[env(safe-area-inset-top)] escritorio:hidden">
       <div className="flex h-14 items-center gap-2 px-2">
         {/* Con el cajón abierto la superposición lo tapa: este botón sólo abre. */}
         <button

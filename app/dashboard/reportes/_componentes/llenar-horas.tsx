@@ -108,7 +108,7 @@ export function LlenarHoras() {
   const mostrar = reporte !== null && rango.ok && !error
 
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-4 escritorio:space-y-6">
       <div className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "flex flex-wrap items-end gap-4")}>
         <div className="w-full sm:w-56">
           <Selector
@@ -126,7 +126,7 @@ export function LlenarHoras() {
         </div>
         {periodo === "personalizado" && (
           <>
-            <div className="max-lg:min-w-0 max-lg:flex-1">
+            <div className="max-escritorio:min-w-0 max-escritorio:flex-1">
               <label htmlFor={idDelDesde} className={CLASES_DE_ETIQUETA}>
                 Desde
               </label>
@@ -138,7 +138,7 @@ export function LlenarHoras() {
                 className={cn(CAMPO, "mt-2")}
               />
             </div>
-            <div className="max-lg:min-w-0 max-lg:flex-1">
+            <div className="max-escritorio:min-w-0 max-escritorio:flex-1">
               <label htmlFor={idDelHasta} className={CLASES_DE_ETIQUETA}>
                 Hasta
               </label>
@@ -170,7 +170,7 @@ export function LlenarHoras() {
       )}
 
       {!reporte && cargando && (
-        <div role="status" className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4">
+        <div role="status" className="grid grid-cols-2 gap-3 escritorio:gap-4 xl:grid-cols-4">
           <span className="sr-only">Cargando el reporte…</span>
           {[0, 1, 2, 3].map((cifra) => (
             <div key={cifra} aria-hidden="true" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4")}>
@@ -182,7 +182,7 @@ export function LlenarHoras() {
       )}
 
       {mostrar && (
-        <div aria-busy={cargando} className={cn("space-y-4 lg:space-y-6 transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
+        <div aria-busy={cargando} className={cn("space-y-4 escritorio:space-y-6 transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
           {reporte.truncado && (
             <Aviso tono="atencion" rol="status">
               {frases.demasiadas}
@@ -195,7 +195,7 @@ export function LlenarHoras() {
           </p>
 
           {/* En el celular, de a dos: las que traen su lectura van a lo ancho. */}
-          <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 escritorio:gap-4 xl:grid-cols-4">
             <CifraConComparacion
               titulo="Ocupación del equipo"
               valor={formatearTasa(reporte.ocupacion.total.ocupacion)}
@@ -203,7 +203,7 @@ export function LlenarHoras() {
               comparacion={textoDeComparacion(reporte.comparacion.ocupacion, "tasa")}
               lectura={frases.lecturaDeOcupacion(reporte.ocupacion.total.ocupacion)}
               principal
-              className="max-lg:col-span-2"
+              className="max-escritorio:col-span-2"
             />
             <CifraConComparacion
               titulo={frases.clientesNuevos}
@@ -223,7 +223,7 @@ export function LlenarHoras() {
               icono={UserX}
               comparacion={textoDeComparacion(reporte.comparacion.inasistencia, "tasa")}
               lectura={frases.lecturaDeInasistencia(reporte.inasistencia.total.tasa)}
-              className="max-lg:col-span-2"
+              className="max-escritorio:col-span-2"
             />
           </div>
 
@@ -299,7 +299,7 @@ function CifraConComparacion({
   return (
     <div className={cn("flex flex-col", className)}>
       <Cifra {...props} className="flex-1 rounded-b-none" />
-      <p className={cn(TARJETA_DEL_PANEL, "-mt-px rounded-t-none border-t border-borde px-4 py-2.5 text-xs text-texto-2 lg:px-6")}>
+      <p className={cn(TARJETA_DEL_PANEL, "-mt-px rounded-t-none border-t border-borde px-4 py-2.5 text-xs text-texto-2 escritorio:px-6")}>
         {comparacion}
       </p>
     </div>

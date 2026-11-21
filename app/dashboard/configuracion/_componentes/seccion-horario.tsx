@@ -146,7 +146,7 @@ export function SeccionHorario({
             variante={guardado && !pendiente ? "secundario" : "primario"}
             // Sin nada guardado, el botón se destaca: es lo único que falta para que se reserve.
             // En el celular, con cambios sin guardar, el que se ve es el fijo de abajo.
-            className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2", pendiente && "max-lg:hidden")}
+            className={cn(nuncaGuardado && "ring-2 ring-naranja ring-offset-2", pendiente && "max-escritorio:hidden")}
           >
             {nuncaGuardado ? "Guardar horario" : guardado && !pendiente ? "Guardado" : "Guardar"}
           </BotonPrimario>
@@ -189,7 +189,7 @@ export function SeccionHorario({
         En el celular, cada día en una fila compacta: el día, sus horas en un
         botón que abre la hoja y el interruptor (`horario-en-el-celular.tsx`).
       */}
-      <ul className="mt-3 divide-y divide-borde lg:hidden">
+      <ul className="mt-3 divide-y divide-borde escritorio:hidden">
         {horarios.map((horario) => {
           const dia = DIAS[horario.dayOfWeek]
           return (
@@ -210,16 +210,18 @@ export function SeccionHorario({
       </ul>
 
       {/*
-        Desde lg, cada día en una fila: el interruptor con su nombre y las
-        horas al lado.
+        Desde `escritorio` (768 px), cada día en una fila: el interruptor con
+        su nombre y las horas al lado.
       */}
-      <ul className="mt-5 divide-y divide-borde max-lg:hidden">
+      <ul className="mt-5 divide-y divide-borde max-escritorio:hidden">
         {horarios.map((horario) => {
           const dia = DIAS[horario.dayOfWeek]
           return (
             <FilaDeDia key={horario.dayOfWeek} etiqueta={dia} activo={horario.active} alAlternar={() => alternarDia(horario.dayOfWeek)}>
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                {/* Del ancho de sus horas: si el "Copiar" no entra al lado (la tablet), baja a otra línea en vez de taparlas. */}
                 <RangoDeHoras
+                  className="sm:flex-none"
                   etiqueta={dia}
                   desde={horario.startTime}
                   hasta={horario.endTime}

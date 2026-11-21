@@ -113,7 +113,7 @@ export function ModalInvitar({ abierto, onCerrar, onInvitado }: PropsDeModalInvi
           // Los botones van en el pie: en el celular quedan fijos abajo de la hoja.
           pie={
             exito ? (
-              <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario" className="lg:mt-1">
+              <BotonPrimario onClick={cerrar} anchoCompleto variante="secundario" className="escritorio:mt-1">
                 Cerrar
               </BotonPrimario>
             ) : (

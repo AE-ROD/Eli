@@ -63,15 +63,15 @@ export function SeccionColapsable({
           onClick={onAlternar}
           className={cn(
             TARJETA_DEL_PANEL,
-            "flex min-h-14 w-full items-center justify-between gap-3 px-4 py-2.5 text-left anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie/60 lg:min-h-16 lg:gap-4 lg:px-6 lg:py-3"
+            "flex min-h-14 w-full items-center justify-between gap-3 px-4 py-2.5 text-left anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie/60 escritorio:min-h-16 escritorio:gap-4 escritorio:px-6 escritorio:py-3"
           )}
         >
           <span className="min-w-0">
-            <span id={idDelTitulo} className="block text-base font-medium text-pretty text-navy lg:text-lg">
+            <span id={idDelTitulo} className="block text-base font-medium text-pretty text-navy escritorio:text-lg">
               {titulo}
             </span>
             {descripcion && (
-              <span id={idDeLaDescripcion} className="mt-0.5 block text-[13px] text-pretty text-texto-2 lg:text-sm">
+              <span id={idDeLaDescripcion} className="mt-0.5 block text-[13px] text-pretty text-texto-2 escritorio:text-sm">
                 {descripcion}
               </span>
             )}
@@ -87,7 +87,7 @@ export function SeccionColapsable({
         </button>
       </Titulo>
       {/* Siempre en el DOM, para que `aria-controls` apunte a algo y no se desmonte lo de adentro; plegada, `hidden`. */}
-      <div id={idDelContenido} role="region" aria-labelledby={idDelTitulo} hidden={!abierta} className="pt-3 pb-2 lg:pt-4">
+      <div id={idDelContenido} role="region" aria-labelledby={idDelTitulo} hidden={!abierta} className="pt-3 pb-2 escritorio:pt-4">
         <div className={className}>{children}</div>
       </div>
     </div>

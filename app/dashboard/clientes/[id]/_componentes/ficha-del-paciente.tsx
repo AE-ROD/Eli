@@ -153,9 +153,9 @@ export function FichaDelPaciente({
         mostrarBusqueda={false}
       />
 
-      <div className="space-y-4 px-4 pt-3 pb-10 sm:px-6 lg:space-y-5 lg:pt-4">
+      <div className="space-y-4 px-4 pt-3 pb-10 sm:px-6 escritorio:space-y-5 escritorio:pt-4">
         {/* En el celular: volver, el paciente y las acciones rápidas (llamar, WhatsApp, agendar) en una fila de íconos de 44 px. */}
-        <div className="-mx-1 flex items-center gap-1.5 lg:hidden">
+        <div className="-mx-1 flex items-center gap-1.5 escritorio:hidden">
           <Link href="/dashboard/clientes" aria-label={`Volver a ${cliente.plural}`} className={BOTON_DE_ICONO}>
             <ArrowLeft className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </Link>
@@ -190,7 +190,7 @@ export function FichaDelPaciente({
 
         <Link
           href="/dashboard/clientes"
-          className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline max-lg:hidden"
+          className="inline-flex min-h-11 items-center gap-2 rounded-[12px] text-sm font-medium text-navy underline-offset-4 anillo-foco hover:underline max-escritorio:hidden"
         >
           <ArrowLeft className="size-4" aria-hidden="true" strokeWidth={1.75} />
           {conMayuscula(cliente.plural)}

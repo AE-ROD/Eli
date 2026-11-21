@@ -169,10 +169,10 @@ export function ModalBienvenida({ nombreNegocio, slug, marcarAlCopiar = false }:
               El principal es hacer el paso; "Siguiente" (o "Después", en el
               último) lo deja para más tarde. En el teléfono, fijos al pie de la
               hoja: el principal arriba y de ancho completo, y "Atrás" y
-              "Siguiente" de a dos debajo. `lg:pt-3`: en el computador, los 32
+              "Siguiente" de a dos debajo. `escritorio:pt-3`: en el computador, los 32
               px de antes entre el paso y los botones.
             */
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 lg:pt-3">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 escritorio:pt-3">
               {paso > 0 ? (
                 <Boton variante="fantasma" onClick={() => irAlPaso(paso - 1)} className="w-full sm:mr-auto sm:w-auto">
                   Atrás

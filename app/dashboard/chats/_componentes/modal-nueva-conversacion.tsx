@@ -39,7 +39,7 @@ export function ModalNuevaConversacion({
       bloqueado={guardando}
       alCerrar={onCerrar}
       pie={
-        <div className="flex gap-3 lg:pt-1">
+        <div className="flex gap-3 escritorio:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
             Cancelar
           </BotonPrimario>

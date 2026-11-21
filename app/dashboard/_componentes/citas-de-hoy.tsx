@@ -44,20 +44,20 @@ export function CitasDeHoy({ citas, zona, className }: PropsDeCitasDeHoy) {
         }
       />
 
-      <div className="mt-4 lg:mt-5">
+      <div className="mt-4 escritorio:mt-5">
         {!citas ? (
           <ListaCargando texto={frases.cargando} />
         ) : citas.length > 0 ? (
           <>
             {/* En el celular, filas compactas con un divisor; en el computador, las tarjetas de siempre. */}
-            <ul className="-mx-3 divide-y divide-superficie lg:hidden">
+            <ul className="-mx-3 divide-y divide-superficie escritorio:hidden">
               {citas.map((cita) => (
                 <li key={cita.id}>
                   <FilaDeCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} />
                 </li>
               ))}
             </ul>
-            <ul className="space-y-2 max-lg:hidden">
+            <ul className="space-y-2 max-escritorio:hidden">
               {citas.map((cita) => (
                 <li key={cita.id}>
                   <TarjetaCita cita={citaParaTarjeta(cita, palabras.cliente.singular, zona)} compacta />

@@ -35,11 +35,12 @@ interface PropsDeTarjetaCliente {
   /** Si es el que está abierto en la ficha de al lado. La ficha se ve desde `lg`, y la marca también. */
   seleccionado?: boolean
   /**
-   * Clínica dental: la ficha clínica del paciente. Por debajo de `lg` la
+   * Clínica dental: la ficha clínica del paciente. Por debajo de `escritorio` la
    * tarjeta es un enlace a la ficha clínica, y un botón aparte, en la
    * esquina, abre la ficha del paciente en una hoja (contacto, editar,
-   * eliminar y notas, que la ficha clínica no tiene). Desde `lg` la tarjeta
-   * sigue siendo el botón que abre la de al lado (que tiene "Abrir ficha
+   * eliminar y notas, que la ficha clínica no tiene). Desde `escritorio` la
+   * tarjeta sigue siendo el botón que abre la ficha (al lado desde `lg`, en
+   * una ventana en la tablet) (que tiene "Abrir ficha
    * clínica").
    */
   rutaDeLaFicha?: string
@@ -114,16 +115,16 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
     "@container block h-full w-full rounded-[24px] bg-tarjeta p-4 text-left text-navy shadow-sm squircle anillo-foco",
     "cursor-pointer transition-[box-shadow,background-color] duration-200 ease-suave hover:shadow-md",
     // La abierta, con el lila de Clientes. Sólo marca: el nombre está en la ficha.
-    seleccionado && "lg:bg-lila-suave/50 lg:inset-ring-2 lg:inset-ring-lila",
+    seleccionado && "escritorio:bg-lila-suave/50 escritorio:inset-ring-2 escritorio:inset-ring-lila",
     // En el celular, una fila compacta de la lista (que es una sola tarjeta con divisiones): sin sombra ni radio propios.
-    "max-lg:flex max-lg:min-h-16 max-lg:items-center max-lg:gap-3 max-lg:rounded-none max-lg:bg-transparent max-lg:px-3.5 max-lg:py-2 max-lg:shadow-none max-lg:hover:shadow-none"
+    "max-escritorio:flex max-escritorio:min-h-16 max-escritorio:items-center max-escritorio:gap-3 max-escritorio:rounded-none max-escritorio:bg-transparent max-escritorio:px-3.5 max-escritorio:py-2 max-escritorio:shadow-none max-escritorio:hover:shadow-none"
   )
 
   if (rutaDeLaFicha) {
     return (
       // El botón de los datos va al lado del enlace y no adentro: un botón dentro de un enlace no se puede usar.
       <div className="relative h-full">
-        <Link href={rutaDeLaFicha} className={cn(clases, "pr-14 lg:hidden")}>
+        <Link href={rutaDeLaFicha} className={cn(clases, "pr-14 escritorio:hidden")}>
           <FilaDelCelular cliente={cliente} />
         </Link>
         <button
@@ -131,11 +132,11 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
           onClick={onClick}
           aria-label={`Datos y notas de ${cliente.nombre}`}
           title="Datos y notas"
-          className="absolute top-1/2 right-1.5 grid size-11 -translate-y-1/2 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie lg:hidden"
+          className="absolute top-1/2 right-1.5 grid size-11 -translate-y-1/2 place-items-center rounded-[14px] text-navy squircle anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie escritorio:hidden"
         >
           <Contact className="size-5" aria-hidden="true" strokeWidth={1.75} />
         </button>
-        <button type="button" onClick={onClick} className={cn(clases, "max-lg:hidden")}>
+        <button type="button" onClick={onClick} className={cn(clases, "max-escritorio:hidden")}>
           <ContenidoDeLaTarjeta cliente={cliente} />
         </button>
       </div>
@@ -145,8 +146,8 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
   return (
     <button type="button" onClick={onClick} className={clases}>
       <FilaDelCelular cliente={cliente} />
-      {/* Desde lg, la tarjeta de siempre. */}
-      <span className="block h-full max-lg:hidden">
+      {/* Desde `escritorio`, la tarjeta de siempre. */}
+      <span className="block h-full max-escritorio:hidden">
         <ContenidoDeLaTarjeta cliente={cliente} />
       </span>
     </button>
@@ -154,7 +155,7 @@ export function TarjetaCliente({ cliente, seleccionado = false, rutaDeLaFicha, o
 }
 
 /**
- * El cliente en el celular (por debajo de `lg`): una fila de 64 px con el
+ * El cliente en el celular (por debajo de `escritorio`): una fila de 64 px con el
  * avatar chico, el nombre y, en una línea, el teléfono y la última visita.
  * La flecha dice que se abre algo. Todo `span`, como la tarjeta.
  */
@@ -163,7 +164,7 @@ function FilaDelCelular({ cliente }: { cliente: ClienteEnTarjeta }) {
     .filter(Boolean)
     .join(" · ")
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-3 lg:hidden">
+    <span className="flex min-w-0 flex-1 items-center gap-3 escritorio:hidden">
       <AvatarUsuario nombre={cliente.nombre} imagenUrl={cliente.imagenUrl} tamaño="md" />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">

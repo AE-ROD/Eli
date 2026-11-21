@@ -23,7 +23,7 @@ interface PropsDeListaClientes {
   palabras?: PalabrasDelRubro
   /**
    * Clínica dental: la ruta de la ficha clínica de cada paciente. Por debajo
-   * de `lg` la tarjeta lleva a la ficha clínica, y su botón de la esquina abre
+   * de `escritorio` la tarjeta lleva a la ficha clínica, y su botón de la esquina abre
    * la ficha del paciente en una hoja (`onSeleccionar`).
    */
   rutaDeLaFicha?: (id: string) => string
@@ -44,12 +44,12 @@ const CUADRICULA = "grid grid-cols-1 gap-3 sm:gap-4 @xl:grid-cols-2 @4xl:grid-co
 const LISTA = "space-y-3"
 
 /**
- * En el celular (por debajo de `lg`) la cuadrícula y la lista son lo mismo:
+ * En el celular (por debajo de `escritorio`) la cuadrícula y la lista son lo mismo:
  * una sola tarjeta blanca con una fila de 64 px por cliente, separadas por
  * una línea (`block` deja sin efecto las columnas y el espacio de arriba).
  */
 const FILAS_DEL_CELULAR =
-  "max-lg:block max-lg:space-y-0 max-lg:divide-y max-lg:divide-borde max-lg:rounded-[24px] max-lg:bg-tarjeta max-lg:shadow-sm max-lg:squircle"
+  "max-escritorio:block max-escritorio:space-y-0 max-escritorio:divide-y max-escritorio:divide-borde max-escritorio:rounded-[24px] max-escritorio:bg-tarjeta max-escritorio:shadow-sm max-escritorio:squircle"
 
 function EsqueletoDeClientes({ vista, cargando }: { vista: "grid" | "lista"; cargando: string }) {
   return (
@@ -59,16 +59,16 @@ function EsqueletoDeClientes({ vista, cargando }: { vista: "grid" | "lista"; car
         {Array.from({ length: 6 }).map((_, i) => (
           <li
             key={i}
-            className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle max-lg:flex max-lg:min-h-16 max-lg:items-center max-lg:rounded-none max-lg:bg-transparent max-lg:px-3.5 max-lg:py-2 max-lg:shadow-none"
+            className="rounded-[24px] bg-tarjeta p-4 shadow-sm squircle max-escritorio:flex max-escritorio:min-h-16 max-escritorio:items-center max-escritorio:rounded-none max-escritorio:bg-transparent max-escritorio:px-3.5 max-escritorio:py-2 max-escritorio:shadow-none"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Esqueleto forma="circulo" className="max-lg:size-10" />
+              <Esqueleto forma="circulo" className="max-escritorio:size-10" />
               <div className="min-w-0 flex-1 space-y-2.5">
                 <Esqueleto className="h-3.5 w-2/3" />
                 <Esqueleto className="w-1/2" />
               </div>
             </div>
-            <Esqueleto className="mt-6 w-4/5 max-lg:hidden" />
+            <Esqueleto className="mt-6 w-4/5 max-escritorio:hidden" />
           </li>
         ))}
       </ul>

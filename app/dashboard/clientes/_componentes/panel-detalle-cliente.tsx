@@ -156,7 +156,8 @@ interface PropsDePanelDetalleCliente {
  * columnas del tablero, con un bloque blanco para los datos, otro para sus
  * últimas citas y otro para las notas. Desde `lg` queda fija al bajar por la
  * página y, si no entra en el alto, se desplaza adentro. Por debajo de `lg`
- * (`comoHoja`) es la misma ficha en una hoja que sube desde abajo, con velo:
+ * (`comoHoja`) es la misma ficha encima de la página, con velo (a pantalla
+ * completa en el celular, centrada en la tablet):
  * un diálogo que se cierra con Escape, con la X o tocando el velo, y del que
  * el foco no sale con Tab.
  *
@@ -483,8 +484,10 @@ function enfocables(nodo: HTMLElement): HTMLElement[] {
 }
 
 /**
- * La ficha por debajo de `lg`: a pantalla completa, con la cabecera compacta
- * pegada arriba (volver, el nombre y las acciones rápidas). Es un diálogo:
+ * La ficha por debajo de `lg`: en el celular a pantalla completa y, en la
+ * tablet (desde `escritorio`, 768 px), una ventana centrada como los modales
+ * del panel; con la cabecera compacta pegada arriba (volver, el nombre y las
+ * acciones rápidas). Es un diálogo:
  * al abrirse el foco entra, Tab da la vuelta adentro, Escape y el velo la
  * cierran, y al cerrarse el foco vuelve a la tarjeta que la abrió. Va por
  * debajo de los modales del panel (z-40 contra z-50): editar o eliminar se
@@ -569,7 +572,7 @@ function HojaDeLaFicha({
 
   return (
     <motion.div
-      className="fixed inset-0 z-40 flex"
+      className="fixed inset-0 z-40 flex escritorio:items-center escritorio:justify-center escritorio:p-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -583,7 +586,7 @@ function HojaDeLaFicha({
         aria-modal="true"
         aria-labelledby={idDelTitulo}
         tabIndex={-1}
-        className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto overscroll-contain bg-superficie px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-navy focus:outline-none sm:px-6"
+        className="relative flex h-dvh w-full flex-col gap-3 overflow-y-auto overscroll-contain bg-superficie px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-navy focus:outline-none sm:px-6 escritorio:h-auto escritorio:max-h-full escritorio:max-w-xl escritorio:rounded-panel escritorio:pb-6 escritorio:shadow-md escritorio:squircle"
       >
         {children}
       </div>

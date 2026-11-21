@@ -35,21 +35,21 @@ export function BarraDeSeleccion({ frases, marcados, visibles, alMarcarTodos, al
       aria-label={frases.seleccion.etiquetaDeLaBarra}
       // En el celular queda pegada encima de la barra inferior (64 px y el área segura): el conteo y
       // «Seleccionar todos» a lo ancho, y las tres acciones en una fila, con letra de 13 px para que entren.
-      className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 mt-5 grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 rounded-[20px] border border-borde bg-tarjeta p-3 shadow-md squircle lg:bottom-3 lg:flex lg:flex-wrap lg:gap-x-3 lg:gap-y-2"
+      className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 mt-5 grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 rounded-[20px] border border-borde bg-tarjeta p-3 shadow-md squircle escritorio:bottom-3 escritorio:flex escritorio:flex-wrap escritorio:gap-x-3 escritorio:gap-y-2"
     >
-      <p role="status" className="col-span-3 text-sm font-medium lg:min-w-40 lg:flex-1">
+      <p role="status" className="col-span-3 text-sm font-medium escritorio:min-w-40 escritorio:flex-1">
         {sinMarcar ? frases.seleccion.ninguno : frases.seleccion.seleccionados(marcados)}
       </p>
-      <BotonPrimario variante="fantasma" tamaño="sm" onClick={todosMarcados ? alQuitarSeleccion : alMarcarTodos} disabled={visibles === 0} className="max-lg:col-span-3 max-lg:w-full">
+      <BotonPrimario variante="fantasma" tamaño="sm" onClick={todosMarcados ? alQuitarSeleccion : alMarcarTodos} disabled={visibles === 0} className="max-escritorio:col-span-3 max-escritorio:w-full">
         {todosMarcados ? frases.seleccion.desmarcarTodos : frases.seleccion.marcarTodos}
       </BotonPrimario>
-      <BotonPrimario variante="secundario" tamaño="sm" onClick={alCambiarCategoria} disabled={sinMarcar} className="max-lg:w-full max-lg:px-2.5 max-lg:text-[13px]">
+      <BotonPrimario variante="secundario" tamaño="sm" onClick={alCambiarCategoria} disabled={sinMarcar} className="max-escritorio:w-full max-escritorio:px-2.5 max-escritorio:text-[13px]">
         {frases.seleccion.acciones.categoria}
       </BotonPrimario>
-      <BotonPrimario variante="secundario" tamaño="sm" onClick={alActivar} disabled={sinMarcar} className="max-lg:w-full max-lg:px-2.5 max-lg:text-[13px]">
+      <BotonPrimario variante="secundario" tamaño="sm" onClick={alActivar} disabled={sinMarcar} className="max-escritorio:w-full max-escritorio:px-2.5 max-escritorio:text-[13px]">
         {frases.seleccion.acciones.activar}
       </BotonPrimario>
-      <BotonPrimario variante="secundario" tamaño="sm" onClick={alDesactivar} disabled={sinMarcar} className="max-lg:w-full max-lg:px-2.5 max-lg:text-[13px]">
+      <BotonPrimario variante="secundario" tamaño="sm" onClick={alDesactivar} disabled={sinMarcar} className="max-escritorio:w-full max-escritorio:px-2.5 max-escritorio:text-[13px]">
         {frases.seleccion.acciones.desactivar}
       </BotonPrimario>
     </div>

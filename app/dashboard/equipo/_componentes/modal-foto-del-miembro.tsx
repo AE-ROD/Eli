@@ -39,7 +39,7 @@ export function ModalFotoDelMiembro({ miembro, alCerrar, alCambiar }: PropsDeMod
       descripcion={foto.descripcion(apareceEnLaPagina(miembro.role))}
       alCerrar={alCerrar}
       pie={
-        <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} className="lg:mt-1">
+        <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} className="escritorio:mt-1">
           Listo
         </BotonPrimario>
       }

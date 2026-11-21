@@ -202,7 +202,7 @@ export function RepartoDeProtesisConfig() {
   }
 
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-4 escritorio:space-y-6">
       {error && <Aviso>{error}</Aviso>}
       <p role="status" className="sr-only">
         {anuncio}
@@ -557,7 +557,7 @@ function ModalMaterial({ material, laboratorios, alGuardar, alCerrar }: PropsDeM
       ancho="lg"
       alCerrar={alCerrar}
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
             Cancelar
           </Boton>
@@ -745,7 +745,7 @@ function ModalExcepcion({ excepcion, materiales, odontologos, frases, alGuardar,
       ancho="lg"
       alCerrar={alCerrar}
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
             Cancelar
           </Boton>

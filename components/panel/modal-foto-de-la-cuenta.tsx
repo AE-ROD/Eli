@@ -36,8 +36,8 @@ export function ModalFotoDeLaCuenta({ nombre, fotoUrl: inicial, alCerrar, alCamb
       descripcion="Es la foto de tu cuenta: te acompaña donde trabajes y solo la ves tú, en el panel. No se publica en la página de reservas."
       alCerrar={alCerrar}
       pie={
-        // `lg:pt-1`: en el computador, los mismos 24 px de antes entre la foto y el botón.
-        <div className="lg:pt-1">
+        // `escritorio:pt-1`: en el computador, los mismos 24 px de antes entre la foto y el botón.
+        <div className="escritorio:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar}>
             Listo
           </BotonPrimario>

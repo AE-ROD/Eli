@@ -351,7 +351,7 @@ export default function PaginaClientes() {
         mostrarBusqueda={false}
       />
 
-      <div className="space-y-4 px-4 pt-4 pb-10 sm:space-y-6 sm:px-6 lg:pt-6">
+      <div className="space-y-4 px-4 pt-4 pb-10 sm:space-y-6 sm:px-6 escritorio:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
         {avisoListo && (
           <Aviso tono="listo" rol="status">

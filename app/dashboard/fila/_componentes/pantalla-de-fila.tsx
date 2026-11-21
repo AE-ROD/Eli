@@ -105,18 +105,18 @@ export function PantallaDeFila() {
       {/*
         En el celular: 16 px a los lados, el área segura del iPhone arriba y
         abajo (la pantalla tapa todo, también la barra inferior) y los dos
-        botones de 44 px. Desde lg, como siempre: el `max` da los mismos 16 y
+        botones de 44 px. Desde `escritorio`, como siempre: el `max` da los mismos 16 y
         32 px donde no hay área segura.
       */}
       <div className="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
         <Link
           href="/dashboard/tablero"
-          className={cn(clasesDeBoton({ variante: "fantasma", tamano: "sm" }), "max-lg:h-11 max-lg:after:inset-y-0")}
+          className={cn(clasesDeBoton({ variante: "fantasma", tamano: "sm" }), "max-escritorio:h-11 max-escritorio:after:inset-y-0")}
         >
           <ArrowLeft aria-hidden="true" className="size-4" strokeWidth={2} />
           {volverA}
         </Link>
-        <Boton variante="fantasma" tamano="sm" onClick={pantallaCompleta} className="max-lg:h-11 max-lg:after:inset-y-0">
+        <Boton variante="fantasma" tamano="sm" onClick={pantallaCompleta} className="max-escritorio:h-11 max-escritorio:after:inset-y-0">
           <Maximize aria-hidden="true" className="size-4" strokeWidth={2} />
           Pantalla completa
         </Boton>

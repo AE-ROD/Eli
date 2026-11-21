@@ -243,7 +243,7 @@ export function ModalCobro({
           ))}
         </div>
       ) : (
-        <form id={idDelFormulario} onSubmit={cobrar} noValidate className="space-y-4 lg:space-y-6">
+        <form id={idDelFormulario} onSubmit={cobrar} noValidate className="space-y-4 escritorio:space-y-6">
           <section aria-labelledby={`${idBase}-resumen`} className="rounded-[24px] bg-superficie p-4 squircle sm:p-5">
             <h3 id={`${idBase}-resumen`} className="mb-3 text-sm font-semibold">
               Lo que se hizo

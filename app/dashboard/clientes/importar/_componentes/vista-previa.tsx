@@ -80,11 +80,11 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
           </p>
         </div>
         {/*
-          En el celular (por debajo de lg) una tabla de muchas columnas sólo se
+          En el celular (por debajo de `escritorio`) una tabla de muchas columnas sólo se
           lee desplazándola de lado: cada fila va en su propia tarjeta, con el
-          nombre de cada columna al lado de su valor. Desde lg, la tabla.
+          nombre de cada columna al lado de su valor. Desde `escritorio`, la tabla.
         */}
-        <ol aria-label="Primeras filas del archivo" className="space-y-2 lg:hidden">
+        <ol aria-label="Primeras filas del archivo" className="space-y-2 escritorio:hidden">
           {muestra.map((fila, numero) => (
             <li key={numero} className="rounded-[16px] bg-superficie p-3 squircle">
               <p className="text-xs font-medium text-texto-2">Fila {numero + 1}</p>
@@ -102,7 +102,7 @@ export function VistaPrevia({ filas, mapeo, alCambiarMapeo }: PropsDeVistaPrevia
             </li>
           ))}
         </ol>
-        <div className="overflow-x-auto max-lg:hidden">
+        <div className="overflow-x-auto max-escritorio:hidden">
           <table className="w-full min-w-max text-left text-sm">
             <thead>
               <tr className="border-b border-borde">

@@ -35,23 +35,23 @@ export function Cifra({ titulo, valor, icono, principal = false, lectura, classN
       className={cn(
         TARJETA_DEL_PANEL,
         RELLENO_DE_TARJETA,
-        "flex items-start justify-between gap-3 lg:gap-4",
+        "flex items-start justify-between gap-3 escritorio:gap-4",
         className
       )}
     >
-      <div className="min-w-0 space-y-1.5 lg:space-y-2">
-        <p className="text-[13px] leading-snug text-pretty text-texto-2 lg:text-sm">{titulo}</p>
+      <div className="min-w-0 space-y-1.5 escritorio:space-y-2">
+        <p className="text-[13px] leading-snug text-pretty text-texto-2 escritorio:text-sm">{titulo}</p>
         <p
           className={cn(
-            "leading-[1.1] font-medium tracking-[-0.5px] tabular-nums [overflow-wrap:anywhere] lg:text-[32px] lg:tracking-[-1px]",
+            "leading-[1.1] font-medium tracking-[-0.5px] tabular-nums [overflow-wrap:anywhere] escritorio:text-[32px] escritorio:tracking-[-1px]",
             principal ? "text-[28px]" : "text-[22px]"
           )}
         >
           {valor}
         </p>
-        {lectura && <p className="text-xs text-pretty text-texto-2 lg:text-sm">{lectura}</p>}
+        {lectura && <p className="text-xs text-pretty text-texto-2 escritorio:text-sm">{lectura}</p>}
       </div>
-      <CuadroDeIcono icono={icono} color="lima" activo={principal} className={cn(!principal && "max-lg:hidden")} />
+      <CuadroDeIcono icono={icono} color="lima" activo={principal} className={cn(!principal && "max-escritorio:hidden")} />
     </div>
   )
 }
@@ -152,8 +152,8 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
   const { resumen: frases } = frasesDeLosReportes(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
-    <div className="space-y-3 lg:space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-3">
+    <div className="space-y-3 escritorio:space-y-4">
+      <div className="grid grid-cols-2 gap-3 escritorio:gap-4 xl:grid-cols-3">
         <Cifra
           titulo={rotuloDeIngresos}
           valor={formatearMonto(resumen.ingresos)}
@@ -169,7 +169,7 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3 lg:gap-4">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3 escritorio:gap-4">
         {/* Al profesional, el desglose por profesional sería una sola fila: la suya, que ya está arriba. */}
         {!propio && (
           <Desglose

@@ -25,7 +25,7 @@ export function PlanSinEquipo({ puedeCambiarDePlan }: PropsDePlanSinEquipo) {
   const { sinEquipoPorElPlan } = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
 
   return (
-    <section aria-labelledby="plan-sin-equipo" className={cn(TARJETA_DEL_PANEL, "flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:gap-5 lg:p-6")}>
+    <section aria-labelledby="plan-sin-equipo" className={cn(TARJETA_DEL_PANEL, "flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:gap-5 escritorio:p-6")}>
       <CuadroDeIcono icono={UserRound} color="azul" activo />
       <div className="min-w-0 flex-1">
         <h2 id="plan-sin-equipo" className="font-medium text-navy">

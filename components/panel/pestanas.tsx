@@ -80,7 +80,7 @@ export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "relative h-10 shrink-0 rounded-full px-3.5 text-sm whitespace-nowrap anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5 lg:px-5",
+              "relative h-10 shrink-0 rounded-full px-3.5 text-sm whitespace-nowrap anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5 escritorio:px-5",
               "transition-colors duration-150 ease-suave",
               elegida ? "bg-navy font-semibold text-white" : "font-medium text-texto-2 hover:bg-tarjeta hover:text-navy"
             )}

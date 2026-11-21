@@ -69,7 +69,7 @@ export function ModalNuevoCliente({
       bloqueado={guardando}
       alCerrar={onCerrar}
       pie={
-        <div className="flex gap-3 lg:pt-1">
+        <div className="flex gap-3 escritorio:pt-1">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
             Cancelar
           </Boton>

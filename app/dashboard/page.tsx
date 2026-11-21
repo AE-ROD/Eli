@@ -126,7 +126,7 @@ export default function PaginaPanel() {
         En columna con `gap` (lo mismo que el `space-y` de antes): así, en el
         celular, la invitación plegada baja con `order` debajo del enlace.
       */}
-      <div className="flex flex-col gap-4 px-4 pt-3 pb-10 sm:gap-6 sm:px-6 lg:pt-6">
+      <div className="flex flex-col gap-4 px-4 pt-3 pb-10 sm:gap-6 sm:px-6 escritorio:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
 
         {!rolConocido ? (
@@ -141,7 +141,7 @@ export default function PaginaPanel() {
         ) : (
           <>
             {/* En el celular, las tres cifras del día en chico y arriba de todo; en el computador, las tarjetas grandes de abajo. */}
-            {!sinEstadisticas && <NumerosDelDia estadisticas={estadisticas} className="lg:hidden" />}
+            {!sinEstadisticas && <NumerosDelDia estadisticas={estadisticas} className="escritorio:hidden" />}
 
             {clinica && <InicioDeLaClinica gestionaSillones={puedeGestionarSillones(actorDeSesion(sesion))} />}
 
@@ -149,14 +149,14 @@ export default function PaginaPanel() {
 
             {/* En el celular, plegada en una fila y después del enlace de reservas. */}
             {invitacion && (
-              <div className="max-lg:order-1">
+              <div className="max-escritorio:order-1">
                 <InvitarNegocios datos={invitacion} />
               </div>
             )}
 
             {!sinEstadisticas && (
               <>
-                <div className="max-lg:hidden">
+                <div className="max-escritorio:hidden">
                   <EstadisticasDelNegocio estadisticas={estadisticas} />
                 </div>
 
@@ -179,7 +179,7 @@ export default function PaginaPanel() {
             )}
 
             {!sinEstadisticas && (
-              <div className="grid grid-cols-1 gap-4 max-lg:order-2 sm:gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 max-escritorio:order-2 sm:gap-6 lg:grid-cols-2">
                 <CitasPorHora citas={citasDeHoy} zona={estadisticas?.zona} />
                 <ResumenDelNegocio estadisticas={estadisticas} />
               </div>

@@ -131,7 +131,7 @@ export function FormularioFilaVirtual({ slug, nombreDelNegocio, activaInicial, t
           />
         </div>
         <BotonPrimario
-          className="max-lg:w-full"
+          className="max-escritorio:w-full"
           type="submit"
           tamaño="sm"
           icono={<Save className="h-4 w-4" />}

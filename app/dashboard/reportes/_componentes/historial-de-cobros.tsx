@@ -200,9 +200,9 @@ export function HistorialDeCobros({
       ref={seccion}
       aria-labelledby={idDelTitulo}
       // La fila fija de arriba del teléfono mide 68 px: el principio de la sección no queda debajo.
-      className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 lg:scroll-mt-6")}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 escritorio:scroll-mt-6")}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 lg:px-6 lg:pb-4 lg:pt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 escritorio:px-6 escritorio:pb-4 escritorio:pt-6">
         <h2
           id={idDelTitulo}
           ref={titulo}
@@ -229,7 +229,7 @@ export function HistorialDeCobros({
           <ul
             aria-label={`Atenciones cobradas, página ${pagina} de ${paginas}`}
             className={cn(
-              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave lg:hidden",
+              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave escritorio:hidden",
               actualizando && "opacity-60"
             )}
           >
@@ -244,7 +244,7 @@ export function HistorialDeCobros({
               />
             ))}
           </ul>
-          <div className="relative overflow-x-auto max-lg:hidden">
+          <div className="relative overflow-x-auto max-escritorio:hidden">
             <table className={cn("w-full text-sm", anchoMinimo)}>
               <caption className="sr-only">
                 Atenciones cobradas, página {pagina} de {paginas}

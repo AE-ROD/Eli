@@ -21,7 +21,7 @@ interface PropsDeBotonesDelPie {
  * celular quedan fijos al pie de la hoja, a la altura del pulgar, y el que
  * envía arriba; desde `sm`, uno al lado del otro, como siempre.
  *
- * El `lg:pt-1` suma 4 px a los 20 que el marco deja antes del pie: en el
+ * El `escritorio:pt-1` suma 4 px a los 20 que el marco deja antes del pie: en el
  * computador quedan a los mismos 24 px de lo último del formulario
  * (`space-y-6`) que cuando iban adentro.
  */
@@ -34,7 +34,7 @@ export function BotonesDelPie({
   children,
 }: PropsDeBotonesDelPie) {
   return (
-    <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+    <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
       <Boton type="button" variante="secundario" onClick={onCancelar} disabled={guardando} className="w-full">
         Cancelar
       </Boton>

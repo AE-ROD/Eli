@@ -19,7 +19,7 @@ import { useIrALaSeccion } from "./usar-ir-a-la-seccion"
 export function ResumenDeAnuladas({ reporte }: { reporte: ReporteDeAnuladas }) {
   const { cantidad, montoAnulado } = reporte.resumen
   return (
-    <div className="grid grid-cols-2 gap-3 lg:gap-4">
+    <div className="grid grid-cols-2 gap-3 escritorio:gap-4">
       <Cifra titulo="Atenciones anuladas" valor={String(cantidad)} icono={Ban} />
       <Cifra titulo="Cobrado que se anuló" valor={formatearMonto(montoAnulado)} icono={DollarSign} />
     </div>
@@ -124,9 +124,9 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
       ref={seccion}
       aria-labelledby={idDelTitulo}
       // La fila fija de arriba del teléfono mide 68 px: el principio de la sección no queda debajo.
-      className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 lg:scroll-mt-6")}
+      className={cn(TARJETA_DEL_PANEL, "scroll-mt-20 escritorio:scroll-mt-6")}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 lg:px-6 lg:pb-4 lg:pt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pb-3 pt-4 escritorio:px-6 escritorio:pb-4 escritorio:pt-6">
         <h2 id={idDelTitulo} className={TITULO_DE_TARJETA}>
           Historial de anuladas
         </h2>
@@ -145,7 +145,7 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
           <ul
             aria-label={`Atenciones anuladas, página ${pagina} de ${paginas}`}
             className={cn(
-              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave lg:hidden",
+              "divide-y divide-borde border-t border-borde transition-opacity duration-200 ease-suave escritorio:hidden",
               actualizando && "opacity-60"
             )}
           >
@@ -153,7 +153,7 @@ export function HistorialDeAnuladas({ reporte, actualizando, onPagina }: PropsDe
               <TarjetaDeAnulada key={fila.id} fila={fila} sinServicios={frases.sinServicios} />
             ))}
           </ul>
-          <div className="relative overflow-x-auto max-lg:hidden">
+          <div className="relative overflow-x-auto max-escritorio:hidden">
             <table className="w-full min-w-[900px] text-sm">
               <caption className="sr-only">
                 Atenciones anuladas, página {pagina} de {paginas}

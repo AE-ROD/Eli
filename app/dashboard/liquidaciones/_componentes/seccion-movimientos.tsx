@@ -87,9 +87,9 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
       {pendientes.length === 0 ? (
         <EstadoVacio className="mt-5">No hay nada pendiente de descontar ni de sumar.</EstadoVacio>
       ) : (
-        <ul className="mt-4 divide-y divide-borde/60 lg:mt-5">
+        <ul className="mt-4 divide-y divide-borde/60 escritorio:mt-5">
           {pendientes.map((movimiento) => (
-            <li key={movimiento.id} className="flex items-center justify-between gap-3 py-3 text-sm lg:flex-wrap">
+            <li key={movimiento.id} className="flex items-center justify-between gap-3 py-3 text-sm escritorio:flex-wrap">
               <div className="min-w-0">
                 <p>
                   <span className="font-medium">{movimiento.miembro}</span> · {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]}
@@ -100,7 +100,7 @@ export function SeccionMovimientos({ miembros, pendientes, tipos, hoy }: Props) 
                 </p>
               </div>
               {/* En el celular, el monto arriba y "Anular" debajo, a la derecha: el texto no se aprieta. */}
-              <div className="flex items-center gap-2 max-lg:shrink-0 max-lg:flex-col max-lg:items-end max-lg:gap-0">
+              <div className="flex items-center gap-2 max-escritorio:shrink-0 max-escritorio:flex-col max-escritorio:items-end max-escritorio:gap-0">
                 <span className="tabular-nums font-medium">
                   {pesos(movimiento.tipo === "ajuste" ? movimiento.montoCents : -movimiento.montoCents)}
                 </span>
@@ -209,10 +209,10 @@ function ModalRegistrar({
       descripcion="Elige qué pasó y escribe el monto sin signo: la app sabe si suma o resta."
       bloqueado={guardando}
       alCerrar={alCerrar}
-      // En el celular, fijos al pie de la hoja. En el computador, el `lg:-mt-1`
+      // En el celular, fijos al pie de la hoja. En el computador, el `escritorio:-mt-1`
       // los deja a los 16 px de antes del formulario (el marco deja 20).
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:-mt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:-mt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={alCerrar} disabled={guardando}>
             Cancelar
           </BotonPrimario>

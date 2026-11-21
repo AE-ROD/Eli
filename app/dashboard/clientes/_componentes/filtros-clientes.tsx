@@ -51,8 +51,8 @@ export function FiltrosClientes({
   return (
     <>
       {/* En el celular el buscador queda pegado bajo la barra de arriba (56 px más el área segura) al bajar por la lista. */}
-      <div className="space-y-3 max-lg:sticky max-lg:top-[calc(3.5rem+env(safe-area-inset-top))] max-lg:z-20 max-lg:-mx-4 max-lg:space-y-2 max-lg:bg-crema max-lg:px-4 max-lg:py-2 sm:max-lg:-mx-6 sm:max-lg:px-6">
-        <div className="flex items-center gap-2 lg:gap-3">
+      <div className="space-y-3 max-escritorio:sticky max-escritorio:top-[calc(3.5rem+env(safe-area-inset-top))] max-escritorio:z-20 max-escritorio:-mx-4 max-escritorio:space-y-2 max-escritorio:bg-crema max-escritorio:px-4 max-escritorio:py-2 sm:max-escritorio:-mx-6 sm:max-escritorio:px-6">
+        <div className="flex items-center gap-2 escritorio:gap-3">
           <div className="relative min-w-0 flex-1">
             <label htmlFor={idDelBuscador} className="sr-only">
               {lista.buscar}
@@ -81,18 +81,18 @@ export function FiltrosClientes({
             aria-label={conFiltro ? `Filtrar por etiqueta: ${etiquetaActiva}` : "Filtrar por etiqueta"}
             onClick={() => setHojaAbierta(true)}
             className={cn(
-              "relative grid size-12 shrink-0 place-items-center rounded-[14px] squircle anillo-foco transition-colors duration-150 ease-suave lg:hidden",
+              "relative grid size-12 shrink-0 place-items-center rounded-[14px] squircle anillo-foco transition-colors duration-150 ease-suave escritorio:hidden",
               conFiltro ? "bg-navy text-white" : "bg-tarjeta text-navy shadow-sm"
             )}
           >
             <SlidersHorizontal className="size-5" aria-hidden="true" strokeWidth={1.75} />
           </button>
 
-          {/* En el celular la lista y la cuadrícula se ven iguales, en filas: el selector aparece desde lg, donde se distinguen. */}
+          {/* En el celular la lista y la cuadrícula se ven iguales, en filas: el selector aparece desde `escritorio`, donde se distinguen. */}
           <div
             role="group"
             aria-label={lista.comoVer}
-            className="hidden shrink-0 gap-1 rounded-full bg-superficie p-1 lg:flex"
+            className="hidden shrink-0 gap-1 rounded-full bg-superficie p-1 escritorio:flex"
           >
             {VISTAS.map(({ id, texto, icono: Icono }) => (
               <button
@@ -118,14 +118,14 @@ export function FiltrosClientes({
             type="button"
             onClick={() => onEtiqueta("Todos")}
             aria-label={`Quitar el filtro ${etiquetaActiva}`}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-navy pr-2.5 pl-3.5 text-sm font-medium text-white anillo-foco lg:hidden"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-navy pr-2.5 pl-3.5 text-sm font-medium text-white anillo-foco escritorio:hidden"
           >
             {etiquetaActiva}
             <X className="size-4" aria-hidden="true" strokeWidth={2} />
           </button>
         )}
 
-        <div role="group" aria-label="Filtrar por etiqueta" className="flex flex-wrap gap-2 max-lg:hidden">
+        <div role="group" aria-label="Filtrar por etiqueta" className="flex flex-wrap gap-2 max-escritorio:hidden">
           {ETIQUETAS.map((etiqueta) => {
             const activa = etiquetaActiva === etiqueta
             return (

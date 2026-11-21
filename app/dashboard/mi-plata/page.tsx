@@ -57,7 +57,7 @@ export default async function PaginaMiPlata() {
     <div className="min-h-dvh">
       <BarraSuperior titulo="Mi plata" subtitulo="Lo que llevas ganado, tus adelantos y tus liquidaciones." mostrarBusqueda={false} />
 
-      <div className="max-w-xl space-y-3 px-4 pt-4 pb-12 sm:px-6 lg:space-y-4 lg:pt-8">
+      <div className="max-w-xl space-y-3 px-4 pt-4 pb-12 sm:px-6 escritorio:space-y-4 escritorio:pt-8">
         <section aria-labelledby="titulo-periodo" className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-1")}>
           <h2 id="titulo-periodo" className="text-sm text-texto-2">
             Este período · {plata.periodo.texto}
@@ -66,15 +66,15 @@ export default async function PaginaMiPlata() {
           <Desglose ganado={plata.periodo} />
         </section>
 
-        <div className="grid grid-cols-2 gap-3 lg:gap-4">
-          <section aria-labelledby="titulo-hoy" className={cn(TARJETA_DEL_PANEL, "space-y-1 p-4 lg:p-5")}>
+        <div className="grid grid-cols-2 gap-3 escritorio:gap-4">
+          <section aria-labelledby="titulo-hoy" className={cn(TARJETA_DEL_PANEL, "space-y-1 p-4 escritorio:p-5")}>
             <h2 id="titulo-hoy" className="text-sm text-texto-2">
               Hoy
             </h2>
             <p className="text-2xl font-medium tabular-nums">{pesos(plata.hoy.totalCents)}</p>
             <DeProtesis ganado={plata.hoy} />
           </section>
-          <section aria-labelledby="titulo-semana" className={cn(TARJETA_DEL_PANEL, "space-y-1 p-4 lg:p-5")}>
+          <section aria-labelledby="titulo-semana" className={cn(TARJETA_DEL_PANEL, "space-y-1 p-4 escritorio:p-5")}>
             <h2 id="titulo-semana" className="text-sm text-texto-2">
               Esta semana
             </h2>
@@ -139,7 +139,7 @@ export default async function PaginaMiPlata() {
           {plata.adelantos.lista.length > 0 && (
             <ul className="mt-4 divide-y divide-borde/60 text-sm">
               {plata.adelantos.lista.map((movimiento) => (
-                <li key={movimiento.id} className="flex justify-between gap-4 py-2.5 lg:py-2">
+                <li key={movimiento.id} className="flex justify-between gap-4 py-2.5 escritorio:py-2">
                   <span>
                     {NOMBRES_DE_MOVIMIENTO[movimiento.tipo]} · <span className="text-texto-2">{fechaParaLeer(movimiento.fecha)}</span>
                     {movimiento.motivo && <span className="block text-texto-2">{movimiento.motivo}</span>}
@@ -171,11 +171,11 @@ export default async function PaginaMiPlata() {
                     <span className="min-w-0 flex-1 text-sm">
                       {liquidacion.texto}
                       {/* En el celular el estado va debajo del período: el total no aprieta el texto. */}
-                      <span className="mt-1 flex lg:hidden">
+                      <span className="mt-1 flex escritorio:hidden">
                         <InsigniaDeEstado estado={liquidacion.estado} />
                       </span>
                     </span>
-                    <span className="flex max-lg:hidden">
+                    <span className="flex max-escritorio:hidden">
                       <InsigniaDeEstado estado={liquidacion.estado} />
                     </span>
                     <span className={cn("tabular-nums font-medium", liquidacion.estado === "anulada" && "text-texto-2 line-through")}>

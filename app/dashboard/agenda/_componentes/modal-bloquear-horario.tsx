@@ -105,8 +105,8 @@ export function ModalBloquearHorario({ dia, eligeAQuien, memberIdPropio, onCread
       bloqueado={guardando}
       alCerrar={onCerrar}
       pie={
-        // `lg:pt-1`: en el computador, la misma separación de antes.
-        <div className="flex gap-3 lg:pt-1">
+        // `escritorio:pt-1`: en el computador, la misma separación de antes.
+        <div className="flex gap-3 escritorio:pt-1">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={onCerrar}>
             Cancelar
           </Boton>

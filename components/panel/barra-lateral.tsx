@@ -39,7 +39,7 @@ const BOTON_DE_ICONO =
  * teléfono es un poco más ancho. `ContenidoDelPanel` corre el contenido lo
  * mismo, más el margen de 24 px de la isla.
  */
-const ANCHO_EXPANDIDA = "w-64 lg:w-60"
+const ANCHO_EXPANDIDA = "w-64 escritorio:w-60"
 const ANCHO_COLAPSADA = "w-[76px]"
 
 interface PropsDeBarraLateral {
@@ -226,7 +226,7 @@ export function BarraLateral({
       <AnimatePresence>
         {cajonAbierto && (
           <motion.div
-            className="fixed inset-0 z-40 bg-navy/40 lg:hidden"
+            className="fixed inset-0 z-40 bg-navy/40 escritorio:hidden"
             onClick={cerrarCajon}
             aria-hidden="true"
             initial={{ opacity: 0 }}
@@ -238,7 +238,7 @@ export function BarraLateral({
       </AnimatePresence>
 
       {/*
-        Desde lg la barra es una isla blanca fija a la izquierda, separada 24 px
+        Desde `escritorio` (768 px) la barra es una isla blanca fija a la izquierda, separada 24 px
         del borde. Por debajo es un cajón fuera de la pantalla; cerrado es
         `invisible`, que lo saca del orden de Tab y del lector de pantalla sin
         esperar al JS. Al abrir se hace visible en el acto (el foco no puede
@@ -258,7 +258,7 @@ export function BarraLateral({
         aria-label={cajonAbierto ? "Menú" : undefined}
         tabIndex={cajonAbierto ? -1 : undefined}
         className={cn(
-          "fixed inset-y-0 left-0 z-40 p-2 duration-300 ease-in-out focus:outline-none motion-reduce:transition-none lg:visible lg:translate-x-0 lg:py-6 lg:pr-0 lg:pl-6",
+          "fixed inset-y-0 left-0 z-40 p-2 duration-300 ease-in-out focus:outline-none motion-reduce:transition-none escritorio:visible escritorio:translate-x-0 escritorio:py-6 escritorio:pr-0 escritorio:pl-6",
           cajonAbierto
             ? "visible translate-x-0 transition-[translate]"
             : "invisible -translate-x-full transition-[translate,visibility]"
@@ -289,7 +289,7 @@ export function BarraLateral({
                 <LogoEli tamaño="md" />
               </Link>
             )}
-            {/* Colapsar es cosa del escritorio: en el teléfono el cajón se cierra. */}
+            {/* Colapsar es cosa del escritorio ancho: en el teléfono el cajón se cierra y en la tablet la barra va siempre contraída. */}
             <button
               type="button"
               className={cn(BOTON_DE_ICONO, "hidden lg:grid")}
@@ -308,7 +308,7 @@ export function BarraLateral({
               pantalla no llega a la superposición: sin este botón, quien lo usa
               sólo saldría del cajón eligiendo una página.
             */}
-            <button type="button" className={cn(BOTON_DE_ICONO, "lg:hidden")} onClick={cerrarCajon} aria-label="Cerrar menú">
+            <button type="button" className={cn(BOTON_DE_ICONO, "escritorio:hidden")} onClick={cerrarCajon} aria-label="Cerrar menú">
               <X className="size-5" aria-hidden="true" strokeWidth={1.75} />
             </button>
           </div>

@@ -230,7 +230,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
   const diaDeLaHoja = semana.find((dia) => dia.dayOfWeek === diaEnLaHoja) ?? null
 
   return (
-    <div role="group" aria-labelledby={idDelTitulo} className="rounded-campo bg-superficie p-3 squircle lg:p-5">
+    <div role="group" aria-labelledby={idDelTitulo} className="rounded-campo bg-superficie p-3 squircle escritorio:p-5">
       <h5 id={idDelTitulo} className="font-medium text-navy break-words">
         {frases.titulo(sede.nombre)}
       </h5>
@@ -276,7 +276,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
       )}
 
       {/* En el celular, cada día en una fila compacta; sus franjas se cambian en una hoja (`horario-en-el-celular.tsx`). */}
-      <ul className="mt-3 divide-y divide-borde lg:hidden">
+      <ul className="mt-3 divide-y divide-borde escritorio:hidden">
         {semana.map((dia) => (
           <FilaDeDiaCompacta
             key={dia.dayOfWeek}
@@ -295,7 +295,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
         ))}
       </ul>
 
-      <ul className="mt-4 divide-y divide-borde max-lg:hidden">
+      <ul className="mt-4 divide-y divide-borde max-escritorio:hidden">
         {semana.map((dia) => {
           const nombreDelDia = DIAS[dia.dayOfWeek]
           return (
@@ -341,7 +341,7 @@ export function EditorDeHorarioDeSede({ sede, sedes, alGuardar, alCambiarPendien
           disabled={bloqueado || !pendiente}
           variante={pendiente ? "primario" : "secundario"}
           onClick={guardar}
-          className={cn(pendiente && "max-lg:hidden")}
+          className={cn(pendiente && "max-escritorio:hidden")}
         >
           {guardado && !pendiente ? frases.guardado : frases.guardar}
         </BotonPrimario>

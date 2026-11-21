@@ -63,9 +63,9 @@ type VistaDeCobros = Exclude<VistaDeReporte, "llenar-horas">
 /** Mientras llega el primer reporte: las cifras y el historial en gris, con su forma, sin números inventados. */
 function ReporteCargando() {
   return (
-    <div role="status" className="space-y-3 lg:space-y-4">
+    <div role="status" className="space-y-3 escritorio:space-y-4">
       <span className="sr-only">Cargando el reporte…</span>
-      <div className="grid grid-cols-2 gap-3 lg:gap-4 xl:grid-cols-3" aria-hidden="true">
+      <div className="grid grid-cols-2 gap-3 escritorio:gap-4 xl:grid-cols-3" aria-hidden="true">
         {[0, 1, 2].map((cifra) => (
           <div
             key={cifra}
@@ -319,7 +319,7 @@ export default function PaginaReportes() {
     <div className="min-h-screen">
       <BarraSuperior titulo="Reportes" subtitulo={subtitulo} />
 
-      <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6 lg:space-y-6">
+      <div className="space-y-4 px-4 pb-8 pt-4 sm:px-6 sm:pt-6 escritorio:space-y-6">
         {verAnuladas && (
           <SelectorDeVista idBase={idBase} idDelPanel={idDelPanel} vista={vistaVisible} onCambiar={cambiarVista} />
         )}
@@ -328,7 +328,7 @@ export default function PaginaReportes() {
           id={idDelPanel}
           role={verAnuladas ? "tabpanel" : undefined}
           aria-labelledby={verAnuladas ? idDePestaña(idBase, vistaVisible) : undefined}
-          className="space-y-4 lg:space-y-6"
+          className="space-y-4 escritorio:space-y-6"
         >
           {llenarHoras && <LlenarHoras />}
           {!llenarHoras && (
@@ -369,7 +369,7 @@ export default function PaginaReportes() {
               {((vista === "cobradas" && !reporte) || (vista === "anuladas" && !anuladas)) && cargando && <ReporteCargando />}
 
               {mostrarReporte && (
-                <div aria-busy={cargando} className="space-y-4 lg:space-y-6">
+                <div aria-busy={cargando} className="space-y-4 escritorio:space-y-6">
                   {reporte.truncado && !cargando && <AvisoDeTruncado />}
                   <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                     <ResumenDeReporte reporte={reporte} rotuloDeIngresos={rotulo} />
@@ -387,7 +387,7 @@ export default function PaginaReportes() {
               )}
 
               {mostrarAnuladas && (
-                <div aria-busy={cargando} className="space-y-4 lg:space-y-6">
+                <div aria-busy={cargando} className="space-y-4 escritorio:space-y-6">
                   {anuladas.truncado && !cargando && <AvisoDeTruncado />}
                   <div className={cn("transition-opacity duration-200 ease-suave", cargando && "opacity-60")}>
                     <ResumenDeAnuladas reporte={anuladas} />

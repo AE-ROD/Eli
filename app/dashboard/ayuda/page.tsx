@@ -24,7 +24,7 @@ export default async function PaginaAyuda() {
         mostrarBusqueda={false}
       />
 
-      <div className="max-w-4xl px-4 pt-6 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-4xl px-4 pt-6 pb-12 sm:px-6 escritorio:pt-8">
         <CentroDeAyuda conSesion emailDeSesion={session?.user?.email ?? undefined} rubro={actor.rubro} />
       </div>
     </div>

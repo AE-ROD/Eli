@@ -39,12 +39,12 @@ export function EncabezadoDeTarjeta({
   const Titulo = nivel === 2 ? "h2" : "h3"
 
   return (
-    <div className={cn("flex flex-wrap items-start justify-between gap-x-3 gap-y-2 lg:gap-x-4 lg:gap-y-3", className)}>
+    <div className={cn("flex flex-wrap items-start justify-between gap-x-3 gap-y-2 escritorio:gap-x-4 escritorio:gap-y-3", className)}>
       {/*
         El ancho mínimo es lo que hace bajar la acción cuando no entra al
         lado: sin él, el título se achicaba hasta una letra por renglón.
       */}
-      <div className="flex min-w-44 flex-1 items-start gap-2.5 lg:gap-3">
+      <div className="flex min-w-44 flex-1 items-start gap-2.5 escritorio:gap-3">
         {icono &&
           (icono.color ? (
             <CuadroDeIcono icono={icono.figura} color={icono.color} />
@@ -56,7 +56,7 @@ export function EncabezadoDeTarjeta({
               <icono.figura className="size-5" strokeWidth={1.75} />
             </span>
           ))}
-        <div className={cn("min-w-0", icono && "pt-2 lg:pt-1.5")}>
+        <div className={cn("min-w-0", icono && "pt-2 escritorio:pt-1.5")}>
           <Titulo id={id} className={cn(TITULO_DE_TARJETA, "break-words")}>
             {titulo}
           </Titulo>

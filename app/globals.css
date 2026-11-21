@@ -361,6 +361,17 @@
  * `--font-geist` y `--font-fraunces` en el <html>. Fraunces se usa con peso
  * 500 (`font-medium`): titulares de sección, citas y chips de palabra.
  */
+/*
+ * El corte del panel entre el celular y el computador: 768 px (48rem, el
+ * mismo valor que `md`). Desde ahí (también la tablet, vertical u horizontal)
+ * barra lateral, ventanas centradas y vistas de escritorio; por debajo, el
+ * modo celular. Se usa como `escritorio:` y `max-escritorio:`, y
+ * `components/panel/ancho-de-escritorio.ts` lo repite para el JS.
+ */
+@theme {
+  --breakpoint-escritorio: 48rem;
+}
+
 @theme {
   --font-sans: var(--font-geist), 'Geist', system-ui, sans-serif;
   --font-serif: var(--font-fraunces), 'Fraunces', Georgia, serif;

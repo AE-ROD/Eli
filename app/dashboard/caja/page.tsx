@@ -17,7 +17,7 @@ export default async function PaginaCaja() {
     <div className="min-h-dvh">
       <BarraSuperior titulo="Caja" subtitulo="Lo que entró en efectivo y los cierres de caja." mostrarBusqueda={false} />
 
-      <div className="max-w-4xl px-4 pt-4 pb-12 sm:px-6 sm:pt-6 lg:pt-8">
+      <div className="max-w-4xl px-4 pt-4 pb-12 sm:px-6 sm:pt-6 escritorio:pt-8">
         <PantallaDeCaja />
       </div>
     </div>

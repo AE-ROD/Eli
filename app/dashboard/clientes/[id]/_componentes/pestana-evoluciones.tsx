@@ -141,7 +141,7 @@ export function PestanaEvoluciones({ pacienteId, activa, editable, zona, hoy }: 
         ) : (
           <ol className="space-y-3">
             {evoluciones.map((evolucion) => (
-              <li key={evolucion.id} className="flex flex-wrap gap-x-6 gap-y-2 rounded-[20px] bg-superficie px-[18px] py-4 squircle max-lg:gap-y-1.5 max-lg:px-3.5 max-lg:py-3">
+              <li key={evolucion.id} className="flex flex-wrap gap-x-6 gap-y-2 rounded-[20px] bg-superficie px-[18px] py-4 squircle max-escritorio:gap-y-1.5 max-escritorio:px-3.5 max-escritorio:py-3">
                 <p className="shrink-0 basis-44">
                   <span className="block font-semibold">{fechaYHora(evolucion.createdAt, zona)}</span>
                   <span className="block text-[13px] text-texto-2">{evolucion.autorNombre}</span>
@@ -244,7 +244,7 @@ function ModalAnotarEvolucion({ pacienteId, zona, hoy, alAnotar, alCerrar }: Pro
       alCerrar={alCerrar}
     
       pie={
-        <div className="flex gap-3 lg:pt-1">
+        <div className="flex gap-3 escritorio:pt-1">
           <Boton type="button" variante="secundario" className="w-full" disabled={guardando} onClick={alCerrar}>
             Cancelar
           </Boton>

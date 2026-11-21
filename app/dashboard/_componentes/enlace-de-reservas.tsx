@@ -65,7 +65,7 @@ export function EnlaceDeReservas({ slug, alCompartir, conQr = false }: PropsDeEn
         // Entero, aunque baje de renglón: es lo que se va a compartir.
         // En el celular, en una línea (se corta con "…"); si no se pudo copiar, entero, para copiarlo a mano.
         subtitulo={
-          <span className={cn("font-mono text-navy", noSeCopio ? "break-all" : "max-lg:block max-lg:truncate lg:break-all")}>
+          <span className={cn("font-mono text-navy", noSeCopio ? "break-all" : "max-escritorio:block max-escritorio:truncate escritorio:break-all")}>
             {enlace}
           </span>
         }
@@ -83,7 +83,7 @@ export function EnlaceDeReservas({ slug, alCompartir, conQr = false }: PropsDeEn
           </Boton>
         }
       />
-      <div className="mt-3 lg:mt-4">
+      <div className="mt-3 escritorio:mt-4">
         <BotonesParaCompartir mensaje={mensaje} alCompartir={alCompartir} hrefDelQr={conQr ? "#qr-del-local" : undefined}>
           <Boton
             variante="secundario"

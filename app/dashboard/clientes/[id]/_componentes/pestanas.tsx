@@ -63,7 +63,7 @@ export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa
       role="tablist"
       aria-label={etiqueta}
       onKeyDown={alTeclear}
-      className="flex max-w-full gap-1 overflow-x-auto rounded-[18px] bg-tarjeta p-1 shadow-sm squircle sm:w-fit max-lg:[scrollbar-width:none] max-lg:sticky max-lg:top-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] max-lg:z-20"
+      className="flex max-w-full gap-1 overflow-x-auto rounded-[18px] bg-tarjeta p-1 shadow-sm squircle sm:w-fit max-escritorio:[scrollbar-width:none] max-escritorio:sticky max-escritorio:top-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] max-escritorio:z-20"
     >
       {pestanas.map(({ id, texto }) => {
         const elegida = activa === id
@@ -78,7 +78,7 @@ export function Pestanas<Id extends string>({ idBase, etiqueta, pestanas, activa
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "relative h-10 shrink-0 rounded-[14px] px-4 text-[15px] whitespace-nowrap squircle anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5 max-lg:px-3 max-lg:text-sm",
+              "relative h-10 shrink-0 rounded-[14px] px-4 text-[15px] whitespace-nowrap squircle anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5 max-escritorio:px-3 max-escritorio:text-sm",
               "transition-colors duration-150 ease-suave",
               elegida ? "bg-lila-suave font-semibold text-navy" : "font-medium text-navy hover:bg-superficie"
             )}

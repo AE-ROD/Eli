@@ -103,10 +103,10 @@ export function VistaSemana({
       {/*
         En el teléfono, tres días enteros a la vista (el ancho de la caja menos
         las horas, en tres) y al deslizar cada día se detiene junto a las horas:
-        ninguno queda cortado a la mitad. Hasta lg, unos 80 px por día; desde
-        lg alcanza con 64.
+        ninguno queda cortado a la mitad. Hasta `escritorio`, unos 80 px por día;
+        desde ahí alcanza con 64.
       */}
-      <div className="min-w-[40rem] max-sm:min-w-[calc(3.5rem_+_(100cqw_-_3.5rem)_*_7_/_3)] lg:min-w-[32rem]">
+      <div className="min-w-[40rem] max-sm:min-w-[calc(3.5rem_+_(100cqw_-_3.5rem)_*_7_/_3)] escritorio:min-w-[32rem]">
         {/* Cabecera con días */}
         <div className="sticky top-0 z-20 flex border-b border-borde bg-tarjeta">
           <div className="sticky left-0 z-10 w-14 shrink-0 bg-tarjeta" />

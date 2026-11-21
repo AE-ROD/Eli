@@ -67,7 +67,7 @@ const ANILLO_DE_LA_OPCION =
  * En el celular el período es una sola fila de píldoras que se desliza de
  * costado, y los demás filtros quedan detrás de "Más filtros" (con cuántos hay
  * elegidos): cuatro selectores ocupaban media pantalla antes de ver un número.
- * Desde `lg` se ve todo, como siempre.
+ * Desde `escritorio` (768 px) se ve todo, como siempre.
  */
 export function FiltrosDeReporte({
   filtros,
@@ -92,7 +92,7 @@ export function FiltrosDeReporte({
   ).length
 
   return (
-    <section aria-labelledby={id("titulo")} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4 lg:space-y-5")}>
+    <section aria-labelledby={id("titulo")} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "space-y-4 escritorio:space-y-5")}>
       <div className="flex min-h-5 items-center justify-between gap-3">
         <h2 id={id("titulo")} className="antetitulo">
           Filtros
@@ -115,7 +115,7 @@ export function FiltrosDeReporte({
           deja ver el anillo del foco. Cada píldora es `relative`: su radio
           `sr-only` (absoluto) queda dentro de la fila y no ensancha la página.
         */}
-        <div className="flex gap-2 max-lg:-mx-4 max-lg:overflow-x-auto max-lg:px-4 max-lg:py-1.5 lg:flex-wrap">
+        <div className="flex gap-2 max-escritorio:-mx-4 max-escritorio:overflow-x-auto max-escritorio:px-4 max-escritorio:py-1.5 escritorio:flex-wrap">
           {PERIODOS.map((periodo) => {
             const elegido = filtros.periodo === periodo.id
             return (
@@ -145,7 +145,7 @@ export function FiltrosDeReporte({
         </div>
 
         {filtros.periodo === "personalizado" && (
-          <div className="mt-4 grid max-w-xl grid-cols-2 gap-3 lg:gap-4">
+          <div className="mt-4 grid max-w-xl grid-cols-2 gap-3 escritorio:gap-4">
             <CampoFormulario
               etiqueta="Desde"
               id={id("desde")}
@@ -189,7 +189,7 @@ export function FiltrosDeReporte({
             aria-expanded={masFiltros}
             aria-controls={id("mas-filtros")}
             onClick={() => setMasFiltros((previo) => !previo)}
-            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-boton px-1 text-sm font-medium text-navy anillo-foco lg:hidden"
+            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-boton px-1 text-sm font-medium text-navy anillo-foco escritorio:hidden"
           >
             <span>
               Más filtros
@@ -203,7 +203,7 @@ export function FiltrosDeReporte({
           </button>
           <div
             id={id("mas-filtros")}
-            className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", !masFiltros && "max-lg:hidden")}
+            className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", !masFiltros && "max-escritorio:hidden")}
           >
             <Selector
               etiqueta="Turno"

@@ -17,6 +17,7 @@ import type { Advertencia } from "@/lib/mover-cita"
 import { Ban } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { AnimatePresence } from "framer-motion"
+import { CONSULTA_DE_ESCRITORIO } from "@/components/panel/ancho-de-escritorio"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { desplazarFecha, diasDeLaSemanaDe, type UnidadDeTiempo } from "@/lib/fechas"
 import type { FranjaDelDia } from "@/lib/horario-de-atencion"
@@ -160,7 +161,7 @@ export default function PaginaAgenda() {
   // decide al montar: en el servidor no hay pantalla.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- el ancho sólo se conoce en el navegador
-    if (!window.matchMedia("(min-width: 64rem)").matches) setModo("dia")
+    if (!window.matchMedia(CONSULTA_DE_ESCRITORIO).matches) setModo("dia")
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga cuando cambia lo que se está mirando
@@ -351,12 +352,12 @@ export default function PaginaAgenda() {
         accionPrincipal={{ texto: frases.nuevaCita, onClick: () => abrirModal() }}
       />
 
-      <div className="space-y-4 px-4 pt-3 pb-10 sm:space-y-6 sm:px-6 lg:pt-6">
+      <div className="space-y-4 px-4 pt-3 pb-10 sm:space-y-6 sm:px-6 escritorio:pt-6">
         {aviso && <Aviso>{aviso}</Aviso>}
 
         {/* En el celular, "Bloquear horario" va en el menú ⋯ de la tarjeta del calendario. */}
         {puedeBloquear && (
-          <div className="flex justify-end max-lg:hidden">
+          <div className="flex justify-end max-escritorio:hidden">
             <Boton
               variante="secundario"
               tamano="sm"
@@ -386,7 +387,7 @@ export default function PaginaAgenda() {
               extra={
                 puedeBloquear && (
                   <MenuDeLaAgenda
-                    className="lg:hidden"
+                    className="escritorio:hidden"
                     opciones={[
                       {
                         texto: "Bloquear horario",
@@ -401,7 +402,7 @@ export default function PaginaAgenda() {
 
             {/* En el celular, la vista Día lleva arriba los siete días de la semana. */}
             {modo === "dia" && (
-              <div className="px-3 pb-2 lg:hidden">
+              <div className="px-3 pb-2 escritorio:hidden">
                 <TiraDeDias fecha={fecha} onElegir={setFecha} />
               </div>
             )}
@@ -438,7 +439,7 @@ export default function PaginaAgenda() {
             {/* El día: hora por hora en el computador; en el celular, una lista con los huecos libres. */}
             {modo === "dia" && !clinica && (
               <>
-                <div className="max-lg:hidden">
+                <div className="max-escritorio:hidden">
                   <VistaDia
                     fecha={fecha}
                     citas={citas}
@@ -449,7 +450,7 @@ export default function PaginaAgenda() {
                     destacarSinProfesional={conProfesionales}
                   />
                 </div>
-                <div className="lg:hidden">
+                <div className="escritorio:hidden">
                   <ListaDelDia
                     fecha={fecha}
                     citas={citas}

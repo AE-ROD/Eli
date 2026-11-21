@@ -11,7 +11,7 @@ import {
   type RefObject,
 } from "react"
 import { usePathname } from "next/navigation"
-import { useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
+import { useCabeLaBarraEntera, useEsEscritorio } from "@/components/panel/ancho-de-escritorio"
 
 /** El `id` del cajón. El botón de menú lo nombra en `aria-controls` para decir qué abre. */
 export const ID_DEL_CAJON = "menu-del-panel"
@@ -39,7 +39,7 @@ interface ValorDeLaBarraLateral {
    * al cerrarse, como con Escape.
    */
   cerrarCajonParaIrA: (ruta: string) => void
-  /** La barra de escritorio muestra sólo los íconos: 76 px en vez de 240. En el teléfono es siempre `false`. */
+  /** La barra de escritorio muestra sólo los íconos: 76 px en vez de 240. En el teléfono es siempre `false`; en la tablet (768 a 1023 px), siempre `true`. */
   colapsada: boolean
   alternarColapso: () => void
   /** Para el botón de menú de la barra superior, que vive en cada vista y no en el layout. */
@@ -76,6 +76,7 @@ export function useBarraLateral() {
  */
 export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
   const esEscritorio = useEsEscritorio()
+  const cabeLaBarraEntera = useCabeLaBarraEntera()
   const ruta = usePathname()
   const [cajonAbierto, setCajonAbierto] = useState(false)
   const [colapsadaEnEscritorio, setColapsadaEnEscritorio] = useState(false)
@@ -154,8 +155,9 @@ export function ProveedorDeBarraLateral({ children }: { children: ReactNode }) {
         cerrarCajonParaIrA,
         // Colapsar es cosa del escritorio. En el teléfono el cajón se ve entero
         // aunque se haya colapsado antes en una ventana más ancha: ahí no hay
-        // botón para expandirlo.
-        colapsada: colapsadaEnEscritorio && esEscritorio,
+        // botón para expandirlo. En la tablet (768 a 1023 px) va siempre
+        // contraída, sin botón: entera no deja lugar al contenido.
+        colapsada: esEscritorio && (colapsadaEnEscritorio || !cabeLaBarraEntera),
         alternarColapso,
         refBotonMenu,
         enfocarBotonMenu,

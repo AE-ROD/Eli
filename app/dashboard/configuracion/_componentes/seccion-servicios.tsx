@@ -368,13 +368,13 @@ export function SeccionServicios({ serviciosIniciales, puedeMarcarUrgencia = fal
         subtitulo={frases.subtitulo}
         icono={{ figura: Scissors }}
         // En el celular los dos botones van debajo del título, a lo ancho y repartidos.
-        className="max-lg:[&>:last-child]:basis-full"
+        className="max-escritorio:[&>:last-child]:basis-full"
         accion={
-          <div className="flex flex-wrap items-center gap-2 max-lg:w-full max-lg:flex-nowrap">
-            <Boton ref={botonDeCarga} variante="secundario" tamano="sm" icono={<ListPlus />} onClick={abrirCarga} className="max-lg:flex-1">
+          <div className="flex flex-wrap items-center gap-2 max-escritorio:w-full max-escritorio:flex-nowrap">
+            <Boton ref={botonDeCarga} variante="secundario" tamano="sm" icono={<ListPlus />} onClick={abrirCarga} className="max-escritorio:flex-1">
               {frases.carga.boton}
             </Boton>
-            <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo} className="max-lg:flex-1">
+            <BotonPrimario tamaño="sm" icono={<Plus className="h-4 w-4" />} onClick={abrirNuevo} className="max-escritorio:flex-1">
               {frases.nuevo}
             </BotonPrimario>
           </div>

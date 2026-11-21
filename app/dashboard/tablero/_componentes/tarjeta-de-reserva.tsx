@@ -78,7 +78,7 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
           onClick={onLlego}
           cargando={enCurso}
           aria-label={enCurso ? `Guardando: ${quien}` : `Llegó: ${quien}`}
-          className="w-full max-lg:h-11 max-lg:after:inset-y-0"
+          className="w-full max-escritorio:h-11 max-escritorio:after:inset-y-0"
         >
           Llegó
         </Boton>
@@ -89,7 +89,7 @@ export function TarjetaDeReserva({ reserva, quien, atrasada, enCurso, arrastre, 
             onClick={onNoVino}
             disabled={enCurso}
             aria-label={frases.noVino.etiqueta(quien)}
-            className="w-full max-lg:h-11 max-lg:after:inset-y-0"
+            className="w-full max-escritorio:h-11 max-escritorio:after:inset-y-0"
           >
             {frases.noVino.boton}
           </Boton>

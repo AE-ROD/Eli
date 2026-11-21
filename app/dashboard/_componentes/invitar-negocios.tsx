@@ -51,7 +51,7 @@ export function InvitarNegocios({ datos }: { datos: DatosDeInvitacion }) {
         aria-expanded={abierta}
         aria-controls={idDeLaTarjeta}
         onClick={() => setAbierta((antes) => !antes)}
-        className="flex min-h-12 w-full items-center gap-3 rounded-[16px] bg-lima-suave px-3.5 py-2.5 text-left text-sm font-medium text-navy squircle anillo-foco lg:hidden"
+        className="flex min-h-12 w-full items-center gap-3 rounded-[16px] bg-lima-suave px-3.5 py-2.5 text-left text-sm font-medium text-navy squircle anillo-foco escritorio:hidden"
       >
         <Gift className="size-5 shrink-0" aria-hidden="true" strokeWidth={1.75} />
         <span className="min-w-0 flex-1">Invita a otro negocio y suma {DIAS_EXTRA_POR_REFERIDO} días</span>
@@ -64,7 +64,7 @@ export function InvitarNegocios({ datos }: { datos: DatosDeInvitacion }) {
       <section
         id={idDeLaTarjeta}
         aria-labelledby={idDelTitulo}
-        className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, !abierta && "max-lg:hidden")}
+        className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, !abierta && "max-escritorio:hidden")}
       >
         <EncabezadoDeTarjeta
           id={idDelTitulo}

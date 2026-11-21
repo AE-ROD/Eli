@@ -116,8 +116,8 @@ export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen
   const deCara = !esTipoDePieza(herramienta) && herramienta !== "borrar"
 
   return (
-    <div className="space-y-4 lg:space-y-6">
-      <div className="flex flex-wrap items-start gap-4 lg:gap-6">
+    <div className="space-y-4 escritorio:space-y-6">
+      <div className="flex flex-wrap items-start gap-4 escritorio:gap-6">
         <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, "min-w-0 flex-[999_1_640px]")}>
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
@@ -143,8 +143,8 @@ export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen
           </div>
 
           {editable && (
-            <div role="group" aria-labelledby={idDeLaHerramienta} className="mt-5 flex flex-wrap items-center gap-2 max-lg:-mx-4 max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:px-4 max-lg:pb-1 max-lg:[scrollbar-width:none]">
-              <span id={idDeLaHerramienta} className="mr-1 antetitulo max-lg:shrink-0">
+            <div role="group" aria-labelledby={idDeLaHerramienta} className="mt-5 flex flex-wrap items-center gap-2 max-escritorio:-mx-4 max-escritorio:flex-nowrap max-escritorio:overflow-x-auto max-escritorio:px-4 max-escritorio:pb-1 max-escritorio:[scrollbar-width:none]">
+              <span id={idDeLaHerramienta} className="mr-1 antetitulo max-escritorio:shrink-0">
                 Herramienta
               </span>
               {HERRAMIENTAS.map(({ id, nombre }) => (
@@ -156,7 +156,7 @@ export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen
                   className={cn(
                     BOTON_DE_OPCION,
                     // En el celular las herramientas van en una fila que se desliza de lado.
-                    "max-lg:shrink-0 max-lg:whitespace-nowrap",
+                    "max-escritorio:shrink-0 max-escritorio:whitespace-nowrap",
                     herramienta === id ? "border-navy bg-azul-suave" : "border-borde bg-tarjeta hover:bg-superficie"
                   )}
                 >
@@ -191,8 +191,8 @@ export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen
           </p>
         </section>
 
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4 lg:gap-6">
-          <section aria-labelledby={idDeLaPieza} className={cn(TARJETA_DEL_PANEL, "p-4 lg:p-5")}>
+        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4 escritorio:gap-6">
+          <section aria-labelledby={idDeLaPieza} className={cn(TARJETA_DEL_PANEL, "p-4 escritorio:p-5")}>
             <div className="flex items-center gap-3.5">
               <span
                 aria-hidden="true"
@@ -227,7 +227,7 @@ export function Odontograma({ marcas, alCambiar, actualizado, accionesDelResumen
             )}
           </section>
 
-          <section aria-labelledby={idDelResumen} className={cn(TARJETA_DEL_PANEL, "p-4 lg:p-5")}>
+          <section aria-labelledby={idDelResumen} className={cn(TARJETA_DEL_PANEL, "p-4 escritorio:p-5")}>
             <h2 id={idDelResumen} className={TITULO_DE_TARJETA}>
               Resumen
             </h2>
@@ -379,7 +379,7 @@ function Leyenda() {
   ]
 
   return (
-    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-4 lg:p-5")}>
+    <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, "p-4 escritorio:p-5")}>
       <h2 id={idDelTitulo} className="font-semibold">
         Cómo leer cada pieza
       </h2>

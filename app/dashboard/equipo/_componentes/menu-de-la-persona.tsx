@@ -16,7 +16,7 @@ export interface OpcionDeLaPersona {
 /**
  * El menú ⋯ de una fila del equipo en el celular: las acciones de la persona
  * («Servicios que hace», la foto; «Reenviar» y «Anular» de una invitación)
- * sin ocupar otra fila. Desde `lg` no se usa: los botones van a la vista.
+ * sin ocupar otra fila. Desde `escritorio` no se usa: los botones van a la vista.
  *
  * Un botón de 44 px que abre la lista. Escape, tocar afuera o elegir una
  * opción la cierra y el foco vuelve al botón (o a lo que abra la opción, que

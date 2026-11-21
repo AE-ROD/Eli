@@ -64,7 +64,7 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: PropsD
       role="tablist"
       aria-label="Qué mirar"
       onKeyDown={alTeclear}
-      className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-tarjeta p-1 shadow-sm lg:inline-flex"
+      className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-tarjeta p-1 shadow-sm escritorio:inline-flex"
     >
       {VISTAS.map(({ id, texto }) => {
         const elegida = vista === id
@@ -79,7 +79,7 @@ export function SelectorDeVista({ idBase, idDelPanel, vista, onCambiar }: PropsD
             tabIndex={elegida ? 0 : -1}
             onClick={() => elegir(id)}
             className={cn(
-              "relative h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-sm font-medium max-lg:flex-1 lg:px-5 anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
+              "relative h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-sm font-medium max-escritorio:flex-1 escritorio:px-5 anillo-foco after:absolute after:inset-x-0 after:-inset-y-0.5",
               "transition-colors duration-150 ease-suave",
               elegida ? "bg-navy text-white" : "text-texto-2 hover:bg-superficie hover:text-navy"
             )}

@@ -47,7 +47,7 @@ export function ModalProducto({
       bloqueado={guardando}
       alCerrar={onCerrar}
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto onClick={onCerrar} disabled={guardando}>
             Cancelar
           </BotonPrimario>

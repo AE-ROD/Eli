@@ -84,7 +84,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
   const sinConfigurar = datos.miembros.filter((miembro) => miembro.porcentaje === null)
 
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-4 escritorio:space-y-6">
       {error && <Aviso>{error}</Aviso>}
 
       {sinConfigurar.length > 0 && (
@@ -105,7 +105,7 @@ export function PantallaDeComisiones({ zona }: { zona: string }) {
           Cuando invites a alguien desde Equipo, aquí le pones su porcentaje.
         </EstadoVacio>
       ) : (
-        <div className="grid gap-3 lg:gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 escritorio:gap-4 xl:grid-cols-2">
           {datos.miembros.map((miembro) => (
             <TarjetaDeMiembro key={miembro.id} miembro={miembro} servicios={datos.servicios} onCambio={alCambiar} />
           ))}

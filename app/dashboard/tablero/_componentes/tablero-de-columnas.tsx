@@ -67,9 +67,9 @@ function pestanaInicial(tablero: Tablero): ColumnaId {
 }
 
 /**
- * Las columnas. En el celular (por debajo de `lg`) se ve una sola, a todo el
+ * Las columnas. En el celular (por debajo de `escritorio`, 768 px) se ve una sola, a todo el
  * ancho, y se cambia con las pestañas de arriba; las demás quedan ocultas.
- * Desde `lg` se reparten el ancho con un mínimo de 196 px. Si las cinco no
+ * Desde `escritorio` se reparten el ancho con un mínimo de 196 px. Si las cinco no
  * entran (una pantalla mediana con la barra lateral), el tablero se desplaza
  * de costado dentro de su caja y la página no.
  *
@@ -83,8 +83,8 @@ function pestanaInicial(tablero: Tablero): ColumnaId {
  * contenedor que recorta, y la estiraban: la página entera se desplazaba de
  * costado en el teléfono.
  */
-const CONTENEDOR = "relative lg:flex lg:gap-3 lg:overflow-x-auto lg:pb-3 lg:-mx-6 lg:px-6 lg:scroll-px-6"
-const ANCHO_DE_COLUMNA = "lg:min-w-[196px] lg:flex-1"
+const CONTENEDOR = "relative escritorio:flex escritorio:gap-3 escritorio:overflow-x-auto escritorio:pb-3 escritorio:-mx-6 escritorio:px-6 escritorio:scroll-px-6"
+const ANCHO_DE_COLUMNA = "escritorio:min-w-[196px] escritorio:flex-1"
 
 /**
  * Cuando las columnas no entran (QA#17: un escritorio de 1126 px con la barra
@@ -268,7 +268,7 @@ function Columna({
       className={cn(
         ANCHO_DE_COLUMNA,
         ISLA,
-        !activa && "max-lg:hidden",
+        !activa && "max-escritorio:hidden",
         "transition-colors duration-150 ease-suave",
         // Mientras se arrastra, las columnas que aceptan la tarjeta se marcan con
         // un borde de trazos, y la que está debajo del puntero toma el naranja
@@ -282,7 +282,7 @@ function Columna({
         tarjeta ya no está. El anillo entra en el relleno de la isla.
       */}
       {/* En el celular el nombre y el número ya están en la pestaña: el título queda para el lector de pantalla. */}
-      <h2 id={idDelTitulo} data-columna={id} tabIndex={-1} className={cn(TITULO_DE_COLUMNA, "anillo-foco max-lg:sr-only")}>
+      <h2 id={idDelTitulo} data-columna={id} tabIndex={-1} className={cn(TITULO_DE_COLUMNA, "anillo-foco max-escritorio:sr-only")}>
         <span className="min-w-0 break-words">{titulo}</span>
         <span className="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-tarjeta px-2 text-[13px] font-semibold tabular-nums">
           <span className="sr-only">, </span>
@@ -505,14 +505,14 @@ export function TableroDeColumnas({
       */}
       {/*
         En el celular, una pestaña por etapa con su número; muestra una columna
-        a la vez. Desde `lg` no está: se ven las cinco columnas.
+        a la vez. Desde `escritorio` no está: se ven las cinco columnas.
       */}
       <div
         ref={pestanas}
         role="tablist"
         aria-label="Etapas"
         onKeyDown={alTeclearEnPestanas}
-        className="-mx-4 mb-1.5 flex gap-2 overflow-x-auto px-4 py-1.5 sm:-mx-6 sm:px-6 lg:hidden"
+        className="-mx-4 mb-1.5 flex gap-2 overflow-x-auto px-4 py-1.5 sm:-mx-6 sm:px-6 escritorio:hidden"
       >
         {COLUMNAS_DEL_TABLERO.map(({ id: columna }) => {
           const elegida = activa === columna
@@ -549,7 +549,7 @@ export function TableroDeColumnas({
       </div>
 
       {hayDesborde && (
-        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 lg:flex">
+        <div aria-hidden="true" className="mb-2 hidden justify-end gap-2 escritorio:flex">
           <button
             type="button"
             tabIndex={-1}
@@ -573,8 +573,8 @@ export function TableroDeColumnas({
         </div>
       )}
       <div className="relative">
-        <div aria-hidden="true" className={cn(DEGRADADO, "-left-6 bg-linear-to-r max-lg:hidden", desborde.izquierda ? "opacity-100" : "opacity-0")} />
-        <div aria-hidden="true" className={cn(DEGRADADO, "-right-6 bg-linear-to-l max-lg:hidden", desborde.derecha ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-left-6 bg-linear-to-r max-escritorio:hidden", desborde.izquierda ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden="true" className={cn(DEGRADADO, "-right-6 bg-linear-to-l max-escritorio:hidden", desborde.derecha ? "opacity-100" : "opacity-0")} />
         <div ref={contenedor} className={CONTENEDOR}>
           {COLUMNAS_DEL_TABLERO.map(({ id: columna, titulo }) => {
             const propsDeColumna = {
@@ -648,7 +648,7 @@ export function TableroCargando() {
       <span className="sr-only">{cargando}</span>
       {/* En el celular, sólo la primera: ahí se ve una columna a la vez. */}
       {COLUMNAS_DEL_TABLERO.map(({ id, titulo }, indice) => (
-        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA, indice > 0 && "max-lg:hidden")}>
+        <div key={id} aria-hidden="true" className={cn(ANCHO_DE_COLUMNA, ISLA, indice > 0 && "max-escritorio:hidden")}>
           <p className={TITULO_DE_COLUMNA}>{titulo}</p>
           {[0, 1].map((fila) => (
             <div key={fila} className="flex flex-col gap-3 rounded-[24px] bg-tarjeta p-3.5 shadow-sm squircle">

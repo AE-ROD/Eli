@@ -101,7 +101,7 @@ interface PropsDeArcada {
  *
  * Se achica con su caja hasta `ESCALA_MINIMA`; los números siguen a 12px.
  *
- * En el celular (por debajo de `lg`) hay un selector: "Toda la boca" entra a
+ * En el celular (por debajo de `escritorio`, 768 px) hay un selector: "Toda la boca" entra a
  * lo ancho, sin cortar piezas, para mirar; "Superior" e "Inferior" acercan
  * una arcada hasta que la pieza más chica mide 32 px (`escalaDeLaArcada`),
  * cómoda para el dedo, y se desplazan de lado dentro de su caja. La arcada
@@ -221,7 +221,7 @@ export function Arcada({
   return (
     <>
     {/* Sólo en el celular: mirar la boca entera o acercar una arcada para tocar cómodo. */}
-    <div role="group" aria-label="Qué ver de la arcada" className="mb-2 flex gap-1 rounded-[16px] bg-superficie p-1 squircle lg:hidden">
+    <div role="group" aria-label="Qué ver de la arcada" className="mb-2 flex gap-1 rounded-[16px] bg-superficie p-1 squircle escritorio:hidden">
       {VISTAS.map(({ id, texto }) => (
         <button
           key={id}

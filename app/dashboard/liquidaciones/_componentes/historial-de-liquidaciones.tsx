@@ -128,11 +128,11 @@ export function HistorialDeLiquidaciones({ liquidaciones, hayMas, personas }: Pr
                       <p className="font-medium">{liquidacion.miembro}</p>
                       <p className="text-sm text-texto-2">{liquidacion.texto}</p>
                       {/* En el celular el estado va debajo del período: así el nombre y el total no se aprietan. */}
-                      <span className="mt-1 flex lg:hidden">
+                      <span className="mt-1 flex escritorio:hidden">
                         <InsigniaDeEstado estado={liquidacion.estado} />
                       </span>
                     </div>
-                    <span className="flex max-lg:hidden">
+                    <span className="flex max-escritorio:hidden">
                       <InsigniaDeEstado estado={liquidacion.estado} />
                     </span>
                     <span className={cn("tabular-nums font-medium", liquidacion.estado === "anulada" && "text-texto-2 line-through")}>

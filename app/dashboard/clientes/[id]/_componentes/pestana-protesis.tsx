@@ -159,7 +159,7 @@ export function PestanaProtesis({
   const vigente = plan?.plan ?? null
 
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-4 escritorio:space-y-6">
       <section aria-labelledby={idDelTitulo} className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)}>
         <EncabezadoDeTarjeta
           id={idDelTitulo}

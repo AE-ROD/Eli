@@ -40,23 +40,23 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
   return (
     <div className="@container px-2 pb-3 sm:px-4 sm:pb-4">
       {/* Cabecera: cada día ya dice su nombre entero, así que no se lee. */}
-      <div aria-hidden="true" className="grid grid-cols-7 pb-1 text-center text-xs font-medium text-texto-2 @lg:gap-1 @lg:text-left">
+      <div aria-hidden="true" className="grid grid-cols-7 pb-1 text-center text-xs font-medium text-texto-2 @escritorio:gap-1 @escritorio:text-left">
         {diasSemana.map((dia) => (
-          <span key={dia} className="py-2 @lg:px-2.5">
+          <span key={dia} className="py-2 @escritorio:px-2.5">
             {dia}
           </span>
         ))}
       </div>
 
       {/* Celdas del mes */}
-      <div className="grid grid-cols-7 @lg:gap-1">
+      <div className="grid grid-cols-7 @escritorio:gap-1">
         {Array.from({ length: totalCeldas }, (_, i) => {
           const diaNum = i - celdasAntesDelPrimero + 1
           const fecha = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), diaNum)
           const esDelMes = fecha.getMonth() === fechaActual.getMonth() && diaNum > 0
 
           // Las celdas de otros meses guardan su lugar: la grilla tiene siempre seis filas y no salta.
-          if (!esDelMes) return <span key={i} aria-hidden="true" className="min-h-11 @lg:min-h-24" />
+          if (!esDelMes) return <span key={i} aria-hidden="true" className="min-h-11 @escritorio:min-h-24" />
 
           const citasDelDia = citas.filter((cita) => caeEnElDia(cita.startTime, fecha, zona))
           const hoy = esHoyEn(fecha, zona)
@@ -71,8 +71,8 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
               className={cn(
                 "flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-campo p-1 text-navy squircle",
                 "anillo-foco transition-colors duration-150 ease-suave hover:bg-superficie",
-                "@lg:min-h-24 @lg:items-start @lg:justify-between @lg:p-2 @lg:hover:bg-azul-suave",
-                hoy ? "@lg:bg-azul-suave/60" : "@lg:bg-superficie"
+                "@escritorio:min-h-24 @escritorio:items-start @escritorio:justify-between @escritorio:p-2 @escritorio:hover:bg-azul-suave",
+                hoy ? "@escritorio:bg-azul-suave/60" : "@escritorio:bg-superficie"
               )}
             >
               {/* Hoy, en un círculo navy: se distingue sin depender del color. */}
@@ -86,8 +86,8 @@ export function VistaMes({ fechaActual, citas, onElegirDia }: PropsDeVistaMes) {
               </span>
               {citasDelDia.length > 0 && (
                 <>
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-navy @lg:hidden" />
-                  <span className="hidden h-6 max-w-full truncate rounded-full bg-tarjeta px-2 text-xs leading-6 font-medium tabular-nums @lg:inline-block">
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-navy @escritorio:hidden" />
+                  <span className="hidden h-6 max-w-full truncate rounded-full bg-tarjeta px-2 text-xs leading-6 font-medium tabular-nums @escritorio:inline-block">
                     {frases.cuantasCitas(citasDelDia.length)}
                   </span>
                 </>

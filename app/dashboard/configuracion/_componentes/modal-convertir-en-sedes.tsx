@@ -74,7 +74,7 @@ export function ModalConvertirEnSedes({ direccionDelNegocio, comunaDelNegocio, a
       bloqueado={guardando}
       alCerrar={alCerrar}
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-2">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-2">
           <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
             {convertir.modal.cancelar}
           </BotonPrimario>

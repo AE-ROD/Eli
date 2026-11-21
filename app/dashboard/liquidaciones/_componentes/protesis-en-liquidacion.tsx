@@ -66,7 +66,7 @@ export function TablaDeProtesis({
       </h3>
       <p className="text-sm text-texto-2">{EXPLICACION}</p>
       {/* En la pantalla del celular, filas compactas; al imprimir, siempre la tabla. */}
-      <ul className="divide-y divide-borde/60 border-y border-borde text-sm lg:hidden print:hidden">
+      <ul className="divide-y divide-borde/60 border-y border-borde text-sm escritorio:hidden print:hidden">
         {protesis.map((abono) => (
           <li key={abono.id} className="py-2.5">
             <div className="flex items-baseline justify-between gap-3">
@@ -83,12 +83,12 @@ export function TablaDeProtesis({
           </li>
         ))}
       </ul>
-      {/* Desde `lg` la tabla se desplaza de lado si no entra: la caja se enfoca para moverla con el teclado. */}
+      {/* Desde `escritorio` la tabla se desplaza de lado si no entra: la caja se enfoca para moverla con el teclado. */}
       <div
         tabIndex={0}
         role="region"
         aria-label="Prótesis de la liquidación"
-        className="overflow-x-auto rounded-[12px] anillo-foco max-lg:not-print:hidden"
+        className="overflow-x-auto rounded-[12px] anillo-foco max-escritorio:not-print:hidden"
       >
         <table className="w-full min-w-[640px] text-sm">
           <thead>

@@ -69,7 +69,7 @@ export function ModalSede({ sede, sedes, alGuardar, alCerrar }: PropsDeModalSede
       bloqueado={guardando}
       alCerrar={alCerrar}
       pie={
-        <div className="flex flex-col-reverse gap-3 sm:flex-row lg:pt-1">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row escritorio:pt-1">
           <BotonPrimario type="button" variante="secundario" anchoCompleto disabled={guardando} onClick={alCerrar}>
             {frases.cancelar}
           </BotonPrimario>

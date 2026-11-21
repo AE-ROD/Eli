@@ -45,10 +45,10 @@ const momento = (iso: string, zona: string) =>
 
 /**
  * En la pantalla del celular las tablas se dibujan como filas compactas; al
- * imprimir (la hoja es más angosta que `lg`) va siempre la tabla.
+ * imprimir (puede ser más angosta que `escritorio`) va siempre la tabla.
  */
-const SOLO_CELULAR = "lg:hidden print:hidden"
-const SIN_CELULAR = "max-lg:not-print:hidden"
+const SOLO_CELULAR = "escritorio:hidden print:hidden"
+const SIN_CELULAR = "max-escritorio:not-print:hidden"
 
 const CELDA = "py-2 pr-3 align-top"
 const CABECERA = "py-2 pr-3 text-left text-xs font-medium uppercase tracking-[0.04em] text-texto-2"
@@ -90,7 +90,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
         <BarraSuperior titulo="Comprobante" subtitulo={`${detalle.miembro} · ${detalle.texto}`} mostrarBusqueda={false} />
       </div>
 
-      <div className="max-w-3xl space-y-4 px-4 pt-4 pb-12 sm:px-6 lg:pt-8">
+      <div className="max-w-3xl space-y-4 px-4 pt-4 pb-12 sm:px-6 escritorio:pt-8">
         {/* En el celular, lo primero es cuánto se paga: el comprobante lo dice recién al final. */}
         <div data-no-imprimir className={cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA, SOLO_CELULAR)}>
           <div className="flex items-center justify-between gap-3">
@@ -130,7 +130,7 @@ export default async function PaginaComprobante({ params }: { params: Promise<{ 
           />
         </div>
 
-        <article data-comprobante className={cn(TARJETA_DEL_PANEL, "space-y-6 p-4 sm:p-8 lg:space-y-8 print:space-y-8")}>
+        <article data-comprobante className={cn(TARJETA_DEL_PANEL, "space-y-6 p-4 sm:p-8 escritorio:space-y-8 print:space-y-8")}>
           <header className="space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

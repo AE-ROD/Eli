@@ -62,9 +62,9 @@ export function ControlesDeAgenda({
   const pasos = PASOS[vista]
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-3 pt-3 pb-2 sm:px-6 sm:pt-6 sm:pb-4 lg:gap-y-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-3 lg:gap-x-4">
-        <div className={cn("flex shrink-0 items-center gap-2", extra && "max-lg:w-full")}>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-3 pt-3 pb-2 sm:px-6 sm:pt-6 sm:pb-4 escritorio:gap-y-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-3 escritorio:gap-x-4">
+        <div className={cn("flex shrink-0 items-center gap-2", extra && "max-escritorio:w-full")}>
           <BotonIcono
             etiqueta={pasos.anterior}
             icono={<ChevronLeft aria-hidden="true" strokeWidth={1.75} />}
@@ -80,14 +80,14 @@ export function ControlesDeAgenda({
             tamano="sm"
             onClick={onSiguiente}
           />
-          {extra && <div className="ml-auto lg:hidden">{extra}</div>}
+          {extra && <div className="ml-auto escritorio:hidden">{extra}</div>}
         </div>
         {/*
           Se anuncia al cambiar: quien no ve el calendario sabe a qué día,
           semana o mes pasó. `first-letter` y no `capitalize`, que ponía
           mayúscula en cada palabra ("Martes, 6 De Octubre").
         */}
-        <h2 id={idDelTitulo} aria-live="polite" className="titulo-3 min-w-0 font-serif break-words first-letter:uppercase max-lg:text-lg max-lg:leading-tight">
+        <h2 id={idDelTitulo} aria-live="polite" className="titulo-3 min-w-0 font-serif break-words first-letter:uppercase max-escritorio:text-lg max-escritorio:leading-tight">
           {formatoFecha(fechaActual, vista)}
         </h2>
       </div>
@@ -108,8 +108,8 @@ export function ControlesDeAgenda({
               onClick={() => onVista(id)}
               className={cn(
                 // 36px a la vista (32 en el celular); el ::after lleva el área que se toca a 44.
-                "relative inline-flex h-8 flex-1 items-center justify-center rounded-full px-4 text-[13px] font-medium sm:flex-none lg:h-9 lg:text-sm",
-                "after:absolute after:inset-x-0 after:-inset-y-1.5 lg:after:-inset-y-1 anillo-foco transition-colors duration-150 ease-suave",
+                "relative inline-flex h-8 flex-1 items-center justify-center rounded-full px-4 text-[13px] font-medium sm:flex-none escritorio:h-9 escritorio:text-sm",
+                "after:absolute after:inset-x-0 after:-inset-y-1.5 escritorio:after:-inset-y-1 anillo-foco transition-colors duration-150 ease-suave",
                 elegida ? "bg-navy text-white" : "text-navy hover:bg-borde"
               )}
             >

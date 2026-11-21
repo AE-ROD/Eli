@@ -41,7 +41,7 @@ export const ERROR_DE_CAMPO = "text-xs font-medium text-error mt-1"
  * de sección, a 24px; en el celular, a 20. El de la página, más grande, lo
  * pone `BarraSuperior`.
  */
-export const TITULO_DE_TARJETA = "titulo-3 font-serif text-navy text-balance max-lg:text-xl max-lg:leading-tight"
+export const TITULO_DE_TARJETA = "titulo-3 font-serif text-navy text-balance max-escritorio:text-xl max-escritorio:leading-tight"
 
 /**
  * Una tarjeta del panel: blanca sobre crema, como `Tarjeta`, con el radio de
@@ -53,15 +53,15 @@ export const TARJETA_DEL_PANEL = "rounded-panel bg-tarjeta text-navy shadow-sm s
 
 /**
  * El relleno de una tarjeta del panel: 16 px en el celular (por debajo de
- * `lg`), 24 desde ahí. Va junto a `TARJETA_DEL_PANEL`:
+ * `escritorio`, 768 px), 24 desde ahí. Va junto a `TARJETA_DEL_PANEL`:
  * `cn(TARJETA_DEL_PANEL, RELLENO_DE_TARJETA)`. Reemplaza al `p-5 sm:p-6` de
  * cada vista (fase 2 del rediseño del celular).
  */
-export const RELLENO_DE_TARJETA = "p-4 lg:p-6"
+export const RELLENO_DE_TARJETA = "p-4 escritorio:p-6"
 
 /**
  * Una fila de una lista del panel (una cita, un cliente, un cobro): 56 px de
  * alto como mínimo en el celular, 14 px de relleno a los lados, letra de 15.
- * Desde `lg`, 64 px y 16 px de relleno.
+ * Desde `escritorio`, 64 px y 16 px de relleno.
  */
-export const FILA_DE_LISTA = "flex min-h-14 items-center gap-3 px-3.5 py-2.5 text-[15px] lg:min-h-16 lg:px-4 lg:py-3 lg:text-base"
+export const FILA_DE_LISTA = "flex min-h-14 items-center gap-3 px-3.5 py-2.5 text-[15px] escritorio:min-h-16 escritorio:px-4 escritorio:py-3 escritorio:text-base"

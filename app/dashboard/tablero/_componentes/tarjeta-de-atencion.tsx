@@ -260,7 +260,7 @@ export function TarjetaDeAtencion({
           cargando={enCurso}
           aria-label={enCurso ? `Guardando: ${quien}` : `${principal.texto}: ${quien}`}
           // En el celular, 44 px a la vista: es el botón que más se toca en el día.
-          className="w-full max-lg:h-11 max-lg:after:inset-y-0"
+          className="w-full max-escritorio:h-11 max-escritorio:after:inset-y-0"
         >
           {principal.texto}
         </Boton>
