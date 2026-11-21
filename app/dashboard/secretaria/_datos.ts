@@ -27,14 +27,6 @@ export interface AjustesParaGuardar {
   reglas: string | null
 }
 
-export interface CanalParaGuardar {
-  phoneNumberId: string
-  wabaId: string
-  /** Sin él, el servidor conserva el que ya tenía. */
-  accessToken?: string
-  activo: boolean
-}
-
 export function enviarAlSimulador(telefono: string, mensaje: string): Promise<Resultado<RespuestaDelSimulador>> {
   return pedir<RespuestaDelSimulador>(
     "/api/secretaria/simulador",
@@ -53,10 +45,6 @@ export function reiniciarSimulador(telefono: string): Promise<Resultado<unknown>
 
 export function guardarAjustes(ajustes: AjustesParaGuardar): Promise<Resultado<unknown>> {
   return pedir<unknown>("/api/secretaria/ajustes", "No se pudieron guardar los ajustes", conJson("PUT", ajustes))
-}
-
-export function guardarCanal(canal: CanalParaGuardar): Promise<Resultado<unknown>> {
-  return pedir<unknown>("/api/secretaria/canal", "No se pudo conectar el número", conJson("PUT", canal))
 }
 
 export function devolverAEli(conversacionId: string): Promise<Resultado<unknown>> {
