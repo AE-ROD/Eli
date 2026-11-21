@@ -82,12 +82,15 @@ export async function resumenDeSalida(db: Db, businessId: string, memberId: stri
 export function motivoParaNoSacar(resumen: ResumenDeSalida, nombre: string): string | null {
   const { citasPorDelante: citas, atencionesAbiertas: abiertas } = resumen
   if (citas > 0) {
-    const horas = citas === 1 ? "1 hora por delante" : `${citas} horas por delante`
-    return `${nombre} tiene ${horas}. Muévelas a otra persona o cancélalas desde la Agenda, y después sácala del equipo.`
+    return citas === 1
+      ? `${nombre} tiene 1 hora por delante. Muévela a otra persona o cancélala desde la Agenda, y después vuelve a intentarlo.`
+      : `${nombre} tiene ${citas} horas por delante. Muévelas a otra persona o cancélalas desde la Agenda, y después vuelve a intentarlo.`
   }
   if (abiertas > 0) {
     const atenciones = abiertas === 1 ? "una atención abierta" : `${abiertas} atenciones abiertas`
-    return `${nombre} tiene ${atenciones} en el Tablero. Cóbrala o anúlala primero.`
+    return abiertas === 1
+      ? `${nombre} tiene ${atenciones} en el Tablero. Cóbrala o anúlala, y después vuelve a intentarlo.`
+      : `${nombre} tiene ${atenciones} en el Tablero. Cóbralas o anúlalas, y después vuelve a intentarlo.`
   }
   return null
 }
