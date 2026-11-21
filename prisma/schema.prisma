@@ -202,6 +202,9 @@ model Business {
   pagosAlLaboratorio       PagoAlLaboratorio[]
   // Sedes del plan Independiente (etapa 9).
   sedes                    Sede[]
+  paquetes                 PaqueteDeSesiones[]
+  paquetesDeClientes       PaqueteDeCliente[]
+  usosDePaquete            UsoDePaquete[]
 
   @@index([invitadoPorId])
   @@map("negocios")
@@ -354,6 +357,7 @@ model Customer {
   fichaClinica        FichaClinica?
   marcasDentales      MarcaDental[]
   evoluciones         Evolucion[]
+  paquetes            PaqueteDeCliente[]
   planesDeTratamiento PlanDeTratamiento[]
   protesis            Protesis[]
 
@@ -396,6 +400,8 @@ model Service {
   commissionChanges     CommissionChange[]
   memberServices        MemberService[]
   inscripcionesEnEspera InscripcionEnEspera[]
+  paquetes              PaqueteDeSesiones[]
+  paquetesDeClientes    PaqueteDeCliente[]
   serviciosDeCitas      AppointmentService[]
   // Prestaciones de planes de tratamiento que sugieren este servicio. FK
   // compuesta y NO ACTION: borrar un servicio que está en un plan falla
@@ -789,6 +795,14 @@ model VisitService {
   tecnicoCents        Int?
   pagoAlLaboratorioId String?
   pagoAlLaboratorio   PagoAlLaboratorio? @relation(fields: [pagoAlLaboratorioId], references: [id], onDelete: NoAction)
+
+  // ─── Paquetes de sesiones (lib/paquetes.ts) ─────────────────────────────
+  // La línea con que se vendió un paquete, y la sesión que una línea usó de
+  // uno. La línea no cambia: una vendida lleva la comisión congelada en 0 %
+  // (la comisión se gana al atender cada sesión) y una usada conserva el valor
+  // de la sesión, pagado con el medio interno "paquete".
+  paqueteVendido PaqueteDeCliente?
+  usoDePaquete   UsoDePaquete?
 
   @@index([visitId])
   @@index([memberId])
@@ -1873,4 +1887,96 @@ model Sede {
   @@unique([id, businessId])
   @@unique([businessId, nombre])
   @@map("sedes")
+}
+
+/**
+ * Un paquete de sesiones que el negocio ofrece: "6 sesiones de Depilación
+ * láser por $150.000". Es la definición; lo que compra una clienta es un
+ * `PaqueteDeCliente`, con los datos copiados (cambiar o borrar la definición
+ * no toca lo vendido). `vigenciaMeses` en null = no vence.
+ */
+model PaqueteDeSesiones {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId     String
+  service       Service  @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// 2..50 (CHECK).
+  sesiones      Int
+  /// Lo que cuesta el paquete entero, en centavos; > 0 (CHECK).
+  priceCents    Int
+  /// 1..36 o null (CHECK).
+  vigenciaMeses Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vendidos PaqueteDeCliente[]
+
+  @@index([businessId])
+  @@index([serviceId])
+  @@map("paquetes")
+}
+
+/**
+ * El paquete que compró una clienta. Nace al cobrar la atención donde se
+ * vendió (`lineaDeVentaId`, la línea de esa venta): si esa atención se anula,
+ * el paquete deja de valer. Las sesiones usadas son sus `usos` en atenciones
+ * no anuladas; el saldo nunca se guarda, se cuenta.
+ *
+ * `valorPorSesionCents` = `priceCents / sesiones` hacia abajo: es el precio
+ * con que queda la línea de cada sesión usada (la base de la comisión de
+ * quien atiende) y lo que se devuelve por cada sesión sin usar.
+ */
+model PaqueteDeCliente {
+  id                  String             @id @default(cuid())
+  businessId          String
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer           @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
+  /// El servicio que cubre. NO ACTION: un servicio con paquetes vendidos no se borra, se desactiva.
+  serviceId           String
+  service             Service            @relation(fields: [serviceId, businessId], references: [id, businessId], onDelete: NoAction)
+  serviceName         String
+  /// La definición de la que salió; null si después se borró.
+  paqueteId           String?
+  paquete             PaqueteDeSesiones? @relation(fields: [paqueteId], references: [id], onDelete: SetNull)
+  sesiones            Int
+  priceCents          Int
+  valorPorSesionCents Int
+  lineaDeVentaId      String             @unique
+  lineaDeVenta        VisitService       @relation(fields: [lineaDeVentaId], references: [id], onDelete: Cascade)
+  vendidoAt           DateTime
+  /// El instante desde el que ya no se puede usar; null = no vence.
+  venceAt             DateTime?
+  // Devolución (sólo la dueña): los cinco juntos o ninguno (CHECK).
+  devueltoAt          DateTime?
+  devueltoCents       Int?
+  devueltoMedio       String?
+  devueltoPorId       String?
+  devueltoPorNombre   String?
+  createdAt           DateTime           @default(now())
+
+  usos UsoDePaquete[]
+
+  @@unique([id, businessId])
+  @@index([businessId, customerId])
+  @@index([serviceId])
+  @@index([paqueteId])
+  @@map("paquetes_de_clientes")
+}
+
+/** Una sesión usada: la línea de una atención que se pagó con el paquete. Una línea usa a lo más una. */
+model UsoDePaquete {
+  id         String           @id @default(cuid())
+  businessId String
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  paqueteId  String
+  paquete    PaqueteDeCliente @relation(fields: [paqueteId, businessId], references: [id, businessId], onDelete: Cascade)
+  lineaId    String           @unique
+  linea      VisitService     @relation(fields: [lineaId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+
+  @@index([paqueteId])
+  @@map("usos_de_paquete")
 }

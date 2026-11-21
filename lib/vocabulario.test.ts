@@ -83,6 +83,15 @@ const DEL_SALON_DE_UNAS: PalabrasEsperadas = {
   },
 }
 
+const DEL_CENTRO_DE_ESTETICA: PalabrasEsperadas = {
+  ...DEL_SALON,
+  sustantivos: {
+    ...DEL_SALON.sustantivos,
+    profesional: ["cosmetóloga", "cosmetólogas", "f"],
+    negocio: ["centro", "centros", "m"],
+  },
+}
+
 const DE_LA_CLINICA_DENTAL: PalabrasEsperadas = {
   sustantivos: {
     cliente: ["paciente", "pacientes", "m"],
@@ -118,6 +127,7 @@ const POR_RUBRO: Record<string, PalabrasEsperadas> = {
   salon: DEL_SALON,
   barberia: DE_LA_BARBERIA,
   "spa-de-unas": DEL_SALON_DE_UNAS,
+  estetica: DEL_CENTRO_DE_ESTETICA,
   odontologia: DE_LA_CLINICA_DENTAL,
 }
 
@@ -197,13 +207,16 @@ describe("vocabularioDe: las palabras con género y número", () => {
       }
     })
 
-    it("la barbería y el salón de uñas no comparten objetos con el salón", () => {
+    it("la barbería, el salón de uñas y el centro de estética no comparten objetos con el salón", () => {
       const salon = vocabularioDe("salon").palabras
       const barberia = vocabularioDe("barberia").palabras
       const salonDeUnas = vocabularioDe("spa-de-unas").palabras
+      const centroDeEstetica = vocabularioDe("estetica").palabras
 
       barberia.cliente.singular = "otra cosa"
       salonDeUnas.etiquetas.noVino = "otra cosa"
+      centroDeEstetica.cliente.singular = "otra cosa"
+      centroDeEstetica.etiquetas.noVino = "otra cosa"
 
       expect(salon.cliente.singular).toBe("cliente")
       expect(salon.etiquetas.noVino).toBe("No vino")

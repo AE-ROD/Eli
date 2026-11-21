@@ -46,5 +46,8 @@ export function esMedioDePago(id: string): id is MedioDePagoId {
  * pago es historial, y se tiene que poder leer aunque el catálogo cambie.
  */
 export function nombreDeMedio(id: string): string {
+  // El medio interno de una sesión de paquete (`lib/paquetes.ts`): no está en
+  // el catálogo porque no se elige en la caja, pero un pago con él se lee.
+  if (id === "paquete") return "Paquete (ya pagado)"
   return MEDIOS_DE_PAGO.find((medio) => medio.id === id)?.nombre ?? MEDIO_DESCONOCIDO
 }

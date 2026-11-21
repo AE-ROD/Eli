@@ -55,6 +55,7 @@ describe("ejemplosDe", () => {
     salon: /barba|manicur|uñ|esmalte|cutícula|dent|cera para/i,
     barberia: /manicur|uñ|esmalte|cutícula|colora|colorista|alisado|raíz|mascarilla|dent|shampoo/i,
     "spa-de-unas": /corte|barba|colora|colorista|alisado|raíz|shampoo|mascarilla|cera para|dent/i,
+    estetica: /corte|barba|colora|colorista|alisado|raíz|shampoo|manicur|uñ|esmalte|cutícula|cera para|dent/i,
     odontologia: /corte|barba|color|manicur|uñ|esmalte|alisado|raíz|shampoo|mascarilla|cera/i,
   }
 
@@ -67,6 +68,7 @@ describe("ejemplosDe", () => {
       salon: /^Salón /,
       barberia: /^Barbería /,
       "spa-de-unas": /^Salón de uñas /,
+      estetica: /^Centro de estética /,
       odontologia: /^Clínica Dental /,
     }
     expect(ejemplosDe(rubro).negocio).toMatch(señal[rubro])
@@ -89,6 +91,14 @@ describe("ejemplosDe", () => {
     expect(ejemplosDe("barberia").productos).toEqual(["Cera para el pelo", "Aceite para barba"])
     expect(ejemplosDe("spa-de-unas").servicios).toEqual(["Manicure", "Esmaltado permanente", "Retoque", "Relleno"])
     expect(ejemplosDe("spa-de-unas").productos).toEqual(["Esmalte", "Aceite de cutículas"])
+    expect(ejemplosDe("estetica")).toEqual({
+      servicios: ["Limpieza facial", "Depilación láser", "Lifting de pestañas", "Masaje reductivo"],
+      categorias: ["Faciales", "Depilación láser", "Corporales"],
+      especialidad: "Depilación láser",
+      negocio: "Centro de estética Belén",
+      instagram: "@tu.negocio",
+      productos: ["Protector solar", "Crema hidratante"],
+    })
     expect(ejemplosDe("odontologia").servicios).toEqual(["Limpieza", "Control", "Extracción", "Urgencia"])
     expect(ejemplosDe("odontologia").especialidad).toBe("Endodoncista")
     expect(ejemplosDe("odontologia").instagram).toBe("@tu.clinica")

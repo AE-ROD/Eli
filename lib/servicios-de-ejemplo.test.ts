@@ -36,7 +36,7 @@ describe("serviciosDeEjemplo", () => {
     expect(urgencias.map((servicio) => servicio.name)).toEqual(["Urgencia dental"])
   })
 
-  it.each(["salon", "barberia", "spa-de-unas"])("el rubro %s no trae urgencias (queda el default de la base)", (rubro) => {
+  it.each(["salon", "barberia", "spa-de-unas", "estetica"])("el rubro %s no trae urgencias (queda el default de la base)", (rubro) => {
     for (const servicio of serviciosDeEjemplo(rubro)) expect(servicio).not.toHaveProperty("esUrgencia")
   })
 
@@ -45,6 +45,22 @@ describe("serviciosDeEjemplo", () => {
 
     expect(nombres).toContain("Relleno de acrílicas")
     expect(nombres.join(" ")).not.toMatch(/\bspa\b/i)
+  })
+
+  it("el centro de estética nace con lo suyo (faciales, láser, pestañas y cejas, corporales), sin nada clínico", () => {
+    const servicios = serviciosDeEjemplo("estetica")
+
+    expect(servicios.map((servicio) => servicio.name)).toEqual([
+      "Limpieza facial profunda",
+      "Depilación láser de piernas completas",
+      "Depilación láser de axilas",
+      "Lifting de pestañas",
+      "Diseño y perfilado de cejas",
+      "Masaje reductivo",
+    ])
+    expect(new Set(servicios.map((servicio) => servicio.category))).toEqual(
+      new Set(["Faciales", "Depilación láser", "Pestañas y cejas", "Corporales"])
+    )
   })
 
   it("el salón nace con el retoque de raíz, que es de las visitas que más se repiten", () => {

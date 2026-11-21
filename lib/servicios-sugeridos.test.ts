@@ -33,10 +33,26 @@ describe("serviciosSugeridosDe: qué lista le toca a cada rubro", () => {
     expect(nombres("salon")).toEqual(expect.arrayContaining(["tintura completa", "mechas o balayage", "peinado de fiesta", "alisado de keratina"]))
     expect(nombres("barberia")).toEqual(expect.arrayContaining(["corte degradado", "perfilado de barba", "corte y barba", "perfilado de cejas"]))
     expect(nombres("spa-de-unas")).toEqual(expect.arrayContaining(["unas polygel", "relleno de acrilicas", "pedicure tradicional", "unas soft gel"]))
+    expect(nombres("estetica")).toEqual(
+      expect.arrayContaining([
+        "limpieza facial profunda",
+        "depilacion laser de piernas completas",
+        "depilacion laser de axilas",
+        "depilacion laser de rebaje",
+        "lifting de pestanas",
+        "extensiones de pestanas",
+        "diseno y perfilado de cejas",
+        "masaje reductivo",
+        "radiofrecuencia facial",
+        "peeling",
+      ])
+    )
     expect(nombres("odontologia")).toEqual(expect.arrayContaining(["blanqueamiento dental", "endodoncia", "exodoncia simple", "urgencia dental", "radiografia panoramica"]))
     // Ninguno nombra el oficio de otro.
     expect(nombres("salon")).not.toContain("endodoncia")
     expect(nombres("odontologia")).not.toContain("corte de pelo")
+    expect(nombres("estetica")).not.toContain("corte de pelo")
+    expect(nombres("estetica")).not.toContain("endodoncia")
   })
 })
 

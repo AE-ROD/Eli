@@ -1,6 +1,6 @@
 "use client"
 
-import { Hand, Scissors, Smile, Sparkles, type LucideIcon } from "lucide-react"
+import { Flower2, Hand, Scissors, Smile, Sparkles, type LucideIcon } from "lucide-react"
 import { CampoFormulario } from "@/components/comunes/campo-formulario"
 import { ejemplosDe } from "@/lib/ejemplos-por-rubro"
 import type { ColorDeModulo } from "@/lib/modulos"
@@ -12,6 +12,8 @@ const ICONO_DE_RUBRO: Record<RubroId, { figura: LucideIcon; color: ColorDeModulo
   salon: { figura: Sparkles, color: "lila" },
   barberia: { figura: Scissors, color: "azul" },
   "spa-de-unas": { figura: Hand, color: "naranja" },
+  // No está en la landing (no tiene oficio ahí): toma el pastel que quedaba libre.
+  estetica: { figura: Flower2, color: "turquesa" },
   // Lucide no tiene un diente: la sonrisa es la figura más cercana.
   odontologia: { figura: Smile, color: "lima" },
 }

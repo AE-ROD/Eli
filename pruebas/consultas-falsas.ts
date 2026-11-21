@@ -57,6 +57,10 @@ export type NombreDeModelo =
   // Las invitaciones al equipo (`invitaciones`): existen desde antes, pero la
   // base falsa no las tenía hasta que el trigger de la etapa 9 las mira.
   | "workerInvitation"
+  // Paquetes de sesiones (migración `20261122120000_paquetes_de_sesiones`).
+  | "paqueteDeSesiones"
+  | "paqueteDeCliente"
+  | "usoDePaquete"
 
 /** Las tablas de la base falsa: todos los modelos, cada uno con sus filas. */
 export type TablasCompletas = Record<NombreDeModelo, Registro[]>
@@ -67,7 +71,7 @@ export type TablasCompletas = Record<NombreDeModelo, Registro[]>
  * tienen por qué conocer las nuevas. La base falsa, en cambio, siempre las tiene
  * (`TablasCompletas`).
  */
-type ModeloOpcional = "sede" | "workerInvitation"
+type ModeloOpcional = "sede" | "workerInvitation" | "paqueteDeSesiones" | "paqueteDeCliente" | "usoDePaquete"
 export type Tablas = Record<Exclude<NombreDeModelo, ModeloOpcional>, Registro[]> & Partial<Record<ModeloOpcional, Registro[]>>
 
 /** Las filas de un modelo; vacías si una `Tablas` armada a mano no lo trae. */
@@ -170,6 +174,9 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   visitService: {
     visit: uno("visit", "visitId"),
     member: uno("businessMember", "memberId"),
+    // La fila del otro lado guarda la FK (1:1), como la ficha del paciente.
+    paqueteVendido: uno("paqueteDeCliente", "id", "lineaDeVentaId"),
+    usoDePaquete: uno("usoDePaquete", "id", "lineaId"),
     service: uno("service", "serviceId"),
     product: uno("producto", "productId"),
     liquidacion: uno("liquidacion", "liquidacionId"),
@@ -302,6 +309,24 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     inscripcionesEnEspera: muchos("inscripcionEnEspera", "sedeId"),
   },
   workerInvitation: { business: uno("business", "businessId") },
+  paqueteDeSesiones: {
+    business: uno("business", "businessId"),
+    service: uno("service", "serviceId"),
+    vendidos: muchos("paqueteDeCliente", "paqueteId"),
+  },
+  paqueteDeCliente: {
+    business: uno("business", "businessId"),
+    customer: uno("customer", "customerId"),
+    service: uno("service", "serviceId"),
+    paquete: uno("paqueteDeSesiones", "paqueteId"),
+    lineaDeVenta: uno("visitService", "lineaDeVentaId"),
+    usos: muchos("usoDePaquete", "paqueteId"),
+  },
+  usoDePaquete: {
+    business: uno("business", "businessId"),
+    paquete: uno("paqueteDeCliente", "paqueteId"),
+    linea: uno("visitService", "lineaId"),
+  },
 }
 
 /**
@@ -314,6 +339,9 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   // La sede de una franja del horario (etapa 9, `horarios_laborales_sedeId_businessId_fkey`);
   // su profesional es FK simple.
   workSchedule: ["sede"],
+  paqueteDeSesiones: ["service"],
+  paqueteDeCliente: ["customer", "service"],
+  usoDePaquete: ["paquete"],
   commissionRate: ["member", "service"],
   memberService: ["member", "service"],
   timeBlock: ["member"],

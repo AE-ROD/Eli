@@ -19,9 +19,10 @@ describe("nombreDelRol", () => {
     expect(nombreDelRol("worker", "salon")).toBe("Estilista")
     expect(nombreDelRol("worker", "barberia")).toBe("Barbero")
     expect(nombreDelRol("worker", "spa-de-unas")).toBe("Manicurista")
+    expect(nombreDelRol("worker", "estetica")).toBe("Cosmetóloga")
     expect(nombreDelRol("worker", "odontologia")).toBe("Odontólogo")
     expect(nombreDelRol(undefined, "odontologia")).toBe("Odontólogo")
-    for (const rubro of ["salon", "barberia", "spa-de-unas", "odontologia"]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica", "odontologia"]) {
       expect(nombreDelRol("admin", rubro)).toBe("Encargado")
     }
   })
@@ -45,6 +46,7 @@ describe("delRol", () => {
     expect(delRol("worker", "barberia")).toBe("del barbero")
     expect(delRol("worker", "salon")).toBe("de la estilista")
     expect(delRol("worker", "spa-de-unas")).toBe("de la manicurista")
+    expect(delRol("worker", "estetica")).toBe("de la cosmetóloga")
     expect(delRol("worker", "odontologia")).toBe("del odontólogo")
   })
 

@@ -7,7 +7,7 @@ import type { RubroId } from "./rubros"
  * una verdad: cada negocio ajusta el precio y la duración a la suya.
  *
  * Los nombres salen de lo que se ofrece en una peluquería, una barbería, un
- * salón de uñas y una clínica dental (docs/PRODUCTO.md, `lib/ejemplos-por-rubro.ts`).
+ * salón de uñas, un centro de estética y una clínica dental (docs/PRODUCTO.md, `lib/ejemplos-por-rubro.ts`).
  * Los seis de cada rubro con que nace un negocio (`lib/servicios-de-ejemplo.ts`)
  * van aquí con el mismo nombre, la misma categoría y los mismos números: quien
  * los tiene los ve como "ya existe", y ninguno aparece con otra grafía.
@@ -140,6 +140,44 @@ const SPA_DE_UNAS = aServicios([
   ["masaje-de-manos-o-pies", "Masaje de manos o pies", 15, 5000, "Extras"],
 ])
 
+const ESTETICA = aServicios([
+  // Faciales
+  ["limpieza-facial-profunda", "Limpieza facial profunda", 60, 30000, "Faciales"],
+  ["limpieza-facial-express", "Limpieza facial express", 30, 18000, "Faciales"],
+  ["hidratacion-facial", "Hidratación facial", 45, 25000, "Faciales"],
+  ["peeling", "Peeling", 45, 35000, "Faciales"],
+  ["microdermoabrasion", "Microdermoabrasión", 45, 30000, "Faciales"],
+  ["radiofrecuencia-facial", "Radiofrecuencia facial", 45, 30000, "Faciales"],
+  ["dermapen", "Dermapen", 60, 45000, "Faciales"],
+  ["fototerapia-led-facial", "Fototerapia LED facial", 30, 20000, "Faciales"],
+  // Depilación láser
+  ["depilacion-laser-de-piernas-completas", "Depilación láser de piernas completas", 60, 45000, "Depilación láser"],
+  ["depilacion-laser-de-media-pierna", "Depilación láser de media pierna", 30, 28000, "Depilación láser"],
+  ["depilacion-laser-de-axilas", "Depilación láser de axilas", 15, 15000, "Depilación láser"],
+  ["depilacion-laser-de-rebaje", "Depilación láser de rebaje", 30, 18000, "Depilación láser"],
+  ["depilacion-laser-de-rebaje-completo", "Depilación láser de rebaje completo", 30, 25000, "Depilación láser"],
+  ["depilacion-laser-de-bozo", "Depilación láser de bozo", 15, 10000, "Depilación láser"],
+  ["depilacion-laser-de-brazos", "Depilación láser de brazos", 30, 25000, "Depilación láser"],
+  ["depilacion-laser-de-espalda", "Depilación láser de espalda", 45, 35000, "Depilación láser"],
+  ["depilacion-laser-de-cuerpo-completo", "Depilación láser de cuerpo completo", 120, 90000, "Depilación láser"],
+  // Pestañas y cejas
+  ["lifting-de-pestanas", "Lifting de pestañas", 60, 25000, "Pestañas y cejas"],
+  ["extensiones-de-pestanas", "Extensiones de pestañas", 120, 35000, "Pestañas y cejas"],
+  ["retoque-de-extensiones-de-pestanas", "Retoque de extensiones de pestañas", 60, 20000, "Pestañas y cejas"],
+  ["retiro-de-extensiones-de-pestanas", "Retiro de extensiones de pestañas", 30, 8000, "Pestañas y cejas"],
+  ["tinte-de-pestanas", "Tinte de pestañas", 30, 10000, "Pestañas y cejas"],
+  ["diseno-y-perfilado-de-cejas", "Diseño y perfilado de cejas", 30, 12000, "Pestañas y cejas"],
+  ["laminado-de-cejas", "Laminado de cejas", 45, 22000, "Pestañas y cejas"],
+  ["tinte-de-cejas-con-henna", "Tinte de cejas con henna", 30, 12000, "Pestañas y cejas"],
+  // Corporales
+  ["masaje-reductivo", "Masaje reductivo", 60, 25000, "Corporales"],
+  ["masaje-de-relajacion", "Masaje de relajación", 60, 28000, "Corporales"],
+  ["drenaje-linfatico", "Drenaje linfático", 60, 28000, "Corporales"],
+  ["radiofrecuencia-corporal", "Radiofrecuencia corporal", 45, 30000, "Corporales"],
+  ["cavitacion", "Cavitación", 45, 28000, "Corporales"],
+  ["exfoliacion-corporal", "Exfoliación corporal", 45, 22000, "Corporales"],
+])
+
 const ODONTOLOGIA: readonly ServicioSugerido[] = Object.freeze([
   ...aServicios([
     // Diagnóstico
@@ -199,6 +237,7 @@ const SUGERIDOS_POR_RUBRO: Record<RubroId, readonly ServicioSugerido[]> = {
   salon: SALON,
   barberia: BARBERIA,
   "spa-de-unas": SPA_DE_UNAS,
+  estetica: ESTETICA,
   odontologia: ODONTOLOGIA,
 }
 

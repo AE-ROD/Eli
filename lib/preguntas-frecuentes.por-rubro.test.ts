@@ -35,6 +35,7 @@ const RUBROS: ReadonlyArray<{ id: Rubro; nombre: string }> = [
   { id: "salon", nombre: "salón de belleza" },
   { id: "barberia", nombre: "barbería" },
   { id: "spa-de-unas", nombre: "salón de uñas" },
+  { id: "estetica", nombre: "centro de estética" },
   { id: "odontologia", nombre: "clínica dental" },
   { id: null, nombre: "sin rubro" },
 ]
@@ -153,6 +154,7 @@ describe("las palabras del rubro", () => {
     ["salon", ["estilista", "cliente", "servicio", "el Tablero", "Nueva hora", "Tu QR para el salón"]],
     ["barberia", ["barbero", "cliente", "servicio", "el Tablero", "Nueva hora", "Tu QR para la barbería"]],
     ["spa-de-unas", ["manicurista", "cliente", "servicio", "el Tablero", "Nueva hora", "Tu QR para el salón de uñas"]],
+    ["estetica", ["cosmetóloga", "cliente", "servicio", "el Tablero", "Nueva hora", "Tu QR para el centro"]],
     [
       "odontologia",
       ["odontólogo", "paciente", "prestación", "la Sala de espera", "Nueva cita", "Nuevo paciente", "Tu QR para la clínica"],
@@ -175,6 +177,7 @@ describe("la concordancia", () => {
     // Estilista y manicurista son femeninas; barbero y odontólogo, masculinas.
     expect(textoDe("tablero-sin-reserva", "salon")).toContain("Una estilista lo anota asignada a sí misma.")
     expect(textoDe("tablero-sin-reserva", "spa-de-unas")).toContain("Una manicurista lo anota asignada a sí misma.")
+    expect(textoDe("tablero-sin-reserva", "estetica")).toContain("Una cosmetóloga lo anota asignada a sí misma.")
     expect(textoDe("tablero-sin-reserva", "barberia")).toContain("Un barbero lo anota asignado a sí mismo.")
     expect(textoDe("tablero-sin-reserva", "odontologia")).toContain("Un odontólogo lo anota asignado a sí mismo.")
 

@@ -27,6 +27,7 @@ import {
   respuestaDeError,
   tomarAtencion,
 } from "@/lib/tablero"
+import { motivoParaNoAnularPorPaquetes } from "@/lib/paquetes-servidor"
 
 /** Por qué no se anula una atención ya rendida, como lo lee quien anula. */
 const MENSAJE_DE_BLOQUEO: Record<MotivoDeBloqueo, string> = {
@@ -104,6 +105,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         voidedByName: nombre,
         voidReason: motivo || null,
       })
+
+      // Un paquete vendido acá del que ya se usaron sesiones, o ya devuelto: no se anula.
+      const porPaquetes = await motivoParaNoAnularPorPaquetes(tx, actor.businessId, existente.id)
+      if (porPaquetes) throw new ErrorDeAtencion(409, porPaquetes)
 
       // Con la fila ya tomada: lo que entró en una liquidación cerrada o en
       // un cierre de caja ya se rindió, y no se anula (#65, #68, #71). Se

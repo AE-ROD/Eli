@@ -152,6 +152,9 @@ const SELECCION_DE_LINEA = {
   odontologoCents: true,
   clinicaCents: true,
   tecnicoCents: true,
+  // Paquetes de sesiones: si la línea usó una sesión, o si es la venta de un paquete.
+  usoDePaquete: { select: { id: true } },
+  paqueteVendido: { select: { id: true } },
 } satisfies Prisma.VisitServiceSelect
 
 /** De una propina (#66), lo que viaja al tablero. */
@@ -444,6 +447,9 @@ export function formatearLinea(
     precio: deCentavos(linea.priceCents),
     // Sólo en un abono de prótesis: las demás líneas viajan como siempre.
     ...(linea.protesisId ? { abono: { protesisId: linea.protesisId } } : {}),
+    // Paquetes: la sesión que se pagó con uno, y la línea con que se vendió uno.
+    ...(linea.usoDePaquete ? { conPaquete: true as const } : {}),
+    ...(linea.paqueteVendido ? { ventaDePaquete: true as const } : {}),
   }
 }
 

@@ -54,6 +54,14 @@ const EJEMPLOS_POR_RUBRO: Record<RubroId, EjemplosDelRubro> = {
     instagram: "@tu.negocio",
     productos: ["Esmalte", "Aceite de cutículas"],
   },
+  estetica: {
+    servicios: ["Limpieza facial", "Depilación láser", "Lifting de pestañas", "Masaje reductivo"],
+    categorias: ["Faciales", "Depilación láser", "Corporales"],
+    especialidad: "Depilación láser",
+    negocio: "Centro de estética Belén",
+    instagram: "@tu.negocio",
+    productos: ["Protector solar", "Crema hidratante"],
+  },
   odontologia: {
     servicios: ["Limpieza", "Control", "Extracción", "Urgencia"],
     categorias: ["Prevención", "Endodoncia", "Urgencias"],

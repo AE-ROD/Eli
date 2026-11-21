@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest"
 import { IDS_DE_RUBROS, RUBROS, RUBRO_DENTAL, esRubroDental, nombreDeRubro } from "./rubros"
 
 describe("RUBROS", () => {
-  it("son los cuatro que Eli atiende, con el id de siempre para el salón", () => {
-    expect(RUBROS.map((rubro) => rubro.id)).toEqual(["salon", "barberia", "spa-de-unas", "odontologia"])
+  it("son los cinco que Eli atiende, con el id de siempre para el salón", () => {
+    expect(RUBROS.map((rubro) => rubro.id)).toEqual(["salon", "barberia", "spa-de-unas", "estetica", "odontologia"])
   })
 
   it("`salon` se conserva: ya está guardado en negocios reales", () => {
@@ -28,6 +28,7 @@ describe("nombreDeRubro", () => {
     ["salon", "Salón de belleza"],
     ["barberia", "Barbería"],
     ["spa-de-unas", "Salón de uñas"],
+    ["estetica", "Centro de estética"],
     ["odontologia", "Clínica dental"],
   ])("el id %s se muestra como %s", (id, nombre) => {
     expect(nombreDeRubro(id)).toBe(nombre)
@@ -62,6 +63,7 @@ describe("esRubroDental", () => {
     ["salon"],
     ["barberia"],
     ["spa-de-unas"],
+    ["estetica"],
     ["salud"],
     ["Odontologia"],
     [" odontologia"],

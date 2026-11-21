@@ -46,6 +46,14 @@ const SERVICIOS_POR_RUBRO: Record<RubroId, readonly ServicioDeEjemplo[]> = {
     { name: "Pedicure tradicional", duration: 60, price: 15000, category: "Pies" },
     { name: "Retiro de esmaltado permanente", duration: 15, price: 5000, category: "Extras" },
   ],
+  estetica: [
+    { name: "Limpieza facial profunda", duration: 60, price: 30000, category: "Faciales" },
+    { name: "Depilación láser de piernas completas", duration: 60, price: 45000, category: "Depilación láser" },
+    { name: "Depilación láser de axilas", duration: 15, price: 15000, category: "Depilación láser" },
+    { name: "Lifting de pestañas", duration: 60, price: 25000, category: "Pestañas y cejas" },
+    { name: "Diseño y perfilado de cejas", duration: 30, price: 12000, category: "Pestañas y cejas" },
+    { name: "Masaje reductivo", duration: 60, price: 25000, category: "Corporales" },
+  ],
   odontologia: [
     { name: "Evaluación / primera consulta", duration: 30, price: 20000, category: "Diagnóstico" },
     { name: "Limpieza y destartraje", duration: 45, price: 35000, category: "Prevención" },

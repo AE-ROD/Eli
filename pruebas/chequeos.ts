@@ -67,6 +67,9 @@ export const TABLAS_SQL: Record<NombreDeModelo, string> = {
   pagoAlLaboratorio: "pagos_al_laboratorio",
   sede: "sedes",
   workerInvitation: "invitaciones",
+  paqueteDeSesiones: "paquetes",
+  paqueteDeCliente: "paquetes_de_clientes",
+  usoDePaquete: "usos_de_paquete",
 }
 
 // ─── Lógica de tres valores, como SQL ────────────────────────────────────────
@@ -150,6 +153,8 @@ const posicion = (pieza: unknown): number | null => (nulo(pieza) ? null : (pieza
 
 const TOPE = 2000000000
 const MEDIOS_DE_PAGO = ["efectivo", "tarjeta-debito", "tarjeta-credito", "transferencia", "billetera-digital"]
+/** `20261122120000_paquetes_de_sesiones`: el cobro además escribe el medio interno "paquete". */
+const MEDIOS_DE_UN_PAGO_DE_ATENCION = [...MEDIOS_DE_PAGO, "paquete"]
 const FECHA = /^\d{4}-\d{2}-\d{2}$/
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
 const TELEFONO_E164 = /^\+[0-9]{8,15}$/
@@ -236,11 +241,28 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
     chequeo("negocios_porConfirmarTrasFaltas_check", (f) => NULO_O_ENTRE(f.porConfirmarTrasFaltas, 1, 20)),
     chequeo("negocios_filaVirtualTope_check", (f) => ENTRE(f.filaVirtualTope, 1, 100)),
     chequeo("negocios_cancelacionHorasAntes_check", (f) => ENTRE(f.cancelacionHorasAntes, 0, 72)),
-    chequeo("negocios_type_check", (f) => EN(f.type, ["salon", "barberia", "spa-de-unas", "odontologia", "salud", "fitness", "otro"])),
+    chequeo("negocios_type_check", (f) => EN(f.type, ["salon", "barberia", "spa-de-unas", "estetica", "odontologia", "salud", "fitness", "otro"])),
     // `20261112120000_etapa_9_planes_y_sedes`: los ids de `PLANES` (lib/planes.ts).
     chequeo("negocios_plan_check", (f) => EN(f.plan, ["independiente", "equipo"])),
   ],
   workerInvitation: [chequeo("invitaciones_role_check", (f) => EN(f.role, ["admin", "worker"]))],
+
+  // ─── 20261122120000_paquetes_de_sesiones ──────────────────────────────────
+  paqueteDeSesiones: [
+    chequeo("paquetes_sesiones_check", (f) => ENTRE(f.sesiones, 2, 50)),
+    chequeo("paquetes_priceCents_check", (f) => Y(MAYOR(f.priceCents, 0), MAYOR_O_IGUAL(TOPE, f.priceCents))),
+    chequeo("paquetes_vigenciaMeses_check", (f) => O(esNulo(f.vigenciaMeses), ENTRE(f.vigenciaMeses, 1, 36))),
+  ],
+  paqueteDeCliente: [
+    chequeo("paquetes_de_clientes_sesiones_check", (f) => ENTRE(f.sesiones, 2, 50)),
+    chequeo("paquetes_de_clientes_montos_check", (f) => Y(MAYOR(f.priceCents, 0), MAYOR(f.valorPorSesionCents, 0))),
+    chequeo("paquetes_de_clientes_devolucion_check", (f) =>
+      O(
+        Y(esNulo(f.devueltoAt), esNulo(f.devueltoCents), esNulo(f.devueltoMedio), esNulo(f.devueltoPorNombre)),
+        Y(NO(esNulo(f.devueltoAt)), Y(MAYOR_O_IGUAL(f.devueltoCents, 0), MAYOR_O_IGUAL(f.priceCents, f.devueltoCents)), EN(f.devueltoMedio, MEDIOS_DE_PAGO), NO(esNulo(f.devueltoPorNombre)))
+      )
+    ),
+  ],
 
   // ─── 20261006122500_tablero_de_atenciones, 20261030120000_etapa_4_reservas_seguras ─
   visit: [
@@ -266,7 +288,7 @@ export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
   ],
   visitPayment: [
     chequeo("atencion_pagos_amountCents_check", (f) => Y(MAYOR(f.amountCents, 0), MAYOR_O_IGUAL(TOPE, f.amountCents))),
-    chequeo("atencion_pagos_method_check", (f) => EN(f.method, MEDIOS_DE_PAGO)),
+    chequeo("atencion_pagos_method_check", (f) => EN(f.method, MEDIOS_DE_UN_PAGO_DE_ATENCION)),
   ],
 
   // ─── 20261028120000_etapa_2_la_plata_del_equipo y las prótesis (7, 7b) ────

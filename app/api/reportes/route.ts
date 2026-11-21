@@ -23,6 +23,7 @@ import {
   type FiltrosDeLinea,
 } from "@/lib/reportes"
 import { formatearLinea, formatearPago, leerRango, seleccionParaReporte, totalVisible } from "@/lib/tablero"
+import { MEDIO_PAQUETE } from "@/lib/paquetes"
 
 /** Un año, con margen para uno bisiesto. Más que eso se pide por partes. */
 const RANGO_MAXIMO_MS = 366 * 24 * 60 * 60 * 1000
@@ -88,14 +89,23 @@ function buscarCobradas(actor: Actor, desde: Date, hasta: Date) {
  * sumaron sus líneas: lo suyo, nunca el total del negocio.
  */
 function paraReporte(verNegocio: boolean, atencion: AtencionLeida, paidAt: Date): AtencionParaReporte {
+  // Una sesión pagada con paquete no es plata de ese día (el paquete entró
+  // cuando se vendió): en los reportes vale 0 y dice "(con paquete)". Su
+  // valor real sigue en la línea, que es la base de la comisión.
+  const lineas = atencion.services.map((linea) =>
+    linea.usoDePaquete ? { ...linea, priceCents: 0, serviceName: `${linea.serviceName} (con paquete)` } : linea
+  )
   if (!verNegocio) {
-    return { paidAt, totalCents: totalEnCentavos(atencion.services), lineas: atencion.services, pagos: [] }
+    return { paidAt, totalCents: totalEnCentavos(lineas), lineas, pagos: [] }
   }
+  const prepagoCents = atencion.payments
+    .filter((pago) => pago.method === MEDIO_PAQUETE)
+    .reduce((suma, pago) => suma + pago.amountCents, 0)
   return {
     paidAt,
-    totalCents: atencion.totalCents ?? totalEnCentavos(atencion.services),
-    lineas: atencion.services,
-    pagos: atencion.payments,
+    totalCents: (atencion.totalCents ?? totalEnCentavos(atencion.services)) - prepagoCents,
+    lineas,
+    pagos: atencion.payments.filter((pago) => pago.method !== MEDIO_PAQUETE),
   }
 }
 

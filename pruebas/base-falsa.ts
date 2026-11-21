@@ -328,6 +328,18 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   // `nombre`, `direccion` y `comuna` de la sede; `email`, `name`, `tokenHash` y
   // `expiresAt` de la invitación.
   sede: () => ({ telefono: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  paqueteDeSesiones: () => ({ vigenciaMeses: null, active: true, createdAt: new Date(), updatedAt: new Date() }),
+  paqueteDeCliente: () => ({
+    paqueteId: null,
+    venceAt: null,
+    devueltoAt: null,
+    devueltoCents: null,
+    devueltoMedio: null,
+    devueltoPorId: null,
+    devueltoPorNombre: null,
+    createdAt: new Date(),
+  }),
+  usoDePaquete: () => ({ createdAt: new Date() }),
   workerInvitation: () => ({ role: "worker", acceptedAt: null, createdAt: new Date() }),
 }
 
@@ -392,6 +404,8 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   // Planes y sedes. `sedes_businessId_nombre_key`: nombre único por negocio.
   // `invitaciones_token_key`: el sha256 del token (la columna se llama `token`).
   sede: [{ campos: ["businessId", "nombre"] }],
+  paqueteDeCliente: [{ campos: ["lineaDeVentaId"] }],
+  usoDePaquete: [{ campos: ["lineaId"] }],
   workerInvitation: [{ campos: ["tokenHash"] }],
 }
 
@@ -461,6 +475,9 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
     ["eventoDeProtesis", "businessId", "cascade"], // eventos_de_protesis_businessId_fkey
     ["pagoAlLaboratorio", "businessId", "cascade"], // pagos_al_laboratorio_businessId_fkey
     ["sede", "businessId", "cascade"], // sedes_businessId_fkey
+    ["paqueteDeSesiones", "businessId", "cascade"], // paquetes_businessId_fkey
+    ["paqueteDeCliente", "businessId", "cascade"], // paquetes_de_clientes_businessId_fkey
+    ["usoDePaquete", "businessId", "cascade"], // usos_de_paquete_businessId_fkey
   ],
   businessMember: [
     ["workSchedule", "memberId", "cascade"], // horarios_laborales_memberId_fkey
@@ -694,6 +711,9 @@ function tablasVacias(): TablasCompletas {
     pagoAlLaboratorio: [],
     sede: [],
     workerInvitation: [],
+    paqueteDeSesiones: [],
+    paqueteDeCliente: [],
+    usoDePaquete: [],
   }
 }
 
@@ -1661,6 +1681,9 @@ export function crearBaseFalsa() {
     pagoAlLaboratorio: delegado("pagoAlLaboratorio"),
     sede: delegado("sede"),
     workerInvitation: delegado("workerInvitation"),
+    paqueteDeSesiones: delegado("paqueteDeSesiones"),
+    paqueteDeCliente: delegado("paqueteDeCliente"),
+    usoDePaquete: delegado("usoDePaquete"),
   }
 
   // ─── Consultas crudas ────────────────────────────────────────────────────

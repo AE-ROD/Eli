@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client"
 import { TOTAL_MAXIMO_CENTAVOS } from "@/lib/atenciones"
 import { rangoDelDiaEn, fechaYMinutosEn } from "@/lib/zona-horaria"
+import { MEDIO_PAQUETE } from "@/lib/paquetes"
 
 /**
  * Cierre de caja (#71). Cada cierre cubre `(desde, hasta]`: `desde` es el
@@ -157,7 +158,9 @@ export async function leerCaja(
   const atenciones = atencionesDelRango(businessId, desde, hasta)
   const [pagos, propinas] = await Promise.all([
     db.visitPayment.findMany({
-      where: { visit: { is: atenciones } },
+      // Lo pagado con una sesión de paquete no es plata que entró: el paquete
+      // se cobró (y entró a la caja) el día en que se vendió.
+      where: { visit: { is: atenciones }, method: { not: MEDIO_PAQUETE } },
       select: { method: true, amountCents: true },
     }),
     db.propinaDeAtencion.findMany({

@@ -37,7 +37,7 @@ export interface Sustantivo {
 export interface PalabrasDelRubro {
   /** Quien se atiende: cliente / paciente. */
   cliente: Sustantivo
-  /** Quien atiende: estilista / barbero / manicurista / odontólogo / profesional. */
+  /** Quien atiende: estilista / barbero / manicurista / cosmetóloga / odontólogo / profesional. */
   profesional: Sustantivo
   /** Lo que se atiende y se cobra, en el panel: servicio / prestación. */
   servicio: Sustantivo
@@ -51,7 +51,7 @@ export interface PalabrasDelRubro {
    * quien reserva lee "hora", por eso son dos palabras distintas.
    */
   citaParaElCliente: Sustantivo
-  /** Qué es el negocio: salón / barbería / salón de uñas / clínica / negocio. */
+  /** Qué es el negocio: salón / barbería / salón de uñas / centro / clínica / negocio. */
   negocio: Sustantivo
   /** La sección de quienes ya llegaron: tablero / sala de espera. */
   tablero: Sustantivo
@@ -72,8 +72,8 @@ export interface PalabrasDelRubro {
 /**
  * Las palabras de la interfaz que cambian con el rubro (docs/PRODUCTO.md,
  * sección 1, "Vocabulario"). Cada rubro habla con las suyas: el salón, la
- * barbería y el salón de uñas con palabras propias ("estilista", "barbero",
- * "manicurista"), la clínica dental como una clínica ("pacientes", "sala de
+ * barbería, el salón de uñas y el centro de estética con palabras propias
+ * ("estilista", "barbero", "manicurista", "cosmetóloga"), la clínica dental como una clínica ("pacientes", "sala de
  * espera", "odontólogo", "motivo"). Un rubro desconocido o ninguno (una sesión
  * de antes del rubro, o los viejos `salud`, `fitness` y `otro`) usa las
  * palabras neutras, así que en un negocio sin rubro conocido no aparece nunca
@@ -100,6 +100,7 @@ export interface Vocabulario {
 const ID_DEL_SALON = "salon" satisfies RubroId
 const ID_DE_LA_BARBERIA = "barberia" satisfies RubroId
 const ID_DEL_SALON_DE_UNAS = "spa-de-unas" satisfies RubroId
+const ID_DEL_CENTRO_DE_ESTETICA = "estetica" satisfies RubroId
 
 /*
  * Las tablas de palabras con género y número. Los datos salen de la
@@ -152,6 +153,19 @@ function palabrasDelSalonDeUnas(): PalabrasDelRubro {
     ...palabrasDelSalon(),
     profesional: { singular: "manicurista", plural: "manicuristas", genero: "f" },
     negocio: { singular: "salón de uñas", plural: "salones de uñas", genero: "m" },
+  }
+}
+
+/**
+ * Centro de estética: como el salón (decisión del dueño: no es una clínica),
+ * salvo quien atiende ("cosmetóloga") y el negocio ("centro"). Confianza
+ * Media: `tablero` (heredado del salón).
+ */
+function palabrasDelCentroDeEstetica(): PalabrasDelRubro {
+  return {
+    ...palabrasDelSalon(),
+    profesional: { singular: "cosmetóloga", plural: "cosmetólogas", genero: "f" },
+    negocio: { singular: "centro", plural: "centros", genero: "m" },
   }
 }
 
@@ -212,6 +226,8 @@ function palabrasDe(rubro: unknown): PalabrasDelRubro {
       return palabrasDeLaBarberia()
     case ID_DEL_SALON_DE_UNAS:
       return palabrasDelSalonDeUnas()
+    case ID_DEL_CENTRO_DE_ESTETICA:
+      return palabrasDelCentroDeEstetica()
     case RUBRO_DENTAL:
       return palabrasDeLaClinicaDental()
     default:

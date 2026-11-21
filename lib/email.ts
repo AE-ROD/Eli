@@ -148,6 +148,7 @@ type TipoCorreo =
   | "reserva-confirmada-por-el-local"
   | "aviso-fila-virtual"
   | "turno-en-la-fila"
+  | "saldo-de-paquete"
   | TipoCorreoDePrueba
 
 /**
@@ -1310,5 +1311,45 @@ export function enviarTurnoEnLaFila(datos: DatosTurnoEnLaFila) {
     destacado: true,
     boton: { texto: "Ver mi turno", enlace: datos.enlaceTurno },
     cierre: html`Con el botón ves cuántas personas hay antes que tú, o sales de la fila si ya no puedes ir.`,
+  })
+}
+
+export interface DatosSaldoDePaquete {
+  emailCliente: string
+  nombreCliente: string
+  nombreNegocio: string
+  servicio: string
+  sesiones: number
+  /** 1 o 0: se avisa cuando queda la última y cuando se usó. */
+  restantes: number
+  /** La página de reservas del negocio (URL completa), para agendar la que sigue. */
+  enlaceReservar: string | null
+}
+
+/**
+ * "Te queda 1 sesión" / "Usaste la última sesión" de un paquete, después de
+ * cobrar la atención donde se usó. De servicio: es el saldo de algo que la
+ * clienta compró, no una promoción, así que no pide consentimiento ni lleva
+ * baja. A lo más dos por paquete (la penúltima y la última sesión).
+ */
+export function enviarSaldoDePaquete(datos: DatosSaldoDePaquete) {
+  const queda = datos.restantes > 0
+  return enviar({
+    tipo: "saldo-de-paquete",
+    para: datos.emailCliente,
+    negocio: datos.nombreNegocio,
+    asunto: queda ? asunto`Te queda 1 sesión de tu paquete — ${datos.nombreNegocio}` : asunto`Usaste la última sesión de tu paquete — ${datos.nombreNegocio}`,
+    titulo: queda ? "Te queda 1 sesión" : "Terminaste tu paquete",
+    intro: queda
+      ? html`Hola <strong>${datos.nombreCliente}</strong>, a tu paquete de <strong>${datos.servicio}</strong> en <strong>${datos.nombreNegocio}</strong> le queda una sesión.`
+      : html`Hola <strong>${datos.nombreCliente}</strong>, ya usaste todas las sesiones de tu paquete de <strong>${datos.servicio}</strong> en <strong>${datos.nombreNegocio}</strong>.`,
+    detalle: [
+      ["Paquete", `${datos.sesiones} sesiones de ${datos.servicio}`],
+      ["Te quedan", String(datos.restantes)],
+    ],
+    ...(datos.enlaceReservar ? { boton: { texto: queda ? "Reservar mi sesión" : "Reservar una hora", enlace: datos.enlaceReservar } } : {}),
+    cierre: queda
+      ? html`Si quieres seguir, pregunta por un paquete nuevo en tu próxima visita.`
+      : html`Si quieres seguir, pregunta por un paquete nuevo cuando vuelvas.`,
   })
 }

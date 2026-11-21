@@ -18,6 +18,7 @@ import { diaDeLaSemana, fechaYMinutosEn, rangoDelDiaEn, zonaDelNegocio } from "@
 import { LLEGADA_DE_LA_CITA, conLlegada } from "@/lib/por-confirmar"
 import { ESTADOS_QUE_LIBERAN } from "@/lib/ocupacion"
 import { WHERE_HORARIO_VIGENTE } from "@/lib/sedes"
+import { MEDIO_PAQUETE } from "@/lib/paquetes"
 
 /**
  * Las citas que cuentan en el día: las que ocupan su horario. Una cancelada
@@ -53,7 +54,8 @@ function cobradasEn(paidAt: { gte: Date; lt?: Date }) {
  */
 async function sumaDePagos(actor: Actor, paidAt: { gte: Date; lt?: Date }): Promise<number> {
   const { _sum } = await prisma.visitPayment.aggregate({
-    where: whereDePagos(actor, { visit: { is: cobradasEn(paidAt) } }),
+    // Sin lo pagado con sesiones de paquete: esa plata entró el día que se vendió.
+    where: whereDePagos(actor, { visit: { is: cobradasEn(paidAt) }, method: { not: MEDIO_PAQUETE } }),
     _sum: { amountCents: true },
   })
   return deCentavos(_sum.amountCents ?? 0)

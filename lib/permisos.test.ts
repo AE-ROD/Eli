@@ -1115,7 +1115,7 @@ describe("lo de salón que la clínica dental no usa (propinas, hora valle y fil
   })
 
   it.each(TABLA)("%s: salón, barbería, salón de uñas, rubros viejos y sin rubro siguen como siempre", (_nombre, permiso, [deDueña, deEncargado, deProfesional]) => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]) {
       expect(permiso(conRubro("owner", rubro))).toBe(deDueña)
       expect(permiso(conRubro("admin", rubro))).toBe(deEncargado)
       expect(permiso(conRubro("worker", rubro))).toBe(deProfesional)
@@ -1129,7 +1129,7 @@ describe("lo de salón que la clínica dental no usa (propinas, hora valle y fil
   })
 
   describe("las preguntas por rubro (sin actor)", () => {
-    const rubrosQueSi = ["salon", "barberia", "spa-de-unas", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]
+    const rubrosQueSi = ["salon", "barberia", "spa-de-unas", "estetica", "salud", "fitness", "otro", "Odontologia", "odontología", "", undefined, null, 7, ["odontologia"]]
 
     it("sólo el rubro dental dice que no; todo lo demás, también lo desconocido, sigue como siempre", () => {
       for (const pregunta of [rubroOfrecePropinas, rubroOfreceHoraValle, rubroOfreceFilaVirtual]) {
@@ -1186,7 +1186,7 @@ describe("clínica dental (rubro odontología)", () => {
   })
 
   it.each(TABLA)("%s: en un negocio que no es dental, nadie (ni la dueña)", (_nombre, permiso) => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas", "salud", "Odontologia", "odontología", ""]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica", "salud", "Odontologia", "odontología", ""]) {
       for (const rol of ["owner", "admin", "worker"] as const) {
         expect(permiso({ ...actor(rol), rubro })).toBe(false)
       }

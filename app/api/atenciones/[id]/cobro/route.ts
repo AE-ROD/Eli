@@ -12,7 +12,10 @@ import {
   requisitoFaltante,
   transicionPermitida,
 } from "@/lib/atenciones"
-import { actorDeSesion, puedeCobrar, puedeRegistrarPropina } from "@/lib/permisos"
+import { actorDeSesion, puedeCobrar, puedeRegistrarPropina, puedeVenderPaquetes } from "@/lib/permisos"
+import { MEDIO_PAQUETE } from "@/lib/paquetes"
+import { ErrorDePaquete, aplicarPaquetesEnElCobro, errorDePaquetesPedidos } from "@/lib/paquetes-servidor"
+import { avisarSaldoDePaquetes } from "@/lib/avisos-de-paquetes"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
@@ -45,6 +48,25 @@ const cobroSchema = z.object({
    * y las propinas van a su tabla. Hasta `MAXIMO_DE_PROPINAS`.
    */
   propinas: propinasPedidasSchema.default([]),
+  /**
+   * Paquetes de sesiones (lib/paquetes.ts): los que se venden en este cobro y
+   * las líneas que se pagan con una sesión. Lo pagado con paquete no va en
+   * `pagos`: lo calcula el servidor y lo registra con el medio interno.
+   */
+  paquetes: z
+    .object({
+      ventas: z.array(z.object({ paqueteId: z.string().min(1).max(64) })).default([]),
+      usos: z
+        .array(
+          z.object({
+            lineaId: z.string().min(1).max(64),
+            paqueteDeClienteId: z.string().min(1).max(64).optional(),
+            venta: z.number().int().min(0).max(50).optional(),
+          })
+        )
+        .default([]),
+    })
+    .default({ ventas: [], usos: [] }),
 })
 
 /**
@@ -109,7 +131,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const recibido = await cuerpoConTope(request)
     if (recibido.excedido) return respuestaDeCuerpoDemasiadoGrande()
-    const { pagos, propinas } = cobroSchema.parse(recibido.cuerpo)
+    const { pagos, propinas, paquetes } = cobroSchema.parse(recibido.cuerpo)
+
+    // Paquetes: los vende y los usa quien cobra, y no existen en la clínica
+    // dental (el rubro sale de la sesión). Falla cerrado.
+    const hayPaquetes = paquetes.ventas.length > 0 || paquetes.usos.length > 0
+    if (hayPaquetes && !puedeVenderPaquetes(actor)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+    const errorDeLosPaquetes = errorDePaquetesPedidos(paquetes)
+    if (errorDeLosPaquetes) throw new ErrorDeAtencion(400, errorDeLosPaquetes)
 
     // Registra propinas quien cobra, salvo en una clínica dental, que no
     // trabaja con ellas: ahí se rechazan aunque el navegador las mande (el
@@ -127,7 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const usuarioId = session?.user?.id ?? null
     const nombre = await nombreEnElNegocio(prisma, actor, usuarioId)
 
-    const atencion = await prisma.$transaction(async (tx) => {
+    const { atencion, avisos } = await prisma.$transaction(async (tx) => {
       // Primero los candados de liquidación de quienes atendieron y de
       // quienes reciben propina (§7): si se está cerrando la liquidación de
       // alguno, el cobro espera a que termine, en el mismo orden que la
@@ -153,6 +184,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         paidByName: nombre,
       })
 
+      // Paquetes: las ventas agregan su línea y los usos dejan la suya con
+      // el valor de la sesión, antes de leer las líneas y sumar el total.
+      const { prepagoCents, avisos } = await aplicarPaquetesEnElCobro(tx, actor, existente.id, paquetes, ahora, {
+        memberId: actor.memberId,
+        nombre,
+      }).catch((error) => {
+        if (error instanceof ErrorDePaquete) throw new ErrorDeAtencion(error.codigo, error.message)
+        throw error
+      })
+
       // Todas las líneas, de todos, contadas antes de leerlas: si pasan del
       // tope de servicios, o si su total no cabe, 400. Nunca se congela el
       // total de una parte. El total es el de la atención entera, y sólo lo
@@ -171,8 +212,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const falta = requisitoFaltante("finalizada", lineas, vocabularioDe(actor.rubro).palabras)
       if (falta) throw new ErrorDeAtencion(400, falta)
 
-      const errorDePagos = errorDeCobro(totalCentavos, pagos)
+      // Lo que cubren los paquetes no se paga de nuevo: los pagos suman el resto.
+      const errorDePagos = errorDeCobro(totalCentavos - prepagoCents, pagos)
       if (errorDePagos) throw new ErrorDeAtencion(400, errorDePagos)
+      if (prepagoCents > 0) {
+        await tx.visitPayment.create({ data: { visitId: existente.id, method: MEDIO_PAQUETE, amountCents: prepagoCents } })
+      }
 
       if (pagos.length > 0) {
         await tx.visitPayment.createMany({
@@ -218,8 +263,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
       }
 
-      return leerAtencion(tx, actor, existente.id)
+      return { atencion: await leerAtencion(tx, actor, existente.id), avisos }
     })
+
+    // Después de cobrar: a la clienta se le avisa si a un paquete le queda una
+    // sesión o ninguna. Si el correo falla, el cobro ya está hecho.
+    if (avisos.length > 0) void avisarSaldoDePaquetes(actor.businessId, existente.id, avisos)
 
     return NextResponse.json(atencion)
   } catch (error) {

@@ -9,7 +9,7 @@ import { conAdjetivoAntes, hastaElMomentoDe, hastaLaHoraDe, palabrasDeLaReserva,
  * clínica, aunque el panel diga "cita"); uno desconocido, como siempre.
  */
 
-const RUBROS_CON_PALABRAS = ["salon", "barberia", "spa-de-unas", "odontologia"] as const
+const RUBROS_CON_PALABRAS = ["salon", "barberia", "spa-de-unas", "estetica", "odontologia"] as const
 const RUBROS_SIN_PALABRAS = [undefined, null, "", "salud", "fitness", "otro", "peluqueria-canina", "constructor", "__proto__"] as const
 
 describe("palabrasDeLaReserva", () => {
@@ -50,7 +50,7 @@ describe("palabrasDeLaReserva", () => {
   })
 
   it("sólo la clínica es dental", () => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas"]) expect(palabrasDeLaReserva(rubro).clinicaDental).toBe(false)
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica"]) expect(palabrasDeLaReserva(rubro).clinicaDental).toBe(false)
   })
 
   it("devuelve palabras nuevas en cada llamada: cambiarlas no cambia las de los demás", () => {

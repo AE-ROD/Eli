@@ -466,6 +466,24 @@ export const puedeRegistrarAdelanto = gestionaElNegocio
  */
 export const veMiPlata = (actor: Actor | null): boolean => !!actor?.memberId
 
+// ─── Paquetes de sesiones (lib/paquetes.ts) ─────────────────────────────────
+
+/** Los paquetes no existen en la clínica dental (tiene su plan de tratamiento). Sin sesión, tampoco. */
+export const usaPaquetes = (actor: Actor | null): boolean => !!actor && !esClinicaDental(actor)
+
+/** Crear, editar y desactivar los paquetes que ofrece el negocio: quien gestiona los servicios. */
+export const puedeGestionarPaquetes = (actor: Actor | null): boolean => usaPaquetes(actor) && puedeGestionarServicios(actor)
+
+/** Vender un paquete o usar una sesión al cobrar: quien cobra. */
+export const puedeVenderPaquetes = (actor: Actor | null): boolean => usaPaquetes(actor) && puedeCobrar(actor)
+
+/** Ver qué paquetes tiene una clienta y cuántas sesiones le quedan: todo el equipo. Los montos, sólo quien ve ingresos. */
+export const puedeVerPaquetesDeClientes = (actor: Actor | null): boolean => usaPaquetes(actor)
+export const veMontosDePaquetes = (actor: Actor | null): boolean => usaPaquetes(actor) && puedeVerIngresosDelNegocio(actor)
+
+/** Devolver un paquete a medio usar: sale plata del negocio, es de la dueña. */
+export const puedeDevolverPaquete = (actor: Actor | null): boolean => usaPaquetes(actor) && esDueño(actor)
+
 /** Cerrar la caja: es la caja del día, como cobrar. Dueña y encargado. */
 export const puedeCerrarCaja = puedeCobrar
 
