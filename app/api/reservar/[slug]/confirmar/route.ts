@@ -51,6 +51,7 @@ import {
   duracionDeLaReserva,
   esElMismoCliente,
   esHoyEn,
+  formasDelTelefono,
   esReservaDeUrgencia,
   fechaNoReservable,
   mensajeDeTopePorContacto,
@@ -60,7 +61,11 @@ import {
   mensajeServicioNoDisponible,
   normalizarEmail,
   normalizarTelefono,
+  notaDeCorreoPorConfirmar,
+  notaDePosibleDuplicado,
   notaDeContactoPorConfirmar,
+  tienenElMismoNombre,
+  tienenElMismoTelefono,
   yaPasoLaHora,
 } from "@/lib/reserva-publica"
 import { esRubroDental } from "@/lib/rubros"
@@ -209,7 +214,27 @@ async function reservar(
         orderBy: { createdAt: "asc" },
       })
     : []
-  const reutilizado = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
+  const porEmail = conEseEmail.find((guardado) => esElMismoCliente(guardado, datos))
+
+  // Sin correo que lo reconozca, el teléfono + el nombre completo: las
+  // clientas importadas desde el teléfono casi nunca traen correo, y sin esto
+  // cada reserva suya abría una ficha nueva y partía su historial. El
+  // teléfono solo no basta (con el de otra persona, la reserva quedaba en su
+  // historial, M6): con otro nombre se crea una ficha nueva con un aviso de
+  // posible duplicado para que el local lo revise.
+  const formas = porEmail ? [] : formasDelTelefono(datos.telefono)
+  const conEseTelefono = formas.length
+    ? (
+        await tx.customer.findMany({
+          // Un cliente eliminado (anonimizado) nunca se reutiliza.
+          where: { AND: [{ businessId: negocioId, phone: { in: formas } }, clienteNoEliminado] },
+          select: { id: true, name: true, lastName: true, email: true, phone: true },
+          orderBy: { createdAt: "asc" },
+        })
+      ).filter((guardado) => tienenElMismoTelefono(guardado.phone, datos.telefono))
+    : []
+  const porTelefono = conEseTelefono.find((guardado) => tienenElMismoNombre(guardado, datos))
+  const reutilizado = porEmail ?? porTelefono
   let cliente: { id: string } | undefined = reutilizado
 
   // Consentimiento para recordatorios por WhatsApp (PRODUCTO.md §10): se
@@ -236,6 +261,9 @@ async function reservar(
   // local lo confirme a mano en la ficha (`notaDeContactoPorConfirmar`).
   let notaDeContacto: string | null = null
   if (!cliente) {
+    notaDeContacto = notaDePosibleDuplicado(
+      conEseTelefono.map((guardado) => [guardado.name, guardado.lastName].filter(Boolean).join(" "))
+    )
     cliente = await tx.customer.create({
       data: {
         // Nombre completo en `name`, como el resto de la app (panel, anotar
@@ -258,7 +286,12 @@ async function reservar(
       select: { id: true },
     })
   } else if (reutilizado) {
-    notaDeContacto = notaDeContactoPorConfirmar(reutilizado.phone, datos.telefono, conConsentimiento)
+    const notas = [
+      // Reconocido por teléfono: el correo dado, si no es el de la ficha, queda por confirmar.
+      porTelefono === reutilizado ? notaDeCorreoPorConfirmar(reutilizado.email, datos.email) : null,
+      notaDeContactoPorConfirmar(reutilizado.phone, datos.telefono, conConsentimiento),
+    ].filter((nota): nota is string => nota !== null)
+    notaDeContacto = notas.length ? notas.join(" ") : null
   }
 
   // Reservas por confirmar (#84): con la regla encendida, si el correo de

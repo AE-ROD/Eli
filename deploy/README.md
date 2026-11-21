@@ -1,6 +1,12 @@
 # Eli en un VPS de Hostinger: guía paso a paso
 
-Esta guía lleva Eli de Vercel a tu servidor (VPS) de Hostinger. Está escrita
+**Eli vive en este VPS de Hostinger**, en `https://eliagenda.com` (el DNS apunta
+a `187.41.114.36`). **Vercel ya no es producción.** Para publicar lo que entra a
+`main` se usa el paso 14 (`./deploy/actualizar.sh`): el VPS no se actualiza solo.
+Los pasos 0 a 13 cuentan cómo se armó el servidor y sirven para rehacerlo desde
+cero; el paso 13 (el lanzamiento) ya se hizo.
+
+Está escrita
 para alguien que **no es técnico**: cada comando va en su propio recuadro, y
 debajo dice qué deberías ver en pantalla. Si lo que ves es distinto, **para y
 no sigas**: pega *sólo la salida del comando* (nunca claves ni contraseñas) a
@@ -126,7 +132,7 @@ sea un chat**):
 | **IP del VPS** | `187.41.114.36` (la confirmas en hPanel → *VPS* → tu servidor → *Resumen*, "Dirección IP"). En la guía, `IP_DEL_VPS` es ésa. |
 | **Contraseña de root** | La que pusiste al crear el VPS (hPanel → VPS → *Configuración* si la quieres cambiar). |
 | **Versión de Ubuntu** | `24.04.5` (hPanel → VPS → Resumen). Esta guía vale para **22.04 y 24.04**. |
-| **Dominio** | `eliagenda.com`, comprado en Hostinger, con el DNS en hPanel. Todavía no sirve a Eli: hoy Eli vive sólo en su dirección de Vercel (`*.vercel.app`), así que pasar al VPS es un **lanzamiento** (paso 13), no un cambio de dirección. |
+| **Dominio** | `eliagenda.com`, comprado en Hostinger, con el DNS en hPanel. Apunta al VPS: es la dirección de Eli. |
 | **Variables de Eli** | Vercel → tu proyecto → *Settings* → *Environment Variables*. Son las mismas del paso 6. **`NEXTAUTH_SECRET` tiene que ser EXACTAMENTE el mismo que usa Vercel** (si no, los enlaces de baja y de cancelar/cambiar cita de los correos ya enviados dejan de servir). |
 | **Acceso a GitHub** | Que seas administrador del repositorio `AE-ROD/Eli` (para crear la deploy key). |
 | **Acceso a Neon** | Para saber la versión de Postgres (paso 3) y crear una base de pruebas (paso 11). |

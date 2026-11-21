@@ -1,17 +1,18 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useRef, useState, useSyncExternalStore } from "react"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, Upload } from "lucide-react"
+import { ArrowLeft, BookUser, ClipboardList, Upload } from "lucide-react"
 import { BarraSuperior } from "@/components/panel/barra-superior"
 import { Aviso } from "@/components/panel/aviso"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
 import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { Tarjeta } from "@/components/comunes/tarjeta"
-import { RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { actorDeSesion, puedeImportarExportarClientes } from "@/lib/permisos"
 import { decodificarCsv, leerCsv } from "@/lib/csv"
 import { vcardACsv } from "@/lib/vcard"
+import { contactosACsv, contactosDelSelector, leerListaEscrita, selectorDeContactos, type ContactosLeidos } from "@/lib/contactos"
+import { CAMPO, ETIQUETA, RELLENO_DE_TARJETA } from "@/components/panel/estilos"
 import { FILAS_MAXIMAS, TAMAÑO_MAXIMO_EN_BYTES, sugerirMapeo, type CampoDeImportacion } from "@/lib/importar-clientes"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { importarClientes, type ResumenDeImportacion as Resumen } from "../_datos"
@@ -27,13 +28,31 @@ interface ArchivoLeido {
 
 /** Contactos del teléfono (vCard): por su extensión o por su tipo. */
 function pareceVcf(archivo: File): boolean {
-  return archivo.name.toLowerCase().endsWith(".vcf") || /^text\/(x-)?vcard$/.test(archivo.type)
+  return /\.(vcf|vcard)$/i.test(archivo.name) || /^text\/(x-)?(vcard|directory)$/.test(archivo.type)
+}
+
+/** Un archivo de contactos que llegó sin extensión ni tipo: empieza con `BEGIN:VCARD`. */
+async function empiezaComoVcard(archivo: File): Promise<boolean> {
+  try {
+    const inicio = await archivo.slice(0, 64).text()
+    return /^\uFEFF?\s*BEGIN:VCARD/i.test(inicio)
+  } catch {
+    return false
+  }
 }
 
 /** Un CSV por su extensión o por su tipo: Windows a veces lo declara como de Excel, o sin tipo. */
 function pareceCsv(archivo: File): boolean {
   return archivo.name.toLowerCase().endsWith(".csv") || archivo.type.startsWith("text/")
 }
+
+/** iPhone, iPod o iPad (que en iPadOS se presenta como un Mac con pantalla táctil). */
+function esUnIphone(): boolean {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+}
+
+/** Que haya agenda no cambia mientras la página está abierta: no hay a qué suscribirse. */
+const sinSuscripcion = () => () => {}
 
 /**
  * Un .vcf puede pesar mucho más que el CSV que resulta de él: cada contacto
@@ -43,9 +62,11 @@ function pareceCsv(archivo: File): boolean {
 const TAMAÑO_MAXIMO_DEL_VCF_EN_BYTES = 25 * 1024 * 1024
 
 /**
- * Importar clientes desde un CSV o desde los contactos del teléfono (.vcf):
- * se elige el archivo, se revisa qué columna es cada dato con una vista previa, y el
- * servidor crea los que no estén repetidos. El archivo se lee acá sólo para
+ * Importar clientes de tres formas, de la más simple a la más completa:
+ * elegirlos de la agenda del teléfono (donde el navegador lo permite: Chrome en
+ * Android), escribir o pegar una lista, o subir un CSV o un .vcf. Las tres
+ * terminan en el mismo CSV: se revisa qué columna es cada dato con una vista
+ * previa, y el servidor crea los que no estén repetidos. El archivo se lee acá sólo para
  * mostrarlo; el servidor lo vuelve a leer y valida cada fila.
  */
 export default function PaginaImportarClientes() {
@@ -64,14 +85,70 @@ export default function PaginaImportarClientes() {
   const [importando, setImportando] = useState(false)
   const [resumen, setResumen] = useState<Resumen | null>(null)
 
-  const elegirArchivo = async (elegido: File | undefined) => {
+  // El selector de contactos sólo existe en algunos navegadores (Chrome en
+  // Android). En el servidor se pinta sin él y el navegador lo agrega al hidratar.
+  const hayAgenda = useSyncExternalStore(sinSuscripcion, () => selectorDeContactos() !== null, () => false)
+  // En iPhone el camino de la app Contactos va primero y con los pasos a la vista.
+  const esIphone = useSyncExternalStore(sinSuscripcion, esUnIphone, () => false)
+  const [lista, setLista] = useState("")
+  const idDeLaLista = useId()
+  const revision = useRef<HTMLDivElement>(null)
+
+  // En el teléfono la revisión queda más abajo: se lleva la vista hasta ella.
+  const llevarALaRevision = () =>
+    requestAnimationFrame(() => revision.current?.scrollIntoView({ behavior: "smooth", block: "start" }))
+
+  const empezarDeNuevo = () => {
     setAviso("")
     setNota("")
     setResumen(null)
     setArchivo(null)
+  }
+
+  /**
+   * Lo que viene de la agenda o de la lista ya es un CSV de importación: pasa
+   * por los mismos topes que un archivo y queda listo para revisar.
+   */
+  const cargarContactos = (origen: string, leidos: ContactosLeidos) => {
+    if (leidos.contactos === 0) return setAviso(frases.sinContactos)
+    if (new TextEncoder().encode(leidos.csv).byteLength > TAMAÑO_MAXIMO_EN_BYTES || leidos.contactos > FILAS_MAXIMAS) {
+      return setAviso("Son demasiados contactos para una sola vez. Tráelos en partes.")
+    }
+    const filas = leerCsv(leidos.csv)
+    setArchivo({ nombre: origen, texto: leidos.csv, filas })
+    setMapeo(sugerirMapeo(filas[0]) ?? {})
+    if (leidos.sinNombre > 0) setNota(frases.contactosSinNombre(leidos.sinNombre))
+    llevarALaRevision()
+  }
+
+  const elegirDeLaAgenda = async () => {
+    empezarDeNuevo()
+    const selector = selectorDeContactos()
+    if (!selector) return setAviso(frases.contactos.noSeAbrio)
+    let elegidos
+    try {
+      elegidos = await selector.select(["name", "tel", "email"], { multiple: true })
+    } catch {
+      return setAviso(frases.contactos.noSeAbrio)
+    }
+    // Cerrar la agenda sin elegir no es un error: no se dice nada.
+    if (!elegidos || elegidos.length === 0) return
+    cargarContactos(frases.origen.contactos(elegidos.length), contactosACsv(contactosDelSelector(elegidos)))
+  }
+
+  const revisarLista = () => {
+    empezarDeNuevo()
+    const contactos = leerListaEscrita(lista)
+    if (contactos.length === 0) return setAviso(frases.escribir.vacia)
+    cargarContactos(frases.origen.lista, contactosACsv(contactos))
+  }
+
+  const elegirArchivo = async (elegido: File | undefined) => {
+    empezarDeNuevo()
     if (!elegido) return
 
-    const esVcf = pareceVcf(elegido)
+    // El iPhone a veces entrega los contactos sin extensión ni tipo: se mira el contenido.
+    const esVcf = pareceVcf(elegido) || (await empiezaComoVcard(elegido))
     if (!esVcf && !pareceCsv(elegido)) return setAviso(frases.archivoNoValido)
     const tope = esVcf ? TAMAÑO_MAXIMO_DEL_VCF_EN_BYTES : TAMAÑO_MAXIMO_EN_BYTES
     if (elegido.size > tope) {
@@ -107,6 +184,7 @@ export default function PaginaImportarClientes() {
     setArchivo({ nombre: elegido.name, texto, filas })
     setMapeo(sugerirMapeo(filas[0]) ?? {})
     if (contactosSinNombre > 0) setNota(frases.contactosSinNombre(contactosSinNombre))
+    llevarALaRevision()
   }
 
   const cambiarMapeo = (campo: CampoDeImportacion, columna: number | undefined) => {
@@ -130,13 +208,14 @@ export default function PaginaImportarClientes() {
     if (!resultado.ok) return setAviso(resultado.error)
     setResumen(resultado.datos)
     setArchivo(null)
+    setLista("")
   }
 
   return (
     <div className="min-h-dvh">
       <BarraSuperior
         titulo={frases.titulo}
-        subtitulo="Desde un CSV (el que exporta tu sistema anterior o una planilla de Excel) o desde los contactos de tu teléfono."
+        subtitulo="Desde los contactos de tu teléfono, escribiendo una lista o con un archivo de tu sistema anterior."
         mostrarBusqueda={false}
       />
 
@@ -151,47 +230,110 @@ export default function PaginaImportarClientes() {
           <>
             {resumen && <ResumenDeImportacion resumen={resumen} palabras={palabras} />}
 
-            <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-archivo">
-              <div>
-                <h2 id="titulo-archivo" className="font-medium text-navy">
-                  {resumen ? "Importar otro archivo" : "Elige el archivo"}
-                </h2>
-                <p className="mt-1 text-sm text-texto-2">
-                  {frases.ayuda(FILAS_MAXIMAS.toLocaleString("es-CL"))}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* El input queda invisible pero enfocable: la etiqueta con forma de botón lo abre. */}
-                <label htmlFor={idDelArchivo} className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "cursor-pointer gap-2" })}>
-                  <Upload className="size-4" aria-hidden="true" strokeWidth={1.75} />
-                  Elegir archivo
+            {/* Un solo selector de archivo, invisible pero enfocable: las etiquetas con forma de botón lo abren. */}
+            <input
+              id={idDelArchivo}
+              type="file"
+              // En iPhone sin filtro: Safari traduce mal los tipos y deja el .vcf en gris,
+              // sin poder tocarlo. Qué archivo sirve lo decide `elegirArchivo` al leerlo.
+              accept={esIphone ? undefined : ".csv,text/csv,.vcf,.vcard,text/vcard,text/x-vcard"}
+              className="sr-only"
+              onChange={(e) => {
+                void elegirArchivo(e.target.files?.[0])
+                // Así elegir el mismo archivo otra vez también lo vuelve a leer.
+                e.target.value = ""
+              }}
+            />
+
+            {hayAgenda && (
+              <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-agenda">
+                <div>
+                  <h2 id="titulo-agenda" className="font-medium text-navy">{frases.contactos.titulo}</h2>
+                  <p className="mt-1 text-sm text-texto-2">{frases.contactos.ayuda}</p>
+                </div>
+                <Boton type="button" className="w-full sm:w-auto" icono={<BookUser aria-hidden="true" strokeWidth={1.75} />} onClick={() => void elegirDeLaAgenda()}>
+                  {frases.contactos.boton}
+                </Boton>
+              </Tarjeta>
+            )}
+
+            {esIphone && (
+              <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-iphone">
+                <h2 id="titulo-iphone" className="font-medium text-navy">{frases.iphone.titulo}</h2>
+                <ol className="list-decimal space-y-2 pl-5 text-sm text-texto-2">
+                  {frases.iphone.pasos.map((paso) => (
+                    <li key={paso}>{paso}</li>
+                  ))}
+                </ol>
+                <label htmlFor={idDelArchivo} className={clasesDeBoton({ className: "w-full cursor-pointer gap-2 sm:w-auto" })}>
+                  <BookUser className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                  {frases.iphone.boton}
                 </label>
-                <input
-                  id={idDelArchivo}
-                  type="file"
-                  accept=".csv,text/csv,.vcf,text/vcard,text/x-vcard"
-                  className="sr-only"
-                  onChange={(e) => {
-                    void elegirArchivo(e.target.files?.[0])
-                    // Así elegir el mismo archivo otra vez también lo vuelve a leer.
-                    e.target.value = ""
-                  }}
-                />
-                {archivo && <span className="text-sm text-texto-2">{archivo.nombre}</span>}
+              </Tarjeta>
+            )}
+
+            {!esIphone && (
+              <Tarjeta como="section" className={`space-y-4 ${RELLENO_DE_TARJETA}`} aria-labelledby="titulo-archivo">
+                <div>
+                  <h2 id="titulo-archivo" className="font-medium text-navy">
+                    {frases.archivo.titulo}
+                  </h2>
+                  <p className="mt-1 text-sm text-texto-2">
+                    {frases.ayuda(FILAS_MAXIMAS.toLocaleString("es-CL"))}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label htmlFor={idDelArchivo} className={clasesDeBoton({ variante: "secundario", tamano: "sm", className: "cursor-pointer gap-2" })}>
+                    <Upload className="size-4" aria-hidden="true" strokeWidth={1.75} />
+                    Elegir archivo
+                  </label>
+                </div>
+              </Tarjeta>
+            )}
+
+            {/* Para unos pocos, sin archivo: queda plegado para no competir con la agenda. */}
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-medium text-navy">{frases.escribir.titulo}</summary>
+              <div className="mt-3">
+                <Tarjeta className={`space-y-4 ${RELLENO_DE_TARJETA}`}>
+                  <p className="text-sm text-texto-2">{frases.escribir.ayuda}</p>
+                  <div>
+                    <label htmlFor={idDeLaLista} className={ETIQUETA}>
+                      Nombre y teléfono, uno por línea
+                    </label>
+                    <textarea
+                      id={idDeLaLista}
+                      rows={5}
+                      value={lista}
+                      onChange={(e) => setLista(e.target.value)}
+                      placeholder={frases.escribir.ejemplo}
+                      className={CAMPO}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Boton type="button" variante="secundario" tamano="sm" className="gap-2" icono={<ClipboardList aria-hidden="true" strokeWidth={1.75} />} onClick={revisarLista}>
+                    {frases.escribir.boton}
+                  </Boton>
+                </Tarjeta>
               </div>
-            </Tarjeta>
+            </details>
 
             {aviso && <Aviso>{aviso}</Aviso>}
             {nota && <Aviso tono="info">{nota}</Aviso>}
 
-            {archivo && (
-              <>
-                <VistaPrevia filas={archivo.filas} mapeo={mapeo} alCambiarMapeo={cambiarMapeo} />
-                <Boton type="button" className="w-full sm:w-auto" cargando={importando} onClick={importar}>
-                  {frases.titulo}
-                </Boton>
-              </>
-            )}
+            <div ref={revision} className="scroll-mt-4 space-y-4 sm:space-y-6">
+              {archivo && (
+                <>
+                  <p className="text-sm text-texto-2">
+                    Revisando: <span className="font-medium text-navy">{archivo.nombre}</span>
+                  </p>
+                  <VistaPrevia filas={archivo.filas} mapeo={mapeo} alCambiarMapeo={cambiarMapeo} />
+                  <Boton type="button" className="w-full sm:w-auto" cargando={importando} onClick={importar}>
+                    {frases.titulo}
+                  </Boton>
+                </>
+              )}
+            </div>
           </>
         )}
       </div>

@@ -9,7 +9,7 @@ import { al, concordar, del, el, ese, este, pronombreDe } from "@/lib/concordanc
 import { horaAMinutos } from "@/lib/horario-dia"
 import { palabrasDeLaReserva } from "@/lib/palabras-de-la-reserva"
 import { RUBRO_DENTAL } from "@/lib/rubros"
-import { aE164Chile } from "@/lib/telefono"
+import { aE164Chile, mostrarTelefono } from "@/lib/telefono"
 import { conMayuscula } from "@/lib/vocabulario"
 import { diaDeLaSemana, diasEntre, esFechaCalendario, fechaYMinutosEn, instanteEn } from "@/lib/zona-horaria"
 
@@ -388,7 +388,77 @@ export function esElMismoCliente(
 ): boolean {
   const email = normalizarEmail(reserva.email)
   if (!email || normalizarEmail(cliente.email) !== email) return false
+  return tienenElMismoNombre(cliente, reserva)
+}
+
+/** El mismo nombre completo, normalizado: "Lucía" + "Pérez" es "lucia perez", partido o junto. */
+export function tienenElMismoNombre(
+  cliente: { name: string; lastName: string | null },
+  reserva: { nombre: string; apellido: string }
+): boolean {
   return normalizarNombre(`${cliente.name} ${cliente.lastName ?? ""}`) === normalizarNombre(`${reserva.nombre} ${reserva.apellido}`)
+}
+
+/**
+ * El mismo teléfono chileno, escrito de cualquier forma ("9 1234 5678",
+ * "+56912345678"). Uno que no se puede leer como chileno no coincide con
+ * nada: comparar dígitos sueltos uniría números distintos.
+ */
+export function tienenElMismoTelefono(guardado: string | null | undefined, dado: string | null | undefined): boolean {
+  const e164 = aE164Chile(dado)
+  return e164 !== null && aE164Chile(guardado) === e164
+}
+
+/**
+ * Las formas en que un teléfono ya en E.164 puede estar guardado, para
+ * buscarlo en la base con `in`: los nuevos están en E.164, y los guardados
+ * antes de normalizar los teléfonos (`scripts/normalizar-telefonos.ts`)
+ * pueden estar como se escribieron. Lo traído se vuelve a comparar con
+ * `tienenElMismoTelefono`. `[]` si no es un teléfono chileno.
+ */
+export function formasDelTelefono(dado: string | null | undefined): string[] {
+  const e164 = aE164Chile(dado)
+  if (!e164) return []
+  const nacional = e164.slice(3)
+  const mostrado = mostrarTelefono(e164) // "+56 9 1234 5678"
+  const formas = [e164, `56${nacional}`, nacional, `+56 ${nacional}`, mostrado, mostrado.slice(4)]
+  return formas.filter((forma, i) => formas.indexOf(forma) === i)
+}
+
+/**
+ * Cuántas fichas con el mismo teléfono se nombran en el aviso de posible
+ * duplicado: más sería ruido.
+ */
+const FICHAS_EN_EL_AVISO = 3
+
+/**
+ * La nota interna de una reserva pública que creó una ficha nueva aunque el
+ * negocio ya tenía otra (u otras) con el mismo teléfono y otro nombre: puede
+ * ser la misma persona agendada con otro nombre ("Caro uñas" en la agenda del
+ * teléfono). No se une sola: el teléfono solo no basta para decir quién es.
+ * `null` sin fichas con ese teléfono.
+ */
+export function notaDePosibleDuplicado(nombres: readonly string[]): string | null {
+  if (nombres.length === 0) return null
+  const lista = nombres
+    .slice(0, FICHAS_EN_EL_AVISO)
+    .map((nombre) => `«${nombre}»`)
+    .join(", ")
+  const mas = nombres.length > FICHAS_EN_EL_AVISO ? ` y ${nombres.length - FICHAS_EN_EL_AVISO} más` : ""
+  const ficha = nombres.length === 1 ? "la ficha" : "las fichas"
+  return `Tiene el mismo teléfono que ${ficha} ${lista}${mas}: puede ser la misma persona con otro nombre. Revísalo en la ficha.`
+}
+
+/**
+ * La nota interna de una reserva pública reconocida por teléfono + nombre
+ * cuando trae un correo que no es el de la ficha. El correo no se escribe en
+ * la ficha: quien sabe el teléfono y el nombre de otra persona recibiría sus
+ * recordatorios. Lo confirma el local. `null` si no trae correo o es el mismo.
+ */
+export function notaDeCorreoPorConfirmar(emailGuardado: string | null | undefined, emailDado: string | null | undefined): string | null {
+  const dado = normalizarEmail(emailDado)
+  if (!dado || normalizarEmail(emailGuardado) === dado) return null
+  return `Correo dado al reservar: ${dado}. No se guardó en la ficha. Confírmalo y actualiza su ficha.`
 }
 
 /**

@@ -11,6 +11,10 @@ import {
   normalizarNombre,
   normalizarTelefono,
   notaDeContactoPorConfirmar,
+  notaDeCorreoPorConfirmar,
+  notaDePosibleDuplicado,
+  formasDelTelefono,
+  tienenElMismoTelefono,
   yaPasoLaHora,
   avisoSinCambiosPorElEnlace,
   avisoSinCambiosDespuesDeReservar,
@@ -460,5 +464,33 @@ describe("los rechazos de la reserva con las palabras del rubro", () => {
     expect(mensajeDeTopePorNegocio("odontologia")).toBe(
       "Esta clínica recibió demasiadas reservas en línea en las últimas horas. Intenta más tarde o contáctala directamente."
     )
+  })
+})
+
+describe("reconocer por teléfono", () => {
+  it("tienenElMismoTelefono compara números chilenos escritos de cualquier forma", () => {
+    expect(tienenElMismoTelefono("9 1234 5678", "+56912345678")).toBe(true)
+    expect(tienenElMismoTelefono("+56987654321", "912345678")).toBe(false)
+    expect(tienenElMismoTelefono("llamar al local", "912345678")).toBe(false)
+    expect(tienenElMismoTelefono(null, null)).toBe(false)
+  })
+
+  it("formasDelTelefono lista las formas guardables, sin repetir", () => {
+    const formas = formasDelTelefono("+56912345678")
+    expect(formas).toEqual(expect.arrayContaining(["+56912345678", "56912345678", "912345678", "+56 9 1234 5678", "9 1234 5678"]))
+    expect(new Set(formas).size).toBe(formas.length)
+    expect(formasDelTelefono("hola")).toEqual([])
+  })
+
+  it("notaDePosibleDuplicado nombra hasta 3 fichas", () => {
+    expect(notaDePosibleDuplicado([])).toBeNull()
+    expect(notaDePosibleDuplicado(["Caro"])).toContain("la ficha «Caro»")
+    expect(notaDePosibleDuplicado(["A", "B", "C", "D", "E"])).toContain("y 2 más")
+  })
+
+  it("notaDeCorreoPorConfirmar sólo con un correo distinto del guardado", () => {
+    expect(notaDeCorreoPorConfirmar(null, "")).toBeNull()
+    expect(notaDeCorreoPorConfirmar("a@b.cl", "A@B.cl")).toBeNull()
+    expect(notaDeCorreoPorConfirmar(null, "a@b.cl")).toContain("a@b.cl")
   })
 })
