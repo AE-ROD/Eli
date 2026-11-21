@@ -113,6 +113,7 @@ type TipoCorreo =
   | "aviso-fila-virtual"
   | "derivacion-de-secretaria"
   | "presupuesto-de-secretaria"
+  | "whatsapp-desconectado"
   | TipoCorreoDePrueba
 
 /**
@@ -1193,5 +1194,24 @@ export function enviarPresupuestoDeSecretaria(datos: DatosPresupuestoDeSecretari
       ? html`La Secretaria de <strong>${datos.nombreNegocio}</strong> usó todo el presupuesto del mes. Hasta el mes que viene, cada consulta nueva de WhatsApp te llega a ti.`
       : html`La Secretaria de <strong>${datos.nombreNegocio}</strong> ya usó el 80 % del presupuesto de este mes.`,
     ...(datos.enlace ? { boton: { texto: "Ver la Secretaria", enlace: datos.enlace } } : {}),
+  })
+}
+
+export interface DatosWhatsappDesconectado {
+  para: string
+  nombreNegocio: string
+  enlace: string | null
+}
+
+/** A la dueña: el WhatsApp de la Secretaria se desconectó y hay que volver a escanear el QR. */
+export function enviarWhatsappDesconectado(datos: DatosWhatsappDesconectado) {
+  return enviar({
+    tipo: "whatsapp-desconectado",
+    para: datos.para,
+    asunto: asunto`La Secretaria Eli se desconectó de tu WhatsApp en ${datos.nombreNegocio}`,
+    titulo: "La Secretaria se desconectó de tu WhatsApp",
+    intro: html`La Secretaria de <strong>${datos.nombreNegocio}</strong> ya no está conectada a tu WhatsApp, así que no está respondiendo. Tus mensajes te siguen llegando al celular como siempre.`,
+    ...(datos.enlace ? { boton: { texto: "Volver a conectar", enlace: datos.enlace } } : {}),
+    cierre: html`Para volver a conectarla, entra al panel y escanea el código QR desde WhatsApp → Dispositivos vinculados.`,
   })
 }

@@ -26,7 +26,6 @@ const PREFIJOS_SIN_LIMITE_DE_PANEL = [
   "/api/equipo/invitacion", // Aceptar invitación: por token, antes de tener sesión
   "/api/correos/baja", // Baja de los correos de prueba: por token firmado, sin sesión; su propio límite por IP
   "/api/correos/baja-de-cliente", // Baja de los correos promocionales de un cliente: por token firmado, sin sesión; su propio límite por IP
-  "/api/webhooks/whatsapp", // Lo llama Meta, sin sesión: firma X-Hub-Signature-256 y su propio límite por IP
 ]
 
 /**

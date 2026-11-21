@@ -156,9 +156,9 @@ const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
 // (mover grupos a una categoría, renombrar, unir) son una docena de pasos
 // seguidos la primera vez, así que 10 se quedaban cortos para el uso normal.
 const limitadorServiciosEnLote = crearLimitador("servicios-en-lote", 20, "1 h")
-// Webhook de WhatsApp (Meta): 600 por minuto por IP. La barrera de verdad es
-// la firma `X-Hub-Signature-256`; esto sólo pone techo a un bombardeo.
-const limitadorWebhookWhatsapp = crearLimitador("webhook-whatsapp", 600, "1 m")
+// Conectar el WhatsApp de la Secretaria (pedir un QR): 10 por hora por negocio.
+// Cada pedido abre una conexión con WhatsApp; más que eso no es un uso normal.
+const limitadorConexionWhatsapp = crearLimitador("conexion-whatsapp", 10, "1 h")
 // Simulador de la Secretaria en el panel: 60 mensajes por hora por usuario.
 // Cada mensaje es una llamada pagada al modelo.
 const limitadorSimuladorSecretaria = crearLimitador("simulador-secretaria", 60, "1 h")
@@ -187,7 +187,7 @@ export type TipoLimite =
   | "fotos"
   | "fotosPublicas"
   | "serviciosEnLote"
-  | "webhookWhatsapp"
+  | "conexionWhatsapp"
   | "simuladorSecretaria"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
@@ -214,7 +214,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   fotos: limitadorFotos,
   fotosPublicas: limitadorFotosPublicas,
   serviciosEnLote: limitadorServiciosEnLote,
-  webhookWhatsapp: limitadorWebhookWhatsapp,
+  conexionWhatsapp: limitadorConexionWhatsapp,
   simuladorSecretaria: limitadorSimuladorSecretaria,
 }
 
@@ -271,9 +271,9 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // Cerrado: cada mensaje del simulador es una llamada pagada al modelo, y
   // una caída del proveedor sólo demora una prueba.
   simuladorSecretaria: false,
-  // Abierto: lo llama Meta y la firma ya filtra lo ajeno; cortarlo dejaría a
-  // las clientas sin respuesta por una caída ajena.
-  webhookWhatsapp: true,
+  // Cerrado: abre una conexión con WhatsApp. Exige sesión de dueña, y una
+  // caída del proveedor sólo demora el escaneo del QR.
+  conexionWhatsapp: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

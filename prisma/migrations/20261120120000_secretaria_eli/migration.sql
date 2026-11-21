@@ -4,14 +4,31 @@
 CREATE TABLE "canales_de_whatsapp" (
     "id" TEXT NOT NULL,
     "businessId" TEXT NOT NULL,
-    "phoneNumberId" TEXT NOT NULL,
-    "wabaId" TEXT NOT NULL,
-    "accessTokenCifrado" TEXT NOT NULL,
-    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "estado" TEXT NOT NULL DEFAULT 'desconectado',
+    "numero" TEXT,
+    "credencialesCifradas" TEXT,
+    "condicionesAceptadasAt" TIMESTAMP(3),
+    "condicionesAceptadasPor" TEXT,
+    "conectadoAt" TIMESTAMP(3),
+    "desconectadoAt" TIMESTAMP(3),
+    "motivoDesconexion" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "canales_de_whatsapp_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "claves_de_whatsapp" (
+    "id" TEXT NOT NULL,
+    "businessId" TEXT NOT NULL,
+    "canalId" TEXT NOT NULL,
+    "tipo" TEXT NOT NULL,
+    "claveId" TEXT NOT NULL,
+    "valorCifrado" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "claves_de_whatsapp_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -35,6 +52,7 @@ CREATE TABLE "conversaciones_de_secretaria" (
     "businessId" TEXT NOT NULL,
     "canalId" TEXT,
     "telefono" TEXT NOT NULL,
+    "waJid" TEXT,
     "customerId" TEXT,
     "estado" TEXT NOT NULL DEFAULT 'bot',
     "turnos" INTEGER NOT NULL DEFAULT 0,
@@ -103,10 +121,10 @@ CREATE TABLE "avisos_del_panel" (
 CREATE UNIQUE INDEX "canales_de_whatsapp_businessId_key" ON "canales_de_whatsapp"("businessId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "canales_de_whatsapp_phoneNumberId_key" ON "canales_de_whatsapp"("phoneNumberId");
+CREATE UNIQUE INDEX "canales_de_whatsapp_id_businessId_key" ON "canales_de_whatsapp"("id", "businessId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "canales_de_whatsapp_id_businessId_key" ON "canales_de_whatsapp"("id", "businessId");
+CREATE UNIQUE INDEX "claves_de_whatsapp_canalId_tipo_claveId_key" ON "claves_de_whatsapp"("canalId", "tipo", "claveId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ajustes_de_secretaria_businessId_key" ON "ajustes_de_secretaria"("businessId");
@@ -121,7 +139,7 @@ CREATE UNIQUE INDEX "conversaciones_de_secretaria_id_businessId_key" ON "convers
 CREATE UNIQUE INDEX "conversaciones_de_secretaria_businessId_telefono_simulacion_key" ON "conversaciones_de_secretaria"("businessId", "telefono", "simulacion");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "mensajes_de_secretaria_waMessageId_key" ON "mensajes_de_secretaria"("waMessageId");
+CREATE UNIQUE INDEX "mensajes_de_secretaria_businessId_waMessageId_key" ON "mensajes_de_secretaria"("businessId", "waMessageId");
 
 -- CreateIndex
 CREATE INDEX "mensajes_de_secretaria_conversacionId_orden_idx" ON "mensajes_de_secretaria"("conversacionId", "orden");
@@ -134,6 +152,12 @@ CREATE INDEX "avisos_del_panel_businessId_createdAt_idx" ON "avisos_del_panel"("
 
 -- AddForeignKey
 ALTER TABLE "canales_de_whatsapp" ADD CONSTRAINT "canales_de_whatsapp_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "negocios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "claves_de_whatsapp" ADD CONSTRAINT "claves_de_whatsapp_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "negocios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "claves_de_whatsapp" ADD CONSTRAINT "claves_de_whatsapp_canalId_businessId_fkey" FOREIGN KEY ("canalId", "businessId") REFERENCES "canales_de_whatsapp"("id", "businessId") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ajustes_de_secretaria" ADD CONSTRAINT "ajustes_de_secretaria_businessId_fkey" FOREIGN KEY ("businessId") REFERENCES "negocios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -161,12 +185,13 @@ ALTER TABLE "avisos_del_panel" ADD CONSTRAINT "avisos_del_panel_businessId_fkey"
 
 
 -- Los valores válidos, como en el resto del esquema.
+ALTER TABLE "canales_de_whatsapp" ADD CONSTRAINT "canales_de_whatsapp_estado_check" CHECK ("estado" IN ('desconectado', 'esperando_qr', 'conectado'));
 ALTER TABLE "conversaciones_de_secretaria" ADD CONSTRAINT "conversaciones_de_secretaria_estado_check" CHECK ("estado" IN ('bot', 'human', 'closed'));
 ALTER TABLE "conversaciones_de_secretaria" ADD CONSTRAINT "conversaciones_de_secretaria_turnos_check" CHECK ("turnos" >= 0);
 ALTER TABLE "mensajes_de_secretaria" ADD CONSTRAINT "mensajes_de_secretaria_rol_check" CHECK ("rol" IN ('user', 'assistant'));
 ALTER TABLE "ajustes_de_secretaria" ADD CONSTRAINT "ajustes_de_secretaria_topes_check" CHECK ("maxTurnos" BETWEEN 1 AND 50 AND "maxTokens" BETWEEN 50 AND 2000 AND ("presupuestoMensualCentavos" IS NULL OR "presupuestoMensualCentavos" BETWEEN 0 AND 100000));
 ALTER TABLE "consumo_de_secretaria" ADD CONSTRAINT "consumo_de_secretaria_periodo_check" CHECK ("periodo" ~ '^[0-9]{4}-[0-9]{2}$');
-ALTER TABLE "avisos_del_panel" ADD CONSTRAINT "avisos_del_panel_tipo_check" CHECK ("tipo" IN ('derivacion', 'presupuesto-80', 'presupuesto-100'));
+ALTER TABLE "avisos_del_panel" ADD CONSTRAINT "avisos_del_panel_tipo_check" CHECK ("tipo" IN ('derivacion', 'presupuesto-80', 'presupuesto-100', 'whatsapp-desconectado'));
 
 -- Origen de cita nuevo: las que agenda la Secretaria por WhatsApp.
 ALTER TABLE "citas" DROP CONSTRAINT "citas_source_check";

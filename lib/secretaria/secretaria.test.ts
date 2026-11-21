@@ -1,32 +1,32 @@
 import { randomBytes } from "node:crypto"
 import { describe, it, expect, beforeEach } from "vitest"
-import { LlaveDeCifradoInvalida, cifrarToken, descifrarToken } from "./cifrado"
+import { LlaveDeCifradoInvalida, cifrar, descifrar } from "./cifrado"
 import { costoEnMicrodolares, periodoDe, porcentajeGastado } from "./costo"
 import { presupuestoDelNegocio } from "./config"
 
-describe("cifrado del token de WhatsApp", () => {
+describe("cifrado de la sesión de WhatsApp", () => {
   beforeEach(() => {
     process.env.WHATSAPP_TOKEN_KEY = randomBytes(32).toString("base64")
   })
 
   it("ida y vuelta, y dos cifrados del mismo token no se parecen", () => {
-    const uno = cifrarToken("EAAG-token")
-    expect(descifrarToken(uno)).toBe("EAAG-token")
-    expect(cifrarToken("EAAG-token")).not.toBe(uno)
+    const uno = cifrar("EAAG-token")
+    expect(descifrar(uno)).toBe("EAAG-token")
+    expect(cifrar("EAAG-token")).not.toBe(uno)
     expect(uno).not.toContain("EAAG")
   })
 
   it("un cifrado alterado no se descifra", () => {
-    const [version, iv, tag, datos] = cifrarToken("EAAG-token").split(":")
+    const [version, iv, tag, datos] = cifrar("EAAG-token").split(":")
     const alterado = [version, iv, tag, Buffer.from("otra-cosa").toString("base64")].join(":")
-    expect(() => descifrarToken(alterado)).toThrow()
+    expect(() => descifrar(alterado)).toThrow()
   })
 
   it("sin llave (o una de otro largo) falla cerrado", () => {
     delete process.env.WHATSAPP_TOKEN_KEY
-    expect(() => cifrarToken("x")).toThrow(LlaveDeCifradoInvalida)
+    expect(() => cifrar("x")).toThrow(LlaveDeCifradoInvalida)
     process.env.WHATSAPP_TOKEN_KEY = randomBytes(16).toString("base64")
-    expect(() => cifrarToken("x")).toThrow(LlaveDeCifradoInvalida)
+    expect(() => cifrar("x")).toThrow(LlaveDeCifradoInvalida)
   })
 })
 

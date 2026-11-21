@@ -792,27 +792,25 @@ Por WhatsApp responde sólo con la Secretaria encendida **y** el número activo;
 El servidor lo aplica con `puedeUsarSecretaria` (dueño y encargado) y `puedeConfigurarSecretaria` (sólo dueño) de `lib/permisos.ts`; sin permiso, 404.
 
 **Seguridad.**
-- **Firma de Meta.** El webhook es público, pero sólo acepta lo que trae la firma `X-Hub-Signature-256` válida con el secreto de la app; sin secreto configurado rechaza todo. Lleva su límite por IP. Un mensaje repetido por Meta no se procesa dos veces.
-- **Aislamiento por negocio.** El negocio de cada mensaje sale del `phone_number_id` del número conectado (y la cuenta que manda Meta tiene que ser la conectada), nunca del texto ni del modelo. Toda lectura y escritura filtra por ese negocio.
+- **Conexión por QR (sin Meta).** Cada negocio vincula su WhatsApp como dispositivo (Baileys, `lib/secretaria/whatsapp/`). Las conexiones viven dentro del mismo `next start` del VPS (un solo proceso) y se retoman solas al reiniciar (`instrumentation.ts`). Sólo se atienden mensajes nuevos (de hasta 10 minutos) de chats uno a uno; grupos, estados, difusiones y el historial del celular se ignoran. Antes de cada respuesta muestra "escribiendo…" de 1,5 a 7 segundos, con un tope de 12 mensajes por minuto por número. Si la dueña escribe en un chat desde su celular, la conversación pasa a "con una persona". Si WhatsApp corta la sesión (cerrada desde el celular, o sin conexión tras varios reintentos), el canal queda desconectado y la dueña recibe correo y aviso en el panel. Conectar exige aceptar las condiciones (quién y cuándo queda guardado) y tiene un límite de 10 intentos por hora. Un mensaje repetido no se procesa dos veces.
+- **Aislamiento por negocio.** El negocio de cada mensaje sale de la conexión que lo recibió, nunca del texto ni del modelo. Toda lectura y escritura filtra por ese negocio.
 - **Las herramientas no aceptan teléfono ni id de clienta del modelo:** siempre usan el número que escribe. Lo único que el modelo elige es servicio, día, hora y profesional, y todo se revalida contra la base de ese negocio. Así un "reserva a nombre de otra" o "busca el número +569…" no tiene por dónde pasar.
-- **Token cifrado.** El token de acceso de WhatsApp se guarda cifrado (AES-256-GCM) y nunca vuelve al navegador. Sin la llave configurada no se puede conectar un número.
-- Las llaves de Anthropic y Meta viven sólo en el servidor.
+- **Sesión cifrada.** La sesión de WhatsApp (credenciales y llaves) se guarda cifrada (AES-256-GCM) en la base y nunca vuelve al navegador; desconectar la borra. Sin la llave configurada no se puede conectar.
+- La llave de Anthropic vive sólo en el servidor.
 
 **Variables de entorno nuevas** (en `eli.env` del servidor):
 
 | Variable | Para qué |
 |---|---|
 | `ANTHROPIC_API_KEY` | La llave de la API de Anthropic. |
-| `WHATSAPP_VERIFY_TOKEN` | El token que se pone en Meta al registrar el webhook. |
-| `WHATSAPP_APP_SECRET` | El secreto de la app de Meta, para verificar la firma. |
-| `WHATSAPP_GRAPH_VERSION` | Opcional: la versión de la Graph API (`v21.0` por defecto). |
-| `WHATSAPP_TOKEN_KEY` | 32 bytes en base64 para cifrar los tokens de acceso. |
+| `WHATSAPP_TOKEN_KEY` | 32 bytes en base64 para cifrar la sesión de WhatsApp de cada negocio. |
 
-**Migración.** `prisma/migrations/20261120120000_secretaria_eli` crea seis tablas nuevas (canal de WhatsApp, ajustes, conversaciones, mensajes, consumo mensual y avisos del panel) y amplía los orígenes válidos de una cita con "whatsapp". No toca datos existentes. **La aplica el dueño**; hasta entonces la sección no funciona.
+**Migración.** `prisma/migrations/20261120120000_secretaria_eli` crea siete tablas nuevas (canal de WhatsApp, llaves de la sesión, ajustes, conversaciones, mensajes, consumo mensual y avisos del panel) y amplía los orígenes válidos de una cita con "whatsapp". No toca datos existentes. **La aplica el dueño**; hasta entonces la sección no funciona.
 
 **Fuera de alcance / pendiente.**
 - **Reportes mensuales** de la Secretaria (hoy sólo el consumo del mes en curso) y **cobro de excedentes** sobre el presupuesto.
-- **Embedded Signup** de Meta: hoy los datos del número se copian a mano.
+- **Audios, fotos y stickers:** la Secretaria sólo lee texto.
+- **Licencia:** Baileys depende de `libsignal` (GPL-3.0). Usada dentro del servidor, sin distribuir el programa, no obliga a publicar el código de Eli; si algún día se distribuyera (app instalable), hay que revisarlo.
 - **Reintento** si falla la respuesta: no se vuelve a intentar. Por WhatsApp, la conversación pasa a una persona (con el aviso de siempre) para que la clienta no quede sin respuesta; en el simulador se muestra el error.
 - **Mensajes seguidos:** una conversación se responde de a una vez. Si la clienta escribe mientras Eli le responde, al terminar Eli da otra vuelta con todo lo nuevo (hasta 3 seguidas).
 - **Negocios con varias sedes** (dos o más activas): la Secretaria no elige sede, así que no puede ofrecer horarios ni reservar (el servidor se lo rechaza) y lo esperable es que derive. No hay una derivación automática para este caso.

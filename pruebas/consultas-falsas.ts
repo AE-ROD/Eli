@@ -59,6 +59,7 @@ export type NombreDeModelo =
   | "workerInvitation"
   // Secretaria Eli (migración `20261120120000_secretaria_eli`).
   | "canalDeWhatsapp"
+  | "claveDeWhatsapp"
   | "ajustesDeSecretaria"
   | "conversacionDeSecretaria"
   | "mensajeDeSecretaria"
@@ -78,6 +79,7 @@ type ModeloOpcional =
   | "sede"
   | "workerInvitation"
   | "canalDeWhatsapp"
+  | "claveDeWhatsapp"
   | "ajustesDeSecretaria"
   | "conversacionDeSecretaria"
   | "mensajeDeSecretaria"
@@ -314,7 +316,12 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
   },
   workerInvitation: { business: uno("business", "businessId") },
   // Secretaria Eli: las FK hacia la conversación, el canal y la clienta son compuestas (`COMPUESTAS`).
-  canalDeWhatsapp: { business: uno("business", "businessId"), conversaciones: muchos("conversacionDeSecretaria", "canalId") },
+  canalDeWhatsapp: {
+    business: uno("business", "businessId"),
+    conversaciones: muchos("conversacionDeSecretaria", "canalId"),
+    claves: muchos("claveDeWhatsapp", "canalId"),
+  },
+  claveDeWhatsapp: { business: uno("business", "businessId"), canal: uno("canalDeWhatsapp", "canalId") },
   ajustesDeSecretaria: { business: uno("business", "businessId") },
   conversacionDeSecretaria: {
     business: uno("business", "businessId"),
@@ -340,6 +347,7 @@ export const COMPUESTAS: Partial<Record<NombreDeModelo, string[]>> = {
   // Secretaria Eli: `(canalId|customerId|conversacionId, businessId)`.
   conversacionDeSecretaria: ["canal", "customer"],
   mensajeDeSecretaria: ["conversacion"],
+  claveDeWhatsapp: ["canal"],
   // La sede de una franja del horario (etapa 9, `horarios_laborales_sedeId_businessId_fkey`);
   // su profesional es FK simple.
   workSchedule: ["sede"],

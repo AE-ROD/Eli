@@ -1,7 +1,7 @@
 /**
  * Lo que la página de la Secretaria lee de la base al entrar. Es de servidor:
  * lo importa sólo `page.tsx`. Toda consulta filtra por el negocio del actor
- * (CLAUDE.md, regla 1). El token de WhatsApp no se lee nunca.
+ * (CLAUDE.md, regla 1). Las credenciales de WhatsApp no se leen nunca.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -9,6 +9,7 @@ import type { Actor } from "@/lib/permisos"
 import { periodoDe, porcentajeGastado } from "@/lib/secretaria/costo"
 import { presupuestoDelNegocio } from "@/lib/secretaria/config"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { estadoDelWhatsapp, type EstadoDelWhatsapp } from "./_datos"
 
 /** Sin fila de ajustes la Secretaria está apagada, con los valores por defecto del esquema. */
 export const AJUSTES_POR_DEFECTO = {
@@ -20,11 +21,8 @@ export const AJUSTES_POR_DEFECTO = {
 
 export type AjustesDeLaSecretaria = typeof AJUSTES_POR_DEFECTO
 
-export interface CanalDeLaSecretaria {
-  phoneNumberId: string
-  wabaId: string
-  activo: boolean
-}
+/** El WhatsApp del negocio como lo ve la pantalla al entrar. El QR no: lo pide la tarjeta. */
+export type CanalDeLaSecretaria = Omit<EstadoDelWhatsapp, "qr">
 
 /** Sin montos: la dueña ve sólo el % del mes usado (el presupuesto lo paga Eli). */
 export interface ConsumoDelMes {
@@ -65,10 +63,10 @@ export async function leerLaSecretaria(actor: Actor) {
       where: { businessId },
       select: { activa: true, maxTurnos: true, maxTokens: true, presupuestoMensualCentavos: true, reglas: true },
     }),
-    // Sin `accessTokenCifrado`: el token no sale del servidor.
+    // Sin las credenciales de la conexión: no salen del servidor.
     prisma.canalDeWhatsapp.findUnique({
       where: { businessId },
-      select: { phoneNumberId: true, wabaId: true, activo: true },
+      select: { estado: true, numero: true, motivoDesconexion: true, condicionesAceptadasAt: true },
     }),
     prisma.consumoDeSecretaria.findUnique({
       where: { businessId_periodo: { businessId, periodo } },
@@ -111,7 +109,12 @@ export async function leerLaSecretaria(actor: Actor) {
   return {
     zona,
     ajustes: ajustesLeidos,
-    canal: canal as CanalDeLaSecretaria | null,
+    canal: {
+      estado: estadoDelWhatsapp(canal?.estado),
+      numero: canal?.numero ?? null,
+      motivoDesconexion: canal?.motivoDesconexion ?? null,
+      condicionesAceptadas: Boolean(canal?.condicionesAceptadasAt),
+    } satisfies CanalDeLaSecretaria,
     consumo: consumoDelMes,
     derivadas: derivadas.map(
       (conversacion): ConversacionDerivada => ({

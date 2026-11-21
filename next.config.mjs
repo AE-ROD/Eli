@@ -21,6 +21,9 @@ const nextConfig = {
   },
   // No anunciar `X-Powered-By: Next.js`: no le regalamos el stack a nadie.
   poweredByHeader: false,
+  // Baileys (WhatsApp de la Secretaria) se carga tal cual desde node_modules:
+  // tiene dependencias opcionales (sharp, jimp...) que el empaquetador no resuelve.
+  serverExternalPackages: ["baileys"],
   async headers() {
     return [{ source: "/:path*", headers: cabecerasDeSeguridad }]
   },

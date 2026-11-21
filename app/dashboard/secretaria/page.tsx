@@ -12,8 +12,8 @@ import { SeccionWhatsapp } from "./_componentes/seccion-whatsapp"
 /**
  * Secretaria Eli: el agente que atiende el WhatsApp del negocio. Dueño y
  * encargado la ven, la prueban en el simulador y devuelven a Eli las
- * conversaciones derivadas. Encenderla y el número de WhatsApp son sólo del
- * dueño; el presupuesto lo define Eli por plan y aquí sólo se ve el % usado. El permiso se mira en el servidor: sin él, de vuelta al
+ * conversaciones derivadas. Encenderla y conectar el WhatsApp son sólo del
+ * dueño (el encargado ve si está conectado); el presupuesto lo define Eli por plan y aquí sólo se ve el % usado. El permiso se mira en el servidor: sin él, de vuelta al
  * inicio. Los endpoints lo vuelven a mirar (404).
  */
 export default async function PaginaSecretaria() {
@@ -41,7 +41,7 @@ export default async function PaginaSecretaria() {
           </div>
         </div>
         <SeccionAjustes inicial={ajustes} editable={esDueño} />
-        {esDueño && <SeccionWhatsapp inicial={canal} />}
+        <SeccionWhatsapp inicial={canal} editable={esDueño} />
       </div>
     </div>
   )

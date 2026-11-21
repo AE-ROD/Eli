@@ -204,6 +204,7 @@ model Business {
   sedes                      Sede[]
   // Secretaria Eli: el agente de IA que atiende el WhatsApp del negocio.
   canalDeWhatsapp            CanalDeWhatsapp?
+  clavesDeWhatsapp           ClaveDeWhatsapp[]
   ajustesDeSecretaria        AjustesDeSecretaria?
   conversacionesDeSecretaria ConversacionDeSecretaria[]
   mensajesDeSecretaria       MensajeDeSecretaria[]
@@ -1881,28 +1882,54 @@ model Sede {
 // ─── Secretaria Eli ─────────────────────────────────────────────────────────
 //
 // El agente de IA que atiende el WhatsApp de cada negocio (`lib/secretaria/`).
-// Todo lleva `businessId`: el negocio de un mensaje entrante sale SIEMPRE del
-// `phoneNumberId` del canal, nunca de lo que diga el modelo ni el mensaje.
+// Todo lleva `businessId`: el negocio de un mensaje entrante sale SIEMPRE de la
+// sesión de WhatsApp que lo recibió, nunca de lo que diga el modelo ni el mensaje.
 
-/// El número de WhatsApp Cloud API del negocio. Uno por negocio. El token de
-/// acceso va cifrado (`lib/secretaria/cifrado.ts`, AES-256-GCM con
-/// `WHATSAPP_TOKEN_KEY`): nunca se guarda ni se devuelve en claro.
+/// El WhatsApp del negocio, conectado como dispositivo vinculado (QR, como
+/// WhatsApp Web; `lib/secretaria/whatsapp/`). Uno por negocio. Las credenciales
+/// de la sesión van cifradas (`lib/secretaria/cifrado.ts`, AES-256-GCM con
+/// `WHATSAPP_TOKEN_KEY`): nunca se guardan ni se devuelven en claro.
 model CanalDeWhatsapp {
-  id                 String   @id @default(cuid())
-  businessId         String   @unique
-  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  /// El id del número en Meta: con él se reconoce el negocio de un mensaje entrante.
-  phoneNumberId      String   @unique
-  wabaId             String
-  accessTokenCifrado String
-  activo             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                      String    @id @default(cuid())
+  businessId              String    @unique
+  business                Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// "desconectado" | "esperando_qr" | "conectado" (CHECK).
+  estado                  String    @default("desconectado")
+  /// El número vinculado, en E.164. Null hasta que se escanea el QR.
+  numero                  String?
+  /// Las credenciales de la sesión (`creds` de Baileys), cifradas. Null = sin sesión.
+  credencialesCifradas    String?
+  /// Cuándo y quién (`User.id`) aceptó las condiciones de la conexión no oficial.
+  condicionesAceptadasAt  DateTime?
+  condicionesAceptadasPor String?
+  conectadoAt             DateTime?
+  desconectadoAt          DateTime?
+  motivoDesconexion       String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
+  claves         ClaveDeWhatsapp[]
   conversaciones ConversacionDeSecretaria[]
 
   @@unique([id, businessId])
   @@map("canales_de_whatsapp")
+}
+
+/// Las llaves de cifrado de la sesión de WhatsApp (las de Signal: pre-keys,
+/// sesiones, sender-keys...). Una fila por llave, cifrada. Se borran con el canal.
+model ClaveDeWhatsapp {
+  id           String          @id @default(cuid())
+  businessId   String
+  business     Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  canalId      String
+  canal        CanalDeWhatsapp @relation(fields: [canalId, businessId], references: [id, businessId], onDelete: Cascade)
+  tipo         String
+  claveId      String
+  valorCifrado String
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([canalId, tipo, claveId])
+  @@map("claves_de_whatsapp")
 }
 
 /// Cómo atiende la Secretaria en un negocio. Sin fila, está apagada.
@@ -1932,11 +1959,13 @@ model ConversacionDeSecretaria {
   id                String           @id @default(cuid())
   businessId        String
   business          Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  /// Null en el simulador, que no pasa por Meta.
+  /// Null en el simulador, que no pasa por WhatsApp.
   canalId           String?
   canal             CanalDeWhatsapp? @relation(fields: [canalId, businessId], references: [id, businessId], onDelete: Cascade)
   /// En E.164 (+569...).
   telefono          String
+  /// A quién se le responde en WhatsApp (el JID del chat: `...@s.whatsapp.net` o `...@lid`). Null en el simulador.
+  waJid             String?
   customerId        String?
   customer          Customer?        @relation(fields: [customerId, businessId], references: [id, businessId], onDelete: Cascade)
   /// "bot" | "human" | "closed" (CHECK). En "human" la Secretaria no responde.
@@ -1977,13 +2006,15 @@ model MensajeDeSecretaria {
   contenido      Json
   tokensEntrada  Int                      @default(0)
   tokensSalida   Int                      @default(0)
-  /// El id del mensaje entrante en WhatsApp: hace idempotente el webhook.
-  waMessageId    String?                  @unique
+  /// El id del mensaje en WhatsApp: hace idempotente la recepción, y marca
+  /// los que mandó la Secretaria (para no confundirlos con los de la dueña).
+  waMessageId    String?
   /// El orden en que se guardaron: dos mensajes del mismo milisegundo (una
   /// llamada a herramienta y su resultado) no se desordenan, como con `createdAt`.
   orden          Int                      @default(autoincrement())
   createdAt      DateTime                 @default(now())
 
+  @@unique([businessId, waMessageId])
   @@index([conversacionId, orden])
   @@map("mensajes_de_secretaria")
 }

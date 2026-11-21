@@ -13,7 +13,7 @@ import { guardarMensajeEntrante, responder } from "@/lib/secretaria/agente"
 
 /**
  * El simulador de la Secretaria en el panel: chatear con el agente del negocio
- * de la sesión sin pasar por Meta. Usa el mismo servicio que el webhook
+ * de la sesión sin pasar por WhatsApp. Usa el mismo servicio que los mensajes de WhatsApp
  * (`lib/secretaria/agente.ts`), así que las reservas que cree quedan en la
  * agenda de verdad. El número es el de una clienta de prueba que se elige en
  * la pantalla; la conversación queda marcada como simulación.

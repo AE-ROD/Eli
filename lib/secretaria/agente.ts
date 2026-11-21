@@ -28,13 +28,12 @@ import {
 import { HERRAMIENTAS, ejecutarHerramienta, type ContextoDeHerramientas, type PedidoDeDerivacion } from "@/lib/secretaria/herramientas"
 import { bloqueDeHoy, promptDelNegocio } from "@/lib/secretaria/prompt"
 import { clienteDelModelo } from "@/lib/secretaria/modelo"
-import { descifrarToken } from "@/lib/secretaria/cifrado"
-import { enviarTextoPorWhatsapp } from "@/lib/secretaria/whatsapp"
+import { enviarPorWhatsapp } from "@/lib/secretaria/whatsapp/envio"
 
 /**
  * La Secretaria Eli: atiende un mensaje entrante de una conversación. La usan
- * el webhook de WhatsApp y el simulador del panel, con la misma lógica; la
- * única diferencia es por dónde sale la respuesta (la Graph API o la
+ * los mensajes que llegan al WhatsApp conectado y el simulador del panel, con la misma lógica; la
+ * única diferencia es por dónde sale la respuesta (el WhatsApp conectado o la
  * pantalla).
  *
  * El negocio SIEMPRE viene de afuera (el canal de WhatsApp o la sesión del
@@ -55,6 +54,8 @@ export interface MensajeAGuardar {
   /** Null en el simulador. */
   canalId: string | null
   telefono: string
+  /** El chat de WhatsApp al que se responde. Null en el simulador. */
+  waJid?: string | null
   simulacion: boolean
   texto: string | null
   waMessageId?: string
@@ -63,7 +64,7 @@ export interface MensajeAGuardar {
 
 /**
  * Guarda el mensaje entrante (y abre la conversación si no existe). Con un
- * `waMessageId` que ya estaba, no guarda nada: es un reintento de Meta.
+ * `waMessageId` que ya estaba, no guarda nada: WhatsApp lo entregó dos veces.
  */
 export async function guardarMensajeEntrante(
   mensaje: MensajeAGuardar
@@ -83,11 +84,16 @@ export async function guardarMensajeEntrante(
           businessId: mensaje.negocioId,
           canalId: mensaje.canalId,
           telefono: mensaje.telefono,
+          waJid: mensaje.waJid ?? null,
           simulacion: mensaje.simulacion,
           ultimoMensajeAt: mensaje.ahora,
           mensajesEntrantes: 1,
         },
-        update: { ultimoMensajeAt: mensaje.ahora, mensajesEntrantes: { increment: 1 } },
+        update: {
+          ultimoMensajeAt: mensaje.ahora,
+          mensajesEntrantes: { increment: 1 },
+          ...(mensaje.waJid ? { waJid: mensaje.waJid } : {}),
+        },
         select: { id: true },
       })
       await tx.mensajeDeSecretaria.create({
@@ -126,7 +132,8 @@ interface Conversacion {
   estado: string
   turnos: number
   simulacion: boolean
-  canal: { phoneNumberId: string; accessTokenCifrado: string; activo: boolean } | null
+  waJid: string | null
+  canal: { estado: string } | null
 }
 
 interface Negocio {
@@ -213,7 +220,8 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
         estado: true,
         turnos: true,
         simulacion: true,
-        canal: { select: { phoneNumberId: true, accessTokenCifrado: true, activo: true } },
+        waJid: true,
+        canal: { select: { estado: true } },
       },
     }),
     prisma.business.findUnique({
@@ -227,8 +235,8 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
 
   // Derivada a una persona: se guarda lo que escribe, pero la Secretaria no responde.
   if (conversacion.estado === "human") return { respuestas: [], estado: "human", derivada: false, sinRespuesta: "humana" }
-  // Por WhatsApp sólo responde encendida y con el canal activo. El simulador sirve para probarla antes.
-  if (!conversacion.simulacion && (!ajustes.activa || !conversacion.canal?.activo)) {
+  // Por WhatsApp sólo responde encendida y con el WhatsApp conectado. El simulador sirve para probarla antes.
+  if (!conversacion.simulacion && (!ajustes.activa || conversacion.canal?.estado !== "conectado")) {
     return { respuestas: [], estado: conversacion.estado as EstadoDeConversacion, derivada: false, sinRespuesta: "apagada" }
   }
   // Una conversación cerrada que vuelve a escribir empieza de nuevo.
@@ -306,14 +314,10 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
 
 function enviarDeLaConversacion(conversacion: Conversacion, respuestas: string[]): Enviar {
   return async (texto) => {
+    let waMessageId: string | null = null
     if (!conversacion.simulacion) {
-      if (!conversacion.canal) throw new Error("Conversación de WhatsApp sin canal")
-      await enviarTextoPorWhatsapp({
-        phoneNumberId: conversacion.canal.phoneNumberId,
-        accessToken: descifrarToken(conversacion.canal.accessTokenCifrado),
-        para: conversacion.telefono,
-        texto,
-      })
+      if (!conversacion.waJid) throw new Error("Conversación de WhatsApp sin chat")
+      waMessageId = await enviarPorWhatsapp(conversacion.businessId, conversacion.waJid, texto)
     }
     respuestas.push(texto)
     await prisma.mensajeDeSecretaria.create({
@@ -322,6 +326,7 @@ function enviarDeLaConversacion(conversacion: Conversacion, respuestas: string[]
         conversacionId: conversacion.id,
         rol: "assistant",
         contenido: [{ type: "text", text: texto }],
+        waMessageId,
       },
     })
   }

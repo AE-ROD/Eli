@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto"
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { NextRequest } from "next/server"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, conId, datosBase, pedido, sesiones } from "@/pruebas/datos"
@@ -20,15 +20,23 @@ const base = crearBaseFalsa()
 vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 
 const crearMensaje = vi.fn()
+
+// La conexión con WhatsApp de verdad no se abre en los tests: se mira qué negocio se pide.
+const gestor = vi.hoisted(() => ({
+  conectarWhatsapp: vi.fn(async (_negocioId: string) => {}),
+  desconectarWhatsapp: vi.fn(async (_negocioId: string) => {}),
+  qrPendiente: vi.fn((_negocioId: string): string | null => null),
+}))
+vi.mock("@/lib/secretaria/whatsapp/gestor", () => gestor)
 vi.mock("@/lib/secretaria/modelo", () => ({ clienteDelModelo: () => ({ messages: { create: crearMensaje } }) }))
 
 const ajustes = () => import("./ajustes/route")
-const canal = () => import("./canal/route")
+const whatsapp = () => import("./whatsapp/route")
 const simulador = () => import("./simulador/route")
 const devolver = () => import("./conversaciones/[id]/devolver/route")
 
 const AJUSTES = { activa: true, maxTurnos: 10, maxTokens: 200, reglas: "Sin reservas los sábados" }
-const CANAL = { phoneNumberId: "1234567890", wabaId: "9876543210", accessToken: "EAAG-secreto", activo: true }
+const ACEPTA = { aceptoLasCondiciones: true }
 
 function escenario() {
   const datos = datosBase()
@@ -43,22 +51,13 @@ function escenario() {
 
 const como = (sesion: unknown) => mockGetServerSession.mockResolvedValue(sesion)
 
-/** Lo que responde Meta al preguntar los números de una cuenta: por defecto, el del pedido es suyo. */
-const metaFalsa = vi.fn(async (_url: string, _opciones?: RequestInit) =>
-  Response.json({ data: [{ id: "1234567890" }] })
-)
-
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubGlobal("fetch", metaFalsa)
+  gestor.qrPendiente.mockReturnValue(null)
   escenario()
 })
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
-
-describe("ajustes y canal: sólo la dueña", () => {
+describe("ajustes y WhatsApp: sólo la dueña", () => {
   it.each([
     ["el encargado", sesiones.encargado],
     ["la profesional", sesiones.carla],
@@ -66,9 +65,12 @@ describe("ajustes y canal: sólo la dueña", () => {
   ])("%s recibe 404 y no se escribe nada", async (_quien, sesion) => {
     como(sesion)
     expect((await (await ajustes()).PUT(pedido("http://x/api/secretaria/ajustes", AJUSTES))).status).toBe(404)
-    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))).status).toBe(404)
+    expect((await (await whatsapp()).POST(pedido("http://x/api/secretaria/whatsapp", ACEPTA))).status).toBe(404)
+    expect((await (await whatsapp()).DELETE()).status).toBe(404)
     expect(base.buscar("ajustesDeSecretaria")).toHaveLength(0)
     expect(base.buscar("canalDeWhatsapp")).toHaveLength(0)
+    expect(gestor.conectarWhatsapp).not.toHaveBeenCalled()
+    expect(gestor.desconectarWhatsapp).not.toHaveBeenCalled()
   })
 
   it("la dueña guarda los ajustes de su negocio; el presupuesto queda en el del plan", async () => {
@@ -88,41 +90,60 @@ describe("ajustes y canal: sólo la dueña", () => {
     expect(base.buscar("ajustesDeSecretaria")).toHaveLength(0)
   })
 
-  it("la dueña conecta su número: el token queda cifrado y no vuelve en la respuesta", async () => {
+  it("sin aceptar las condiciones no se conecta", async () => {
     como(sesiones.dueña)
-    const respuesta = await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))
+    for (const cuerpo of [{}, { aceptoLasCondiciones: false }, { aceptoLasCondiciones: "sí" }]) {
+      expect((await (await whatsapp()).POST(pedido("http://x/api/secretaria/whatsapp", cuerpo))).status).toBe(400)
+    }
+    expect(base.buscar("canalDeWhatsapp")).toHaveLength(0)
+    expect(gestor.conectarWhatsapp).not.toHaveBeenCalled()
+  })
+
+  it("la dueña acepta y conecta: queda registrado quién aceptó y recibe el QR de su negocio", async () => {
+    como(sesiones.dueña)
+    gestor.qrPendiente.mockReturnValue("codigo-del-qr")
+    const respuesta = await (await whatsapp()).POST(pedido("http://x/api/secretaria/whatsapp", ACEPTA))
     expect(respuesta.status).toBe(200)
     const cuerpo = await respuesta.json()
-    expect(JSON.stringify(cuerpo)).not.toContain("EAAG")
-    const [guardado] = base.buscar("canalDeWhatsapp")
-    expect(guardado).toMatchObject({ businessId: NEGOCIO, phoneNumberId: "1234567890" })
-    expect(String(guardado.accessTokenCifrado)).not.toContain("EAAG")
-
-    // Sin token nuevo, se conserva el que había.
-    const { accessToken: _sinToken, ...sinToken } = CANAL
-    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", { ...sinToken, activo: false }))).status).toBe(200)
-    expect(base.buscar("canalDeWhatsapp")[0]).toMatchObject({ activo: false, accessTokenCifrado: guardado.accessTokenCifrado })
+    expect(cuerpo).toMatchObject({ estado: "esperando_qr", condicionesAceptadas: true })
+    expect(cuerpo.qr).toMatch(/^data:image\/png;base64,/)
+    expect(gestor.conectarWhatsapp).toHaveBeenCalledWith(NEGOCIO)
+    expect(gestor.qrPendiente).toHaveBeenCalledWith(NEGOCIO)
+    expect(base.buscar("canalDeWhatsapp")).toEqual([
+      expect.objectContaining({ businessId: NEGOCIO, condicionesAceptadasPor: "u-duena", condicionesAceptadasAt: expect.any(Date) }),
+    ])
   })
 
-  it("si Meta no confirma que el número es de esa cuenta con ese token, no se conecta", async () => {
-    como(sesiones.dueña)
-    metaFalsa.mockResolvedValueOnce(Response.json({ data: [{ id: "5555555555" }] }))
-    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))).status).toBe(400)
-    metaFalsa.mockResolvedValueOnce(Response.json({ error: { message: "sin permiso" } }, { status: 403 }))
-    expect((await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))).status).toBe(400)
-    expect(base.buscar("canalDeWhatsapp")).toHaveLength(0)
-    const [url, opciones] = metaFalsa.mock.calls[0]
-    expect(url).toContain("/9876543210/phone_numbers")
-    expect(new Headers(opciones?.headers).get("authorization")).toBe("Bearer EAAG-secreto")
+  it("el encargado ve el estado, pero no el QR", async () => {
+    gestor.qrPendiente.mockReturnValue("codigo-del-qr")
+    base.reiniciar({ ...base.volcado(), canalDeWhatsapp: [{ id: "canal-1", businessId: NEGOCIO, estado: "esperando_qr" }] })
+    como(sesiones.encargado)
+    const respuesta = await (await whatsapp()).GET()
+    expect(respuesta.status).toBe(200)
+    expect(await respuesta.json()).toMatchObject({ estado: "esperando_qr", qr: null })
+    como(sesiones.carla)
+    expect((await (await whatsapp()).GET()).status).toBe(404)
   })
 
-  it("un número ya conectado a otro negocio no se puede tomar", async () => {
-    como(sesiones.dueñoAjeno)
-    await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))
+  it("cada dueña ve sólo su WhatsApp, y no recibe datos de la sesión", async () => {
+    base.reiniciar({
+      ...base.volcado(),
+      canalDeWhatsapp: [
+        { id: "canal-1", businessId: NEGOCIO, estado: "conectado", numero: "+56900000001", credencialesCifradas: "v1:secreto" },
+        { id: "canal-2", businessId: OTRO_NEGOCIO, estado: "conectado", numero: "+56900000002", credencialesCifradas: "v1:otro" },
+      ],
+    })
     como(sesiones.dueña)
-    const respuesta = await (await canal()).PUT(pedido("http://x/api/secretaria/canal", CANAL))
-    expect(respuesta.status).toBe(409)
-    expect(base.buscar("canalDeWhatsapp")).toEqual([expect.objectContaining({ businessId: OTRO_NEGOCIO })])
+    const cuerpo = await (await (await whatsapp()).GET()).json()
+    expect(cuerpo).toMatchObject({ estado: "conectado", numero: "+56900000001" })
+    expect(JSON.stringify(cuerpo)).not.toContain("v1:")
+  })
+
+  it("desconectar desconecta sólo el negocio de la sesión", async () => {
+    como(sesiones.dueña)
+    expect((await (await whatsapp()).DELETE()).status).toBe(200)
+    expect(gestor.desconectarWhatsapp).toHaveBeenCalledWith(NEGOCIO)
+    expect(gestor.desconectarWhatsapp).toHaveBeenCalledTimes(1)
   })
 })
 

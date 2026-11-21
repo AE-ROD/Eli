@@ -5,10 +5,8 @@ import { planConocido, type PlanId } from "@/lib/planes"
  *
  * Variables de entorno (todas del servidor, ninguna llega al navegador):
  * - `ANTHROPIC_API_KEY`: la llave de la API de Anthropic.
- * - `WHATSAPP_VERIFY_TOKEN`: el token de verificación del webhook en Meta.
- * - `WHATSAPP_APP_SECRET`: el secreto de la app de Meta, para la firma.
- * - `WHATSAPP_GRAPH_VERSION`: la versión de la Graph API (p. ej. "v21.0").
- * - `WHATSAPP_TOKEN_KEY`: 32 bytes en base64 para cifrar los tokens de acceso.
+ * - `WHATSAPP_TOKEN_KEY`: 32 bytes en base64 para cifrar la sesión de WhatsApp
+ *   de cada negocio (`lib/secretaria/cifrado.ts`).
  */
 
 export const MODELO_DE_LA_SECRETARIA = "claude-haiku-5-5"
@@ -67,8 +65,3 @@ export const PRESUPUESTO_AGOTADO = 100
 
 export const ESTADOS_DE_CONVERSACION = ["bot", "human", "closed"] as const
 export type EstadoDeConversacion = (typeof ESTADOS_DE_CONVERSACION)[number]
-
-export function versionDeGraph(): string {
-  const version = process.env.WHATSAPP_GRAPH_VERSION?.trim()
-  return version && /^v\d+\.\d+$/.test(version) ? version : "v21.0"
-}

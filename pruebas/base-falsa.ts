@@ -332,7 +332,19 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   sede: () => ({ telefono: null, orden: 0, activo: true, createdAt: new Date(), updatedAt: new Date() }),
   workerInvitation: () => ({ role: "worker", acceptedAt: null, createdAt: new Date() }),
   // Secretaria Eli (`20261120120000_secretaria_eli`).
-  canalDeWhatsapp: () => ({ activo: true, createdAt: new Date(), updatedAt: new Date() }),
+  canalDeWhatsapp: () => ({
+    estado: "desconectado",
+    numero: null,
+    credencialesCifradas: null,
+    condicionesAceptadasAt: null,
+    condicionesAceptadasPor: null,
+    conectadoAt: null,
+    desconectadoAt: null,
+    motivoDesconexion: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  claveDeWhatsapp: () => ({ updatedAt: new Date() }),
   ajustesDeSecretaria: () => ({
     activa: false,
     maxTurnos: 8,
@@ -344,6 +356,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
   }),
   conversacionDeSecretaria: () => ({
     canalId: null,
+    waJid: null,
     customerId: null,
     estado: "bot",
     turnos: 0,
@@ -438,10 +451,11 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   sede: [{ campos: ["businessId", "nombre"] }],
   workerInvitation: [{ campos: ["tokenHash"] }],
   // Secretaria Eli.
-  canalDeWhatsapp: [{ campos: ["businessId"] }, { campos: ["phoneNumberId"] }, { campos: ["id", "businessId"] }],
+  canalDeWhatsapp: [{ campos: ["businessId"] }, { campos: ["id", "businessId"] }],
+  claveDeWhatsapp: [{ campos: ["canalId", "tipo", "claveId"] }],
   ajustesDeSecretaria: [{ campos: ["businessId"] }],
   conversacionDeSecretaria: [{ campos: ["id", "businessId"] }, { campos: ["businessId", "telefono", "simulacion"] }],
-  mensajeDeSecretaria: [{ campos: ["waMessageId"] }],
+  mensajeDeSecretaria: [{ campos: ["businessId", "waMessageId"] }],
   consumoDeSecretaria: [{ campos: ["businessId", "periodo"] }],
 }
 
@@ -470,7 +484,10 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
 type Regla = "cascade" | "set null" | "restrict" | "no action"
 const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]>> = {
   // Secretaria Eli: todo cuelga del negocio y la conversación se lleva sus mensajes.
-  canalDeWhatsapp: [["conversacionDeSecretaria", "canalId", "cascade"]], // conversaciones_de_secretaria_canalId_businessId_fkey
+  canalDeWhatsapp: [
+    ["conversacionDeSecretaria", "canalId", "cascade"], // conversaciones_de_secretaria_canalId_businessId_fkey
+    ["claveDeWhatsapp", "canalId", "cascade"], // claves_de_whatsapp_canalId_businessId_fkey
+  ],
   conversacionDeSecretaria: [["mensajeDeSecretaria", "conversacionId", "cascade"]], // mensajes_de_secretaria_conversacionId_businessId_fkey
   user: [
     ["business", "userId", "cascade"], // negocios_userId_fkey
@@ -479,6 +496,7 @@ const ACCIONES: Partial<Record<NombreDeModelo, [NombreDeModelo, string, Regla][]
   ],
   business: [
     ["canalDeWhatsapp", "businessId", "cascade"],
+    ["claveDeWhatsapp", "businessId", "cascade"],
     ["ajustesDeSecretaria", "businessId", "cascade"],
     ["conversacionDeSecretaria", "businessId", "cascade"],
     ["mensajeDeSecretaria", "businessId", "cascade"],
@@ -755,6 +773,7 @@ function tablasVacias(): TablasCompletas {
     sede: [],
     workerInvitation: [],
     canalDeWhatsapp: [],
+    claveDeWhatsapp: [],
     ajustesDeSecretaria: [],
     conversacionDeSecretaria: [],
     mensajeDeSecretaria: [],
@@ -1737,6 +1756,7 @@ export function crearBaseFalsa() {
     sede: delegado("sede"),
     workerInvitation: delegado("workerInvitation"),
     canalDeWhatsapp: delegado("canalDeWhatsapp"),
+    claveDeWhatsapp: delegado("claveDeWhatsapp"),
     ajustesDeSecretaria: delegado("ajustesDeSecretaria"),
     conversacionDeSecretaria: delegado("conversacionDeSecretaria"),
     mensajeDeSecretaria: delegado("mensajeDeSecretaria"),

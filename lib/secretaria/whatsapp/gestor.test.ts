@@ -1,23 +1,19 @@
-import { createHmac, randomBytes } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import type { NextRequest } from "next/server"
 import type Anthropic from "@anthropic-ai/sdk"
+import type { WAMessage, proto } from "baileys"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
 import { NEGOCIO, OTRO_NEGOCIO, datosBase } from "@/pruebas/datos"
-import { cuerpoDePrueba } from "@/pruebas/pedidos"
-import { cifrarToken } from "@/lib/secretaria/cifrado"
 import * as email from "@/lib/email"
 
 /**
- * La Secretaria Eli de punta a punta: el webhook de WhatsApp recibe un
- * mensaje firmado, la Secretaria llama al modelo (falso) y sus herramientas
- * corren sobre la base falsa (con la misma lógica de reserva que la página
- * pública), y la respuesta sale por la Graph API (falsa: `fetch`).
+ * La Secretaria Eli de punta a punta: llega un mensaje por WhatsApp (la
+ * conexión de Baileys, falsa: se le pasan los mensajes como los entrega), la
+ * Secretaria llama al modelo (falso) y sus herramientas corren sobre la base
+ * falsa (con la misma lógica de reserva que la página pública), y la respuesta
+ * sale por el WhatsApp del negocio (falso: `enviarPorWhatsapp`).
  */
 
-const SECRETO = "secreto-de-la-app"
-process.env.WHATSAPP_APP_SECRET = SECRETO
-process.env.WHATSAPP_VERIFY_TOKEN = "token-de-verificacion"
 process.env.WHATSAPP_TOKEN_KEY = randomBytes(32).toString("base64")
 
 vi.mock("@/lib/rate-limit", () => ({
@@ -30,6 +26,7 @@ vi.mock("@/lib/email", () => ({
   enviarAvisoProfesional: vi.fn(async () => null),
   enviarDerivacionDeSecretaria: vi.fn(async () => null),
   enviarPresupuestoDeSecretaria: vi.fn(async () => null),
+  enviarWhatsappDesconectado: vi.fn(async () => null),
 }))
 
 const base = crearBaseFalsa()
@@ -50,17 +47,14 @@ vi.mock("@/lib/secretaria/modelo", () => ({
   }),
 }))
 
-// `after` corre lo pendiente cuando el test lo pide (fuera de Next no hay a quién dárselo).
-const pendientes: Promise<unknown>[] = []
-vi.mock("next/server", async (original) => ({
-  ...(await original<typeof import("next/server")>()),
-  after: (fn: () => Promise<unknown>) => {
-    pendientes.push(fn())
-  },
-}))
-
-const fetchFalso = vi.fn(async () => new Response("{}", { status: 200 }))
-
+// Lo que sale por WhatsApp: el negocio, el chat y el texto. Devuelve el id del mensaje, como WhatsApp.
+const envio = vi.hoisted(() => {
+  let siguiente = 1
+  return {
+    enviarPorWhatsapp: vi.fn(async (_negocioId: string, _jid: string, _texto: string) => `ELI-${siguiente++}`),
+  }
+})
+vi.mock("@/lib/secretaria/whatsapp/envio", () => envio)
 
 // ─── El modelo falso ──────────────────────────────────────────────────────────
 
@@ -83,58 +77,50 @@ function resultadoVistoEn(n: number): Record<string, unknown> {
   return JSON.parse(bloque.content as string)
 }
 
-// ─── El webhook ─────────────────────────────────────────────────────────────
+// ─── WhatsApp falso ───────────────────────────────────────────────────────────
 
-const CANAL = "1111111111"
-const CANAL_AJENO = "2222222222"
+const CONEXION = { negocioId: NEGOCIO, canalId: "canal-1", enviados: new Set<string>() }
+const CONEXION_AJENA = { negocioId: OTRO_NEGOCIO, canalId: "canal-2", enviados: new Set<string>() }
 let siguienteMensaje = 1
 
-/** La cuenta de WhatsApp Business de cada número de prueba: la que Meta manda en `entry[].id`. */
-const CUENTA: Record<string, string> = { [CANAL]: "111000", [CANAL_AJENO]: "222000" }
+interface Opciones {
+  id?: string
+  jid?: string
+  jidAlterno?: string
+  deLaDueña?: boolean
+  contenido?: proto.IMessage
+  haceSegundos?: number
+}
 
-function payload(phoneNumberId: string, de: string, cuerpo: string, id = `wamid.${siguienteMensaje++}`, cuenta = CUENTA[phoneNumberId] ?? "999000") {
+/** Un mensaje tal como lo entrega Baileys. `de` es el número sin "+". */
+function mensaje(de: string, cuerpo: string, opciones: Opciones = {}): WAMessage {
   return {
-    object: "whatsapp_business_account",
-    entry: [
-      {
-        id: cuenta,
-        changes: [
-          {
-            field: "messages",
-            value: {
-              messaging_product: "whatsapp",
-              metadata: { phone_number_id: phoneNumberId, display_phone_number: "56900000000" },
-              messages: [{ id, from: de, timestamp: "1", type: "text", text: { body: cuerpo } }],
-            },
-          },
-        ],
-      },
-    ],
-  }
+    key: {
+      remoteJid: opciones.jid ?? `${de}@s.whatsapp.net`,
+      remoteJidAlt: opciones.jidAlterno,
+      fromMe: opciones.deLaDueña ?? false,
+      id: opciones.id ?? `WA-${siguienteMensaje++}`,
+    },
+    message: opciones.contenido ?? { conversation: cuerpo },
+    messageTimestamp: Math.floor(Date.now() / 1000) - (opciones.haceSegundos ?? 0),
+  } as WAMessage
 }
 
-function pedidoFirmado(cuerpo: unknown, firma?: string): NextRequest {
-  const crudo = JSON.stringify(cuerpo)
-  const cabeceras = new Headers({
-    "x-hub-signature-256": firma ?? `sha256=${createHmac("sha256", SECRETO).update(crudo).digest("hex")}`,
-  })
-  return { url: "https://eli.test/api/webhooks/whatsapp", headers: cabeceras, body: cuerpoDePrueba(crudo) } as unknown as NextRequest
+const sinLid = async () => null
+
+/** Se importa tarde: la base falsa tiene que existir antes que el módulo que la usa. */
+async function recibirMensajes(...args: Parameters<typeof import("./gestor").recibirMensajes>) {
+  const gestor = await import("./gestor")
+  return gestor.recibirMensajes(...args)
 }
 
-async function escribe(de: string, cuerpo: string, phoneNumberId = CANAL) {
-  const { POST } = await import("./route")
-  const respuesta = await POST(pedidoFirmado(payload(phoneNumberId, de, cuerpo)))
-  await Promise.all(pendientes.splice(0))
-  return respuesta
+async function escribe(de: string, cuerpo: string, conexion = CONEXION, opciones: Opciones = {}) {
+  await recibirMensajes(conexion, [mensaje(de, cuerpo, opciones)], "notify", sinLid)
 }
 
-/** Los textos que salieron por la Graph API, en orden. */
-function enviados(): { para: string; texto: string; url: string }[] {
-  return fetchFalso.mock.calls.map((llamada) => {
-    const [url, opciones] = llamada as unknown as [string, RequestInit]
-    const cuerpo = JSON.parse(String(opciones.body))
-    return { url, para: cuerpo.to, texto: cuerpo.text.body }
-  })
+/** Los textos que salieron por WhatsApp, en orden. */
+function enviados(): { negocio: string; jid: string; texto: string }[] {
+  return envio.enviarPorWhatsapp.mock.calls.map(([negocio, jid, texto]) => ({ negocio, jid, texto }))
 }
 
 // ─── Escenario ──────────────────────────────────────────────────────────────
@@ -142,7 +128,7 @@ function enviados(): { para: string; texto: string; url: string }[] {
 /** El lunes 7 de enero de 2030; el reloj, el domingo anterior al mediodía. */
 const LUNES = "2030-01-07"
 
-function escenario(extra: { ajustes?: Record<string, unknown>; consumo?: Record<string, unknown>[] } = {}) {
+function escenario(extra: { ajustes?: Record<string, unknown>; consumo?: Record<string, unknown>[]; canal?: Record<string, unknown> } = {}) {
   const datos = datosBase()
   base.reiniciar({
     ...datos,
@@ -158,8 +144,8 @@ function escenario(extra: { ajustes?: Record<string, unknown>; consumo?: Record<
       { id: `h-ajeno-${dayOfWeek}`, businessId: OTRO_NEGOCIO, memberId: null, dayOfWeek, startTime: "09:00", endTime: "18:00" },
     ]),
     canalDeWhatsapp: [
-      { id: "canal-1", businessId: NEGOCIO, phoneNumberId: CANAL, wabaId: "111000", accessTokenCifrado: cifrarToken("token-uno") },
-      { id: "canal-2", businessId: OTRO_NEGOCIO, phoneNumberId: CANAL_AJENO, wabaId: "222000", accessTokenCifrado: cifrarToken("token-dos") },
+      { id: "canal-1", businessId: NEGOCIO, estado: "conectado", numero: "+56900000001", ...extra.canal },
+      { id: "canal-2", businessId: OTRO_NEGOCIO, estado: "conectado", numero: "+56900000002" },
     ],
     ajustesDeSecretaria: [
       { id: "aj-1", businessId: NEGOCIO, activa: true, ...extra.ajustes },
@@ -173,48 +159,130 @@ beforeEach(() => {
   vi.clearAllMocks()
   crearMensaje.mockReset()
   vistos.length = 0
-  vi.stubGlobal("fetch", fetchFalso)
+  CONEXION.enviados.clear()
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.setSystemTime(new Date("2030-01-06T15:00:00.000Z"))
 })
 
 afterEach(() => {
   vi.useRealTimers()
-  vi.unstubAllGlobals()
 })
 
 // ─── Los casos ──────────────────────────────────────────────────────────────
 
-describe("webhook de WhatsApp: verificación y firma", () => {
-  it("GET con el token correcto devuelve el desafío; con otro, 403", async () => {
-    const { GET } = await import("./route")
-    const url = (token: string) =>
-      ({ url: `https://eli.test/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${token}&hub.challenge=42`, headers: new Headers() }) as unknown as NextRequest
-    const bien = await GET(url("token-de-verificacion"))
-    expect(bien.status).toBe(200)
-    expect(await bien.text()).toBe("42")
-    expect((await GET(url("otro"))).status).toBe(403)
+describe("WhatsApp: qué mensajes se atienden", () => {
+  it("el mismo mensaje dos veces (WhatsApp lo reentregó) se atiende una sola vez", async () => {
+    escenario()
+    crearMensaje.mockResolvedValue(texto("¡Hola! ¿En qué te ayudo?"))
+    await escribe("56911111111", "hola", CONEXION, { id: "WA-repetido" })
+    await escribe("56911111111", "hola", CONEXION, { id: "WA-repetido" })
+    expect(base.buscar("mensajeDeSecretaria", { rol: "user" })).toHaveLength(1)
+    expect(crearMensaje).toHaveBeenCalledTimes(1)
   })
 
-  it("un POST sin la firma de Meta es 401 y no guarda nada", async () => {
+  it("grupos, estados y listas de difusión se ignoran", async () => {
     escenario()
-    const { POST } = await import("./route")
-    const respuesta = await POST(pedidoFirmado(payload(CANAL, "56911111111", "hola"), "sha256=00"))
-    expect(respuesta.status).toBe(401)
-    expect(base.buscar("mensajeDeSecretaria")).toHaveLength(0)
+    for (const jid of ["120363000000000000@g.us", "status@broadcast", "1234567890@broadcast", "120363000000@newsletter"]) {
+      await escribe("56911111111", "hola", CONEXION, { jid })
+    }
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
     expect(crearMensaje).not.toHaveBeenCalled()
   })
 
-  it("el mismo mensaje dos veces (reintento de Meta) se atiende una sola vez", async () => {
+  it("un mensaje viejo (llegó mientras estaba desconectada hace rato) no se responde", async () => {
     escenario()
-    crearMensaje.mockResolvedValue(texto("¡Hola! ¿En qué te ayudo?"))
-    const { POST } = await import("./route")
-    const mismo = payload(CANAL, "56911111111", "hola", "wamid.repetido")
-    expect((await POST(pedidoFirmado(mismo))).status).toBe(200)
-    expect((await POST(pedidoFirmado(mismo))).status).toBe(200)
-    await Promise.all(pendientes.splice(0))
+    await escribe("56911111111", "hola", CONEXION, { haceSegundos: 11 * 60 })
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
+    expect(crearMensaje).not.toHaveBeenCalled()
+  })
+
+  it("el historial que sincroniza WhatsApp (\"append\") no se responde", async () => {
+    escenario()
+    await recibirMensajes(CONEXION, [mensaje("56911111111", "hola")], "append", sinLid)
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
+  })
+
+  it("una reacción o un mensaje del sistema no se responde; un audio sí, avisando que no es texto", async () => {
+    escenario()
+    await escribe("56911111111", "", CONEXION, { contenido: { reactionMessage: { text: "👍" } } })
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
+
+    crearMensaje.mockResolvedValueOnce(texto("Por ahora sólo leo texto. ¿Me lo escribes?"))
+    await escribe("56911111111", "", CONEXION, { contenido: { audioMessage: { seconds: 5 } } })
+    expect(JSON.stringify(vistos[0].messages)).toContain("no es texto")
+    expect(enviados()).toHaveLength(1)
+  })
+
+  it("un chat con id privado (LID) usa el número que trae WhatsApp y responde a ese mismo chat", async () => {
+    escenario()
+    crearMensaje.mockResolvedValue(texto("¡Hola!"))
+    await escribe("56911111111", "hola", CONEXION, { jid: "123456789012345@lid", jidAlterno: "56911111111@s.whatsapp.net" })
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ telefono: "+56911111111", waJid: "123456789012345@lid" })
+    expect(enviados()[0]).toMatchObject({ negocio: NEGOCIO, jid: "123456789012345@lid" })
+
+    // Sin el número en el mensaje, se lo pregunta a la sesión.
+    const telefonoDeLid = vi.fn(async () => "56944444444@s.whatsapp.net")
+    await recibirMensajes(CONEXION, [mensaje("", "hola", { jid: "999@lid" })], "notify", telefonoDeLid)
+    expect(telefonoDeLid).toHaveBeenCalledWith("999@lid")
+    expect(base.buscar("conversacionDeSecretaria", { waJid: "999@lid" })[0]).toMatchObject({ telefono: "+56944444444" })
+  })
+
+  it("sin número de teléfono no se guarda nada", async () => {
+    escenario()
+    await recibirMensajes(CONEXION, [mensaje("", "hola", { jid: "999@lid" })], "notify", sinLid)
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
+  })
+
+  it("apagada en los ajustes, o con el WhatsApp desconectado, guarda el mensaje pero no responde", async () => {
+    escenario({ ajustes: { activa: false } })
+    await escribe("56911111111", "hola")
     expect(base.buscar("mensajeDeSecretaria", { rol: "user" })).toHaveLength(1)
+    expect(crearMensaje).not.toHaveBeenCalled()
+
+    escenario({ canal: { estado: "desconectado" } })
+    await escribe("56911111111", "hola")
+    expect(crearMensaje).not.toHaveBeenCalled()
+    expect(enviados()).toHaveLength(0)
+  })
+})
+
+describe("WhatsApp: la dueña responde desde su celular", () => {
+  it("si la dueña escribe en el chat, la Secretaria se retira de esa conversación", async () => {
+    escenario()
+    crearMensaje.mockResolvedValue(texto("¡Hola! ¿Qué servicio buscas?"))
+    await escribe("56911111111", "hola")
+    await escribe("56911111111", "Hola Lucía, soy Ana, te ayudo yo", CONEXION, { deLaDueña: true })
+
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({
+      estado: "human",
+      motivoDerivacion: "La dueña respondió desde su celular.",
+    })
+    await escribe("56911111111", "gracias Ana")
     expect(crearMensaje).toHaveBeenCalledTimes(1)
+    expect(enviados()).toHaveLength(1)
+    // No se le manda correo: ella misma la tomó.
+    expect(email.enviarDerivacionDeSecretaria).not.toHaveBeenCalled()
+  })
+
+  it("los mensajes que mandó la Secretaria no cuentan como de la dueña", async () => {
+    escenario()
+    crearMensaje.mockResolvedValue(texto("¡Hola!"))
+    await escribe("56911111111", "hola")
+    const [{ waMessageId }] = base.buscar("mensajeDeSecretaria", { rol: "assistant" })
+    expect(waMessageId).toMatch(/^ELI-/)
+
+    // Vuelve como "mío" (después de reiniciar el servidor, por ejemplo): está guardado como de la Secretaria.
+    await escribe("56911111111", "¡Hola!", CONEXION, { deLaDueña: true, id: String(waMessageId) })
+    // O lo recuerda la conexión.
+    CONEXION.enviados.add("ELI-en-memoria")
+    await escribe("56911111111", "¡Hola!", CONEXION, { deLaDueña: true, id: "ELI-en-memoria" })
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "bot" })
+  })
+
+  it("la dueña escribiéndole a alguien que no habló con la Secretaria no crea nada", async () => {
+    escenario()
+    await escribe("56955555555", "Hola prima", CONEXION, { deLaDueña: true })
+    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
   })
 })
 
@@ -253,13 +321,13 @@ describe("Secretaria Eli: reservas", () => {
     expect(citas).toHaveLength(1)
     expect(citas[0]).toMatchObject({ businessId: NEGOCIO, customerId: lucia.id, serviceId: "s-corte", source: "whatsapp" })
 
-    // Las tres respuestas salieron por la Graph API, al número que escribió, con el canal del negocio.
+    // Las tres respuestas salieron por el WhatsApp del negocio, al chat que escribió.
     expect(enviados().map((envio) => envio.texto)).toEqual([
       "¡Hola! ¿Me dices tu nombre y apellido?",
       "Tengo 09:00, 13:00 o 17:00 el lunes. ¿Cuál prefieres?",
       "¡Listo! Corte el lunes 7 a las 09:00, $8.000.",
     ])
-    expect(enviados().every((envio) => envio.para === "56911111111" && envio.url.includes(`/${CANAL}/messages`))).toBe(true)
+    expect(enviados().every((envio) => envio.negocio === NEGOCIO && envio.jid === "56911111111@s.whatsapp.net")).toBe(true)
     expect(base.buscar("consumoDeSecretaria", { businessId: NEGOCIO })[0]).toMatchObject({ mensajesWhatsappEnviados: 3 })
   })
 
@@ -298,7 +366,7 @@ describe("Secretaria Eli: derivación y presupuesto", () => {
 
     // Derivada: lo que siga escribiendo se guarda, pero nadie le responde.
     await escribe("56911111111", "¿hola?")
-    expect(fetchFalso).toHaveBeenCalledTimes(2)
+    expect(envio.enviarPorWhatsapp).toHaveBeenCalledTimes(2)
     expect(base.buscar("mensajeDeSecretaria", { rol: "user" })).toHaveLength(3)
   })
 
@@ -365,16 +433,16 @@ describe("Secretaria Eli: aislamiento entre negocios", () => {
       .mockResolvedValueOnce(herramienta("ver_disponibilidad", { servicio_id: "s-corte", fecha: LUNES, profesional_id: null }))
       .mockResolvedValueOnce(herramienta("listar_servicios", {}))
       .mockResolvedValueOnce(texto("¿Qué servicio quieres?"))
-    await escribe("56922222222", "Hola", CANAL_AJENO)
+    await escribe("56922222222", "Hola", CONEXION_AJENA)
 
     expect(resultadoVistoEn(1)).toEqual({ registrada: false })
     expect(resultadoVistoEn(2)).toHaveProperty("error")
     const servicios = (resultadoVistoEn(3) as { servicios: { id: string }[] }).servicios.map((servicio) => servicio.id)
     expect(servicios).toEqual(["s-ajeno"])
 
-    // La conversación es del negocio 2, y la respuesta salió por su canal.
-    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ businessId: OTRO_NEGOCIO, customerId: null })
-    expect(enviados()[0].url).toContain(`/${CANAL_AJENO}/messages`)
+    // La conversación es del negocio 2, y la respuesta salió por su WhatsApp.
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ businessId: OTRO_NEGOCIO, canalId: "canal-2", customerId: null })
+    expect(enviados()[0].negocio).toBe(OTRO_NEGOCIO)
   })
 
   it("una reserva pedida desde el negocio 2 con un servicio del negocio 1 se rechaza y no toca su agenda", async () => {
@@ -383,36 +451,28 @@ describe("Secretaria Eli: aislamiento entre negocios", () => {
       .mockResolvedValueOnce(herramienta("registrar_cliente", { nombre: "Rosa Díaz" }))
       .mockResolvedValueOnce(herramienta("crear_reserva", { servicio_id: "s-corte", fecha: LUNES, hora: "10:00", profesional_id: null }))
       .mockResolvedValueOnce(texto("Ese servicio no está disponible."))
-    await escribe("56933333333", "Quiero un corte", CANAL_AJENO)
+    await escribe("56933333333", "Quiero un corte", CONEXION_AJENA)
 
     expect(resultadoVistoEn(2)).toHaveProperty("error")
     expect(base.buscar("appointment")).toHaveLength(0)
     expect(base.buscar("customer", { phone: "+56933333333" })[0]).toMatchObject({ businessId: OTRO_NEGOCIO })
   })
 
-  it("un mensaje con el número del negocio 1 pero desde otra cuenta de WhatsApp Business se ignora", async () => {
+  it("la misma clienta escribiéndole a los dos negocios tiene dos conversaciones separadas", async () => {
     escenario()
-    const { POST } = await import("./route")
-    const respuesta = await POST(pedidoFirmado(payload(CANAL, "56911111111", "hola", "wamid.otra-cuenta", "222000")))
-    await Promise.all(pendientes.splice(0))
-    expect(respuesta.status).toBe(200)
-    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
-    expect(crearMensaje).not.toHaveBeenCalled()
-  })
-
-  it("un número que no es de ningún negocio se ignora", async () => {
-    escenario()
-    const respuesta = await escribe("56911111111", "hola", "9999999999")
-    expect(respuesta.status).toBe(200)
-    expect(base.buscar("conversacionDeSecretaria")).toHaveLength(0)
-    expect(crearMensaje).not.toHaveBeenCalled()
+    crearMensaje.mockResolvedValue(texto("¡Hola!"))
+    await escribe("56911111111", "hola uno")
+    await escribe("56911111111", "hola dos", CONEXION_AJENA)
+    // La dueña del negocio 2 la toma: la del negocio 1 sigue con la Secretaria.
+    await escribe("56911111111", "te atiendo yo", CONEXION_AJENA, { deLaDueña: true })
+    expect(base.buscar("conversacionDeSecretaria", { businessId: NEGOCIO })[0]).toMatchObject({ estado: "bot" })
+    expect(base.buscar("conversacionDeSecretaria", { businessId: OTRO_NEGOCIO })[0]).toMatchObject({ estado: "human" })
   })
 })
 
 describe("Secretaria Eli: mensajes seguidos y fallas", () => {
   it("dos mensajes seguidos: se responde de a uno, y la segunda ronda ve los dos", async () => {
     escenario()
-    const { POST } = await import("./route")
     // El modelo de la primera ronda tarda: mientras, llega el segundo mensaje.
     let soltar: () => void = () => {}
     const espera = new Promise<void>((resolver) => (soltar = resolver))
@@ -423,11 +483,12 @@ describe("Secretaria Eli: mensajes seguidos y fallas", () => {
       })
       .mockResolvedValueOnce(texto("Perfecto, el lunes. ¿A qué hora?"))
 
-    await POST(pedidoFirmado(payload(CANAL, "56911111111", "Hola")))
+    const primero = escribe("56911111111", "Hola")
     await new Promise((resolver) => setTimeout(resolver, 0))
-    await POST(pedidoFirmado(payload(CANAL, "56911111111", "Quiero un corte el lunes")))
+    const segundo = escribe("56911111111", "Quiero un corte el lunes")
+    await new Promise((resolver) => setTimeout(resolver, 0))
     soltar()
-    await Promise.all(pendientes.splice(0))
+    await Promise.all([primero, segundo])
 
     expect(crearMensaje).toHaveBeenCalledTimes(2)
     const segunda = vistos[1].messages
@@ -440,7 +501,9 @@ describe("Secretaria Eli: mensajes seguidos y fallas", () => {
     escenario()
     base.reiniciar({
       ...base.volcado(),
-      conversacionDeSecretaria: [{ id: "conv-rota", businessId: NEGOCIO, canalId: "canal-1", telefono: "+56911111111" }],
+      conversacionDeSecretaria: [
+        { id: "conv-rota", businessId: NEGOCIO, canalId: "canal-1", telefono: "+56911111111", waJid: "56911111111@s.whatsapp.net" },
+      ],
       mensajeDeSecretaria: [
         { id: "m1", businessId: NEGOCIO, conversacionId: "conv-rota", rol: "user", contenido: [{ type: "text", text: "Hola" }], createdAt: new Date("2030-01-06T14:00:00Z") },
         { id: "m2", businessId: NEGOCIO, conversacionId: "conv-rota", rol: "assistant", contenido: [{ type: "tool_use", id: "toolu_x", name: "buscar_cliente", input: {} }], createdAt: new Date("2030-01-06T14:00:01Z") },
@@ -463,5 +526,17 @@ describe("Secretaria Eli: mensajes seguidos y fallas", () => {
 
     expect(enviados().map((envio) => envio.texto)).toEqual(["Le paso tu consulta a Ana, te responde pronto 🙌"])
     expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human", respondiendoHasta: null })
+  })
+
+  it("si WhatsApp no deja enviar, la conversación pasa a una persona y la dueña recibe el aviso", async () => {
+    escenario()
+    crearMensaje.mockResolvedValueOnce(texto("¡Hola!"))
+    envio.enviarPorWhatsapp.mockRejectedValue(new Error("no conectado"))
+    await escribe("56911111111", "hola")
+    envio.enviarPorWhatsapp.mockReset()
+    envio.enviarPorWhatsapp.mockImplementation(async () => "ELI-x")
+
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human" })
+    expect(email.enviarDerivacionDeSecretaria).toHaveBeenCalledTimes(1)
   })
 })

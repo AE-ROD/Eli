@@ -68,6 +68,7 @@ export const TABLAS_SQL: Record<NombreDeModelo, string> = {
   sede: "sedes",
   workerInvitation: "invitaciones",
   canalDeWhatsapp: "canales_de_whatsapp",
+  claveDeWhatsapp: "claves_de_whatsapp",
   ajustesDeSecretaria: "ajustes_de_secretaria",
   conversacionDeSecretaria: "conversaciones_de_secretaria",
   mensajeDeSecretaria: "mensajes_de_secretaria",
@@ -191,12 +192,15 @@ const chequeo = (nombre: string, cumple: (fila: Registro) => Logico): Chequeo =>
 
 export const CHEQUEOS: Partial<Record<NombreDeModelo, Chequeo[]>> = {
   // Secretaria Eli (`20261120120000_secretaria_eli`).
+  canalDeWhatsapp: [
+    chequeo("canales_de_whatsapp_estado_check", (f) => EN(f.estado, ["desconectado", "esperando_qr", "conectado"])),
+  ],
   conversacionDeSecretaria: [
     chequeo("conversaciones_de_secretaria_estado_check", (f) => EN(f.estado, ["bot", "human", "closed"])),
   ],
   mensajeDeSecretaria: [chequeo("mensajes_de_secretaria_rol_check", (f) => EN(f.rol, ["user", "assistant"]))],
   avisoDelPanel: [
-    chequeo("avisos_del_panel_tipo_check", (f) => EN(f.tipo, ["derivacion", "presupuesto-80", "presupuesto-100"])),
+    chequeo("avisos_del_panel_tipo_check", (f) => EN(f.tipo, ["derivacion", "presupuesto-80", "presupuesto-100", "whatsapp-desconectado"])),
   ],
   // ─── 20260907190000_add_commissions, 20261105120000_cierre_de_la_v1 ───────
   businessMember: [
