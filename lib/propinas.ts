@@ -4,6 +4,7 @@ import { MAXIMO_DE_PROPINAS, PROFESIONAL_DUEÑO, aCentavos, esMontoDePagoValido 
 import { esMedioDePago } from "@/lib/medios-de-pago"
 import type { Actor } from "@/lib/permisos"
 import { ErrorDeAtencion } from "@/lib/tablero"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Propinas (#66): lo que el cliente deja para quien lo atendió, aparte del
@@ -92,7 +93,7 @@ export async function resolverPropinas(
     idsDeMiembros.length === 0
       ? Promise.resolve([])
       : db.businessMember.findMany({
-          where: { businessId: actor.businessId, id: { in: idsDeMiembros } },
+          where: { businessId: actor.businessId, id: { in: idsDeMiembros }, ...EN_EL_EQUIPO },
           select: { id: true, user: { select: { name: true } } },
           take: idsDeMiembros.length,
         }),

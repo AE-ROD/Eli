@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { AnimatePresence } from "framer-motion"
 import { UserPlus } from "lucide-react"
 import { Aviso } from "@/components/panel/aviso"
@@ -14,13 +15,17 @@ import {
   puedeCambiarDePlan,
   puedeEditarFotoDelMiembro,
   puedeInvitarAlEquipo,
+  puedeSacarDelEquipo,
 } from "@/lib/permisos"
 import { vocabularioDe } from "@/lib/vocabulario"
 import {
   anularInvitacion,
   leerEquipo,
   reenviarInvitacion,
+  revisarSalida,
+  sacarDelEquipo,
   type InvitacionPendiente,
+  type ResumenDeSalida,
   type MiembroDelEquipo,
 } from "../_datos"
 import { frasesDeEquipo } from "../_frases"
@@ -63,6 +68,45 @@ export function PantallaDeEquipo() {
   /** La persona cuya foto se está cambiando: su id, no la fila, para que el modal vea la foto que se acaba de guardar. */
   const [fotoDeId, setFotoDeId] = useState<string | null>(null)
   const fotoDe = miembros.find((miembro) => miembro.id === fotoDeId) ?? null
+  const router = useRouter()
+  /** A quién se va a sacar del equipo, con lo que respondió el servidor al revisar. */
+  const [aSacar, setASacar] = useState<{ miembro: MiembroDelEquipo; resumen: ResumenDeSalida } | null>(null)
+  const [sacando, setSacando] = useState(false)
+  const [avisoDeSacar, setAvisoDeSacar] = useState("")
+
+  const pedirSacar = async (miembro: MiembroDelEquipo) => {
+    setAviso("")
+    setAvisoListo("")
+    setAvisoDeSacar("")
+    const resultado = await revisarSalida(miembro.id)
+    if (!resultado.ok) return setAviso(resultado.error)
+    setASacar({ miembro, resumen: resultado.datos })
+  }
+
+  const confirmarSacar = async () => {
+    if (!aSacar || enviado.current) return
+    const { miembro, resumen } = aSacar
+    // Con horas por delante o una atención abierta no se puede: el botón lleva a resolverlo.
+    if (resumen.motivoParaNoSacar) {
+      setASacar(null)
+      router.push(resumen.citasPorDelante > 0 ? "/dashboard/agenda" : "/dashboard/tablero")
+      return
+    }
+    enviado.current = true
+    setAvisoDeSacar("")
+    setSacando(true)
+    const resultado = await sacarDelEquipo(miembro.id)
+    enviado.current = false
+    setSacando(false)
+    if (!resultado.ok) return setAvisoDeSacar(resultado.error)
+    setASacar(null)
+    setAvisoListo(
+      resultado.datos.tienePlataPendiente
+        ? `${miembro.user.name} ya no está en el equipo. Lo que le quedó por liquidar sigue en Liquidaciones para pagárselo.`
+        : `${miembro.user.name} ya no está en el equipo.`
+    )
+    cargar()
+  }
 
   const cargar = async () => {
     setCargando(true)
@@ -119,7 +163,6 @@ export function PantallaDeEquipo() {
     cargar()
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- carga los miembros y las invitaciones al montar
   useEffect(() => { cargar() }, [])
 
   return (
@@ -171,6 +214,10 @@ export function PantallaDeEquipo() {
               setAvisoListo("")
               setFotoDeId(miembro.id)
             }}
+            puedeSacarA={(miembro) =>
+              !!actor && puedeSacarDelEquipo(actor, { id: miembro.id, businessId: actor.businessId, role: miembro.role })
+            }
+            alSacar={(miembro) => void pedirSacar(miembro)}
           />
         )}
       </div>
@@ -202,6 +249,39 @@ export function PantallaDeEquipo() {
             aviso={avisoDeAnular}
             onConfirmar={confirmarAnular}
             onCerrar={() => setAAnular(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {aSacar && (
+          <ModalConfirmar
+            titulo={
+              aSacar.resumen.motivoParaNoSacar
+                ? `Todavía no puedes sacar a ${aSacar.miembro.user.name}`
+                : `¿Sacar a ${aSacar.miembro.user.name} del equipo?`
+            }
+            descripcion={
+              aSacar.resumen.motivoParaNoSacar ??
+              `En unos minutos deja de entrar al negocio y ya no aparece en la reserva ni en la agenda. Su horario y sus bloqueos se borran. Sus atenciones pasadas, sus comisiones y sus liquidaciones quedan guardadas.${
+                aSacar.resumen.tienePlataPendiente
+                  ? " Le queda plata por liquidar: se la puedes pagar después desde Liquidaciones."
+                  : ""
+              } Si vuelve, la invitas de nuevo.`
+            }
+            textoConfirmar={
+              aSacar.resumen.motivoParaNoSacar
+                ? aSacar.resumen.citasPorDelante > 0
+                  ? "Ir a la Agenda"
+                  : "Ir al Tablero"
+                : "Sacar del equipo"
+            }
+            textoCancelar={aSacar.resumen.motivoParaNoSacar ? "Cerrar" : "No sacar"}
+            peligro={!aSacar.resumen.motivoParaNoSacar}
+            trabajando={sacando}
+            aviso={avisoDeSacar}
+            onConfirmar={confirmarSacar}
+            onCerrar={() => setASacar(null)}
           />
         )}
       </AnimatePresence>

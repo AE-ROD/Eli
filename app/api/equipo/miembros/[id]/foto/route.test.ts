@@ -171,7 +171,7 @@ describe("aislamiento entre negocios (404, nunca 403)", () => {
     await subir(sesiones.dueñoAjeno, "m-carla", await jpegDePrueba())
 
     const busqueda = base.prisma.businessMember.findFirst.mock.calls[0][0]
-    expect(busqueda?.where).toEqual({ id: "m-carla", businessId: OTRO_NEGOCIO })
+    expect(busqueda?.where).toEqual({ id: "m-carla", businessId: OTRO_NEGOCIO, archivadoEn: null })
   })
 
   it("la clave nueva siempre cuelga del negocio de la sesión", async () => {
@@ -270,7 +270,7 @@ describe("PUT /api/equipo/miembros/[id]/foto: reemplazar", () => {
   it("la escritura lleva el negocio en el where: nunca toca un integrante ajeno", async () => {
     await subir(sesiones.dueña, "m-carla", await jpegDePrueba())
 
-    expect(base.prisma.businessMember.updateMany.mock.calls[0][0].where).toEqual({ id: "m-carla", businessId: NEGOCIO })
+    expect(base.prisma.businessMember.updateMany.mock.calls[0][0].where).toEqual({ id: "m-carla", businessId: NEGOCIO, archivadoEn: null })
   })
 
   it("NUNCA borra por lo que diga la base si no es una foto de este negocio", async () => {

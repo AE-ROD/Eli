@@ -10,6 +10,7 @@ import { REVALIDAR_CADA_MS } from "@/lib/renovacion-de-sesion"
 import { hashDeToken } from "@/lib/tokens"
 import { normalizarEmail } from "@/lib/validaciones"
 import bcrypt from "bcryptjs"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /** Lo justo del negocio para armar un contexto (`lib/contextos.ts`). */
 const NEGOCIO_DE_CONTEXTO = { select: { id: true, name: true, slug: true, type: true, plan: true } } as const
@@ -21,6 +22,9 @@ const NEGOCIO_DE_CONTEXTO = { select: { id: true, name: true, slug: true, type: 
 const CON_CONTEXTOS = {
   business: NEGOCIO_DE_CONTEXTO,
   memberships: {
+    // Quien fue sacado del equipo no tiene ese contexto: pierde el acceso en la
+    // próxima revalidación (lib/equipo-activo.ts).
+    where: EN_EL_EQUIPO,
     select: { id: true, role: true, business: NEGOCIO_DE_CONTEXTO },
     orderBy: { createdAt: "asc" },
     take: MAXIMO_DE_CONTEXTOS,

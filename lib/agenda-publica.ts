@@ -14,6 +14,7 @@ import { yaPasoLaHora } from "@/lib/reserva-publica"
 import { whereDelHorarioDeLaSede } from "@/lib/sedes"
 import { whereDeChoqueEnSillon } from "@/lib/sillones"
 import { diaDeLaSemana, existeLaHora, instanteEn, rangoDelDiaEn } from "@/lib/zona-horaria"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * La agenda de la reserva pública por profesional: quién atiende, qué horas
@@ -89,7 +90,7 @@ export async function leerProfesionalesQueAtienden(
   businessId: string
 ): Promise<ProfesionalQueAtiende[]> {
   const miembros = await db.businessMember.findMany({
-    where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] } },
+    where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] }, ...EN_EL_EQUIPO },
     select: {
       id: true,
       especialidad: true,
@@ -150,7 +151,7 @@ export async function leerHorarioDeQuienesAtienden(
 ): Promise<FilaDeHorarioSemanal[]> {
   const [atienden, filas] = await Promise.all([
     db.businessMember.findMany({
-      where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] } },
+      where: { businessId, role: { in: [...ROLES_QUE_ATIENDEN] }, ...EN_EL_EQUIPO },
       select: { id: true },
     }),
     db.workSchedule.findMany({

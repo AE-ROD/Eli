@@ -67,6 +67,7 @@ import { leerAlertaDeAlergias } from "@/lib/ficha-clinica-servidor"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { MENSAJE_SEDE_DE_LA_HORA_DESACTIVADA, esRechazoPorSedeInactiva } from "@/lib/rechazo-de-sede-inactiva"
 import { registrarError } from "@/lib/registro-de-errores"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 const edicionDeCitaSchema = z.object({
   title: titulo().optional(),
@@ -268,7 +269,7 @@ export async function PUT(
 
     if (memberId && memberId !== existente.memberId) {
       const miembro = await prisma.businessMember.findFirst({
-        where: { id: memberId, businessId: actor.businessId },
+        where: { id: memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
         select: { id: true, role: true },
       })
       if (!miembro) {

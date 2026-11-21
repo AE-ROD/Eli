@@ -57,6 +57,7 @@ import {
   errorDeSillonOcupado,
   sillonDeLaCita,
 } from "@/lib/sillones"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /** La zona del negocio, para escribir las horas de un mensaje en su reloj. */
 async function zonaDeLaClinica(businessId: string): Promise<string> {
@@ -239,7 +240,7 @@ export async function POST(request: NextRequest) {
 
     if (memberId) {
       const miembro = await prisma.businessMember.findFirst({
-        where: { id: memberId, businessId: actor.businessId },
+        where: { id: memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
         select: { id: true, role: true },
       })
       if (!miembro) {

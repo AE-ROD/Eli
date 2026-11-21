@@ -601,7 +601,7 @@ describe("POST /api/equipo — cuentas que ya existen", () => {
 
     expect(res.status).toBe(201)
     expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ include: { memberships: { where: { businessId: "negocio-1" } } } })
+      expect.objectContaining({ include: { memberships: { where: { businessId: "negocio-1", archivadoEn: null } } } })
     )
   })
 

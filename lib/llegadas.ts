@@ -16,6 +16,7 @@ import { ErrorDeAtencion, formatearAtencion, seleccionDeAtencion } from "@/lib/t
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { telefonoChileno } from "@/lib/campos-del-panel"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Traba la fila del cliente hasta que termine la transacción (`FOR UPDATE`).
@@ -211,7 +212,7 @@ async function lineasDeLaReserva(actor: Actor, cita: CitaQueLlega): Promise<Line
       ? cita.member.user.name
       : (
           await prisma.businessMember.findFirst({
-            where: { id: memberId, businessId: actor.businessId },
+            where: { id: memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
             select: { user: { select: { name: true } } },
           })
         )?.user.name

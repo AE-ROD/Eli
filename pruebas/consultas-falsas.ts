@@ -129,6 +129,10 @@ export const RELACIONES: Record<NombreDeModelo, Record<string, Relacion>> = {
     prestacionesDelPlan: muchos("prestacionDelPlan", "memberId"),
     protesis: muchos("protesis", "memberId"),
     excepcionesDeReparto: muchos("excepcionDeRepartoDeProtesis", "memberId"),
+    // Lo que le queda sin liquidar a quien ya no está (`EN_EL_EQUIPO_O_CON_PLATA_PENDIENTE`).
+    visitServices: muchos("visitService", "memberId"),
+    propinas: muchos("propinaDeAtencion", "memberId"),
+    movimientosDeLiquidacion: muchos("movimientoDeLiquidacion", "memberId"),
   },
   customer: {
     // La ficha guarda la FK: del lado del paciente es la relación inversa (1:1).

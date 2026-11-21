@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeGestionarEquipo } from "@/lib/permisos"
 import { ROLES_QUE_ATIENDEN } from "@/lib/agenda-publica"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 // GET /api/equipo/miembros — lista mínima para el selector de profesional de
 // la agenda: sólo quienes atienden, con la misma regla que la reserva pública
@@ -17,7 +18,7 @@ export async function GET() {
   }
 
   const miembros = await prisma.businessMember.findMany({
-    where: { businessId: actor.businessId, role: { in: [...ROLES_QUE_ATIENDEN] } },
+    where: { businessId: actor.businessId, role: { in: [...ROLES_QUE_ATIENDEN] }, ...EN_EL_EQUIPO },
     select: { id: true, role: true, user: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
     take: 100,

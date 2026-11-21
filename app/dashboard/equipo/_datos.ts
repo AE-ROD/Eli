@@ -87,6 +87,26 @@ export async function anularInvitacion(id: string): Promise<Resultado> {
   return pedir(`/api/equipo/pendientes/${id}`, "No se pudo anular la invitación", { method: "DELETE" })
 }
 
+/** Lo que hay que saber antes de sacar a alguien del equipo (`lib/sacar-del-equipo.ts`). */
+export interface ResumenDeSalida {
+  citasPorDelante: number
+  atencionesAbiertas: number
+  tienePlataPendiente: boolean
+  /** Por qué todavía no se puede, en palabras de la dueña; `null` si se puede. */
+  motivoParaNoSacar: string | null
+}
+
+const rutaDeSalida = (miembroId: string) => `/api/equipo/miembros/${encodeURIComponent(miembroId)}/salida`
+
+export async function revisarSalida(miembroId: string): Promise<Resultado<ResumenDeSalida>> {
+  return pedir<ResumenDeSalida>(rutaDeSalida(miembroId), "No se pudo revisar si se puede sacar a esta persona")
+}
+
+/** La saca del equipo (la archiva): pierde el acceso y deja de aparecer en la agenda y la reserva. */
+export async function sacarDelEquipo(miembroId: string): Promise<Resultado<{ ok: true; tienePlataPendiente: boolean }>> {
+  return pedir(rutaDeSalida(miembroId), "No se pudo sacar a esta persona del equipo", { method: "POST" })
+}
+
 /** Un servicio del catálogo, lo justo para elegir cuáles hace un profesional. */
 export interface ServicioDelCatalogo {
   id: string

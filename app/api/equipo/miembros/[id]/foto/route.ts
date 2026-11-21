@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { quitarFoto, subirFoto, type DestinoDeFoto } from "@/lib/cambiar-foto"
 import { actorDeSesion, puedeEditarFotoDelMiembro } from "@/lib/permisos"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * PUT / DELETE /api/equipo/miembros/[id]/foto — la foto de un integrante del
@@ -30,7 +31,7 @@ function destinoDelMiembro(businessId: string, miembroId: string): DestinoDeFoto
     miembroId,
     async leerUrl() {
       const miembro = await prisma.businessMember.findFirst({
-        where: { id: miembroId, businessId },
+        where: { id: miembroId, businessId, ...EN_EL_EQUIPO },
         select: { fotoUrl: true },
       })
       return miembro ? { url: miembro.fotoUrl } : null
@@ -39,7 +40,7 @@ function destinoDelMiembro(businessId: string, miembroId: string): DestinoDeFoto
       // El negocio en el `where`: aunque algo cambiara entre la verificación y
       // la escritura, nunca toca un integrante ajeno.
       const { count } = await prisma.businessMember.updateMany({
-        where: { id: miembroId, businessId },
+        where: { id: miembroId, businessId, ...EN_EL_EQUIPO },
         data: { fotoUrl: url },
       })
       return count > 0
@@ -56,7 +57,7 @@ async function resolver(contexto: Contexto) {
   const { id } = await contexto.params
   // Pertenencia antes de decidir nada: lo ajeno es 404, nunca 403.
   const miembro = await prisma.businessMember.findFirst({
-    where: { id, businessId: actor.businessId },
+    where: { id, businessId: actor.businessId, ...EN_EL_EQUIPO },
     select: { id: true, businessId: true },
   })
   if (!miembro) return { respuesta: NextResponse.json({ error: "Integrante no encontrado" }, { status: 404 }) }

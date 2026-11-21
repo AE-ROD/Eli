@@ -51,6 +51,7 @@ import {
   subtotalDeEtapa,
   totalesDelPlan,
 } from "@/lib/plan-de-tratamiento"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * (servidor) El plan de tratamiento de un paciente, para
@@ -281,7 +282,7 @@ async function profesionalPedido(
   }
   if (!pedido.memberId) return { memberId: null, profesionalNombre: null }
   const miembro = await tx.businessMember.findFirst({
-    where: { id: pedido.memberId, businessId: actor.businessId },
+    where: { id: pedido.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
     select: { id: true, role: true, user: { select: { name: true } } },
   })
   if (!miembro) throw new ErrorClinico(404, "Profesional no encontrado")

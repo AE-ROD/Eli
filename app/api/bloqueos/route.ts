@@ -7,6 +7,7 @@ import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, puedeGestionarBloqueoDe, whereDeBloqueos, type Miembro } from "@/lib/permisos"
 import { esFechaCalendario, rangoDelDiaEn, zonaDelNegocio } from "@/lib/zona-horaria"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Bloqueos de horario (`TimeBlock`): un tramo en que un profesional, o todo
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
   let miembro: Miembro | null = null
   if (datos.memberId) {
     miembro = await prisma.businessMember.findFirst({
-      where: { id: datos.memberId, businessId: actor.businessId },
+      where: { id: datos.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
       select: { id: true, businessId: true },
     })
     if (!miembro) {

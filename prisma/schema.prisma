@@ -241,6 +241,11 @@ model BusinessMember {
   especialidad String?
   fotoUrl      String?
 
+  /// Cuándo la sacaron del equipo; `null` = está en el equipo. No se borra la
+  /// fila (la referencian sus liquidaciones y su historia): se archiva. Qué lo
+  /// mira y qué no, en `lib/equipo-activo.ts`.
+  archivadoEn DateTime?
+
   workSchedules            WorkSchedule[]
   appointments             Appointment[]
   visitServices            VisitService[]

@@ -11,6 +11,7 @@ import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrand
 import { registrarError } from "@/lib/registro-de-errores"
 import { MENSAJE_HORARIO_POR_SEDE } from "@/lib/reglas-de-sedes"
 import { RechazoDeSedes, tomarCandadoDePlanYSedes } from "@/lib/sedes-servidor"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 type Objetivo = { ok: true; miembro: Miembro | null } | { ok: false; status: 404 | 401 | 400 }
 
@@ -66,7 +67,7 @@ async function resolverObjetivo(actor: Actor, destino: Destino): Promise<Objetiv
   }
 
   const miembro = await prisma.businessMember.findUnique({
-    where: { id: memberIdPedido },
+    where: { id: memberIdPedido, ...EN_EL_EQUIPO },
     select: { id: true, businessId: true },
   })
 

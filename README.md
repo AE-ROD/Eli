@@ -716,6 +716,24 @@ WHERE tgname IN ('citas_exigen_sede_activa', 'lista_de_espera_exige_sede_activa'
 SELECT plan, count(*) FROM negocios GROUP BY plan;
 ```
 
+### `20261121120000_sacar_del_equipo`
+
+**Antes de desplegar.** Agrega `miembros_negocio.archivadoEn` (nullable, sin
+default ni relleno): la fecha en que sacaron a alguien del equipo. El código
+nuevo filtra por esa columna al iniciar sesión y en la reserva pública, así
+que sin ella no anda; el viejo la ignora. Es sólo catálogo (instantánea), no
+toca filas y no necesita respaldo aparte. Si el candado no llega en 5
+segundos, falla entera y se reintenta. Para deshacerla:
+`ALTER TABLE "miembros_negocio" DROP COLUMN "archivadoEn";` (se pierde quién
+salió: vuelven a aparecer en el equipo).
+
+Para comprobarla (tiene que responder 1):
+
+```sql
+SELECT count(*) FROM information_schema.columns
+WHERE table_name = 'miembros_negocio' AND column_name = 'archivadoEn';
+```
+
 ### Qué migraciones están aplicadas
 
 Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de

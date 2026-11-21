@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { actorDeSesion, puedeEditarComisiones, whereDeProductos } from "@/lib/permisos"
 import { leerNegocioParaLiquidar } from "@/lib/liquidacion"
 import { inicioDelPeriodoEn } from "@/lib/periodos-de-liquidacion"
+import { EN_EL_EQUIPO_O_CON_PLATA_PENDIENTE, nombreConMarca } from "@/lib/equipo-activo"
 
 /**
  * Cuántas líneas pendientes se cuentan como máximo. Es un aviso ("tiene N
@@ -42,10 +43,11 @@ export async function GET() {
 
   const [miembros, servicios, productos, pendientes] = await Promise.all([
     prisma.businessMember.findMany({
-      where: { businessId },
+      where: { businessId, ...EN_EL_EQUIPO_O_CON_PLATA_PENDIENTE },
       select: {
         id: true,
         role: true,
+        archivadoEn: true,
         commissionPercent: true,
         user: { select: { name: true } },
         commissionRates: {
@@ -91,7 +93,7 @@ export async function GET() {
   return NextResponse.json({
     miembros: miembros.map((miembro) => ({
       id: miembro.id,
-      nombre: miembro.user.name,
+      nombre: nombreConMarca(miembro.user.name, miembro.archivadoEn),
       rol: miembro.role,
       porcentaje: miembro.commissionPercent,
       excepciones: miembro.commissionRates

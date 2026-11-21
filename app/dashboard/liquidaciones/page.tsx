@@ -31,6 +31,7 @@ import { SeccionMovimientos } from "./_componentes/seccion-movimientos"
 import { HistorialDeLiquidaciones } from "./_componentes/historial-de-liquidaciones"
 import { LIQUIDACIONES_POR_PAGINA } from "./_datos"
 import { frasesDeLasLiquidaciones } from "./_frases"
+import { EN_EL_EQUIPO_O_CON_PLATA_PENDIENTE, nombreConMarca } from "@/lib/equipo-activo"
 
 /**
  * Cuántos miembros se listan para liquidar. Es el tope con que la pantalla de
@@ -54,8 +55,8 @@ export default async function PaginaLiquidaciones() {
   const [{ zona, config, liquidarDesde }, miembros, historial, vivas, pendientes] = await Promise.all([
     leerNegocioParaLiquidar(prisma, actor.businessId),
     prisma.businessMember.findMany({
-      where: { businessId: actor.businessId },
-      select: { id: true, user: { select: { name: true } } },
+      where: { businessId: actor.businessId, ...EN_EL_EQUIPO_O_CON_PLATA_PENDIENTE },
+      select: { id: true, archivadoEn: true, user: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
       take: TOPE_DE_MIEMBROS,
     }),
@@ -94,7 +95,7 @@ export default async function PaginaLiquidaciones() {
     .filter((movimiento) => !liquidarDesde || movimiento.fecha >= liquidarDesde)
   const equipo: MiembroParaLiquidar[] = miembros.map((miembro) => ({
     id: miembro.id,
-    nombre: miembro.user.name,
+    nombre: nombreConMarca(miembro.user.name, miembro.archivadoEn),
     ultima: ultimas.get(miembro.id) ?? null,
   }))
 

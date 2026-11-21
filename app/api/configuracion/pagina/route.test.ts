@@ -58,7 +58,7 @@ describe("PUT /api/configuracion/pagina", () => {
       mediosDePago: ["efectivo", "transferencia"],
     })
     expect(prismaMock.businessMember.updateMany).toHaveBeenCalledWith({
-      where: { id: "m-1", businessId: "negocio-1" },
+      where: { id: "m-1", businessId: "negocio-1", archivadoEn: null },
       data: { especialidad: "Colorista" },
     })
   })
@@ -101,6 +101,7 @@ describe("PUT /api/configuracion/pagina", () => {
     expect(prismaMock.businessMember.findMany.mock.calls[0][0].where).toEqual({
       id: { in: ["m-1"] },
       businessId: "negocio-2",
+      archivadoEn: null,
     })
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })

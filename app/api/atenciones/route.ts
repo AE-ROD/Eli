@@ -30,6 +30,7 @@ import {
   seleccionDeAtencion,
 } from "@/lib/tablero"
 import { nombreCompletoDeCliente } from "@/lib/nombre-de-cliente"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /** El tablero muestra un día; con husos y cambios de hora, un día local cabe holgado en 48 h. */
 const RANGO_MAXIMO_MS = 48 * 60 * 60 * 1000
@@ -137,7 +138,7 @@ async function profesionalesAsignables(actor: Actor) {
   if (!puedeAsignarLineasAOtros(actor)) {
     if (!actor.memberId) return []
     const propio = await prisma.businessMember.findFirst({
-      where: { id: actor.memberId, businessId: actor.businessId },
+      where: { id: actor.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
       select: { id: true, user: { select: { name: true } } },
     })
     return propio ? [{ id: propio.id, nombre: propio.user.name }] : []
@@ -145,7 +146,7 @@ async function profesionalesAsignables(actor: Actor) {
 
   const [miembros, negocio] = await Promise.all([
     prisma.businessMember.findMany({
-      where: { businessId: actor.businessId },
+      where: { businessId: actor.businessId, ...EN_EL_EQUIPO },
       select: { id: true, userId: true, user: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
       take: 100,

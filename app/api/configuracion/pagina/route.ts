@@ -20,6 +20,7 @@ import {
   puedeEditarPaginaDelNegocio,
 } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * PUT /api/configuracion/pagina — los datos de la mini página pública del
@@ -153,7 +154,7 @@ export async function PUT(request: NextRequest) {
   const ids = especialidades.map((fila) => fila.memberId)
   if (ids.length > 0) {
     const delNegocio = await prisma.businessMember.findMany({
-      where: { id: { in: ids }, businessId: actor.businessId },
+      where: { id: { in: ids }, businessId: actor.businessId, ...EN_EL_EQUIPO },
       select: { id: true },
     })
     if (delNegocio.length !== ids.length) {
@@ -179,7 +180,7 @@ export async function PUT(request: NextRequest) {
     // verificación y la escritura, nunca toca un miembro ajeno.
     ...especialidades.map((fila) =>
       prisma.businessMember.updateMany({
-        where: { id: fila.memberId, businessId: actor.businessId },
+        where: { id: fila.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
         data: { especialidad: fila.especialidad },
       })
     ),

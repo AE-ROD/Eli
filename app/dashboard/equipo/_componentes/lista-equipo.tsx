@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import { Camera, Clock, ListChecks, Mail, RotateCw, UsersRound, X } from "lucide-react"
+import { Camera, Clock, ListChecks, Mail, RotateCw, UserMinus, UsersRound, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { CuadroDeIcono } from "@/components/comunes/icono-de-modulo"
@@ -63,6 +63,10 @@ interface PropsDeListaEquipo {
   puedeCambiarLaFotoDe: (miembro: MiembroDelEquipo) => boolean
   /** Abre la foto de un miembro para subirla, cambiarla o quitarla. */
   alEditarFoto: (miembro: MiembroDelEquipo) => void
+  /** Si quien mira puede sacar del equipo a ese integrante (`puedeSacarDelEquipo`). */
+  puedeSacarA: (miembro: MiembroDelEquipo) => boolean
+  /** Pide sacarlo del equipo: la pantalla revisa y confirma antes. */
+  alSacar: (miembro: MiembroDelEquipo) => void
 }
 
 export function ListaEquipo({
@@ -76,6 +80,8 @@ export function ListaEquipo({
   alEditarServicios,
   puedeCambiarLaFotoDe,
   alEditarFoto,
+  puedeSacarA,
+  alSacar,
 }: PropsDeListaEquipo) {
   const frases = frasesDeEquipo(vocabularioDe(useRubroDelPanel()).palabras)
   if (cargando) return <ListaCargando />
@@ -123,6 +129,9 @@ export function ListaEquipo({
                           },
                         ]
                       : []),
+                    ...(puedeSacarA(miembro)
+                      ? [{ texto: "Sacar del equipo", icono: <UserMinus aria-hidden="true" />, onElegir: () => alSacar(miembro), peligro: true }]
+                      : []),
                   ]}
                 />
                 <div className={LUGAR_DE_LAS_ACCIONES}>
@@ -144,6 +153,18 @@ export function ListaEquipo({
                       aria-label={`${miembro.fotoUrl ? "Cambiar foto" : "Subir foto"} de ${miembro.user.name}`}
                     >
                       {miembro.fotoUrl ? "Cambiar foto" : "Subir foto"}
+                    </Boton>
+                  )}
+                  {puedeSacarA(miembro) && (
+                    <Boton
+                      variante="fantasma"
+                      tamano="sm"
+                      className="text-error"
+                      icono={<UserMinus className="size-4" aria-hidden="true" />}
+                      onClick={() => alSacar(miembro)}
+                      aria-label={`Sacar a ${miembro.user.name} del equipo`}
+                    >
+                      Sacar del equipo
                     </Boton>
                   )}
                 </div>

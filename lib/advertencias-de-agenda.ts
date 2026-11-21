@@ -3,6 +3,7 @@ import { leerHorarioDeQuienesAtienden } from "@/lib/agenda-publica"
 import { leerOcupacion } from "@/lib/ocupacion"
 import { advertenciaDeBloqueo, advertenciaDeChoque, advertenciaDeHorario, type Advertencia, type Tramo } from "@/lib/mover-cita"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Las advertencias de dejar una cita en `tramo` con `memberId`, al crearla o
@@ -36,7 +37,7 @@ export async function advertenciasDeAgenda(
     leerHorarioDeQuienesAtienden(db, businessId, sedeId),
     memberId
       ? db.businessMember.findFirst({
-          where: { id: memberId, businessId },
+          where: { id: memberId, businessId, ...EN_EL_EQUIPO },
           select: { user: { select: { name: true } } },
         })
       : null,

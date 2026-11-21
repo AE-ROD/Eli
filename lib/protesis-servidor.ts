@@ -83,6 +83,7 @@ import {
   valorDeLaProtesis,
   type RepartoEnPuntosBase,
 } from "@/lib/protesis"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * (servidor) Las prótesis: el catálogo (laboratorios, materiales, excepciones
@@ -455,7 +456,7 @@ export async function crearExcepcion(
   return prisma.$transaction(async (tx) => {
     const [miembro, material] = await Promise.all([
       tx.businessMember.findFirst({
-        where: { id: datos.memberId, businessId: actor.businessId },
+        where: { id: datos.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
         select: { id: true, role: true, user: { select: { name: true } } },
       }),
       tx.materialDeProtesis.findFirst({ where: whereDeMaterialesDeProtesis(actor, { id: datos.materialId }), select: { id: true, nombre: true } }),
@@ -698,7 +699,7 @@ async function tratanteConNombre(tx: Tx, actor: Actor, pedido: string | undefine
     return { ...tratante, nombre: nombreParaCopiar(negocio?.user.name) }
   }
   const miembro = await tx.businessMember.findFirst({
-    where: { id: tratante.memberId ?? "", businessId: actor.businessId },
+    where: { id: tratante.memberId ?? "", businessId: actor.businessId, ...EN_EL_EQUIPO },
     select: { id: true, role: true, user: { select: { name: true } } },
   })
   if (!miembro) throw new ErrorClinico(404, MENSAJE_PROFESIONAL_NO_ENCONTRADO)
@@ -1031,7 +1032,7 @@ async function tratantesPosibles(actor: Actor): Promise<{ id: string; nombre: st
     const [negocio, miembros] = await Promise.all([
       prisma.business.findFirst({ where: { id: actor.businessId }, select: { user: { select: { name: true } } } }),
       prisma.businessMember.findMany({
-        where: { businessId: actor.businessId, role: "worker" },
+        where: { businessId: actor.businessId, role: "worker", ...EN_EL_EQUIPO },
         orderBy: { createdAt: "asc" },
         select: { id: true, user: { select: { name: true } } },
       }),
@@ -1043,7 +1044,7 @@ async function tratantesPosibles(actor: Actor): Promise<{ id: string; nombre: st
   }
   if (!actor.memberId) return []
   const yo = await prisma.businessMember.findFirst({
-    where: { id: actor.memberId, businessId: actor.businessId },
+    where: { id: actor.memberId, businessId: actor.businessId, ...EN_EL_EQUIPO },
     select: { id: true, user: { select: { name: true } } },
   })
   return yo ? [{ id: yo.id, nombre: nombreParaCopiar(yo.user.name) }] : []

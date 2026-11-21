@@ -5,6 +5,7 @@ import { whereDeSedes, type Actor } from "@/lib/permisos"
 import { PLANES, planConocido, type PlanId } from "@/lib/planes"
 import { MENSAJE_NO_SE_PUEDE_LEER_EL_PLAN } from "@/lib/reglas-de-sedes"
 import { RechazoDeSedes, whereDeHorasPorDelante } from "@/lib/sedes-servidor"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * El lado servidor del cambio de plan (`PATCH /api/configuracion/plan`): lee lo
@@ -64,7 +65,7 @@ export async function cambiarDePlan(tx: Db, actor: Actor, pedido: CambioDePlan, 
     planPedido: pedido.plan,
     sedeQueSeQueda: pedido.sedeQueSeQueda,
     sedes: sedes.map((sede) => ({ id: sede.id, nombre: sede.nombre, activo: sede.activo, horasFuturas: sede._count.citas })),
-    integrantes: pasaAIndependiente ? await tx.businessMember.count({ where: { businessId } }) : 0,
+    integrantes: pasaAIndependiente ? await tx.businessMember.count({ where: { businessId, ...EN_EL_EQUIPO } }) : 0,
     invitacionesPendientes: pasaAIndependiente ? await tx.workerInvitation.count({ where: { businessId, acceptedAt: null } }) : 0,
   })
 

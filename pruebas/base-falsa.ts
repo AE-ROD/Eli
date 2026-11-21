@@ -95,6 +95,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     especialidad: null,
     fotoUrl: null,
     commissionPercent: null,
+    archivadoEn: null,
     createdAt: new Date(),
   }),
   customer: () => ({

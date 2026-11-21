@@ -122,8 +122,19 @@ export async function POST(
         // negocio la puede anular). Antes se marcaba aceptada sin hacer nada.
         const yaEsMiembro = await tx.businessMember.findUnique({
           where: { businessId_userId: { businessId: invitacion.businessId, userId: usuarioExistente.id } },
-          select: { id: true },
+          select: { id: true, archivadoEn: true },
         })
+        // La habían sacado del equipo y la vuelven a invitar: se reactiva su
+        // misma ficha (conserva su historia y su plata), con el rol de la
+        // invitación. Su horario y sus bloqueos se borraron al sacarla: se
+        // vuelven a cargar.
+        if (yaEsMiembro?.archivadoEn) {
+          return tx.businessMember.update({
+            where: { id: yaEsMiembro.id },
+            data: { archivadoEn: null, role: invitacion.role },
+            select: { id: true },
+          })
+        }
         if (yaEsMiembro) throw new YaEsMiembro()
 
         return tx.businessMember.create({

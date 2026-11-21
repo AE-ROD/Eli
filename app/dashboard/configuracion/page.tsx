@@ -66,6 +66,7 @@ import { vocabularioDe } from "@/lib/vocabulario"
 import { zonaVigente } from "@/lib/zonas-de-chile"
 import { frasesDeConfiguracion } from "./_frases"
 import { sedesDeLaRespuesta } from "./_sedes"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 export default async function PaginaConfiguracion() {
   const session = await getServerSession(authOptions)
@@ -151,6 +152,7 @@ export default async function PaginaConfiguracion() {
         avisoDeVueltaActivo: true,
         pideResenas: true,
         members: {
+          where: EN_EL_EQUIPO,
           select: { id: true, role: true, especialidad: true, user: { select: { name: true } } },
           orderBy: { createdAt: "asc" },
         },
@@ -167,7 +169,7 @@ export default async function PaginaConfiguracion() {
     gestionaLaboratorios ? leerLaboratorios(actor) : Promise.resolve([]),
     membresiaConFotoPropia
       ? prisma.businessMember.findFirst({
-          where: { id: membresiaConFotoPropia, businessId: actor.businessId },
+          where: { id: membresiaConFotoPropia, businessId: actor.businessId, ...EN_EL_EQUIPO },
           select: { id: true, role: true, fotoUrl: true },
         })
       : Promise.resolve(null),
@@ -190,7 +192,7 @@ export default async function PaginaConfiguracion() {
 
   const miembros = puedeEditarHorarioDeOtros
     ? await prisma.businessMember.findMany({
-        where: { businessId: actor.businessId },
+        where: { businessId: actor.businessId, ...EN_EL_EQUIPO },
         include: { user: { select: { name: true, email: true } } },
         orderBy: { createdAt: "asc" },
       })

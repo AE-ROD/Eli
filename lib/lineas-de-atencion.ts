@@ -4,6 +4,7 @@ import { MAXIMO_DE_LINEAS_POR_ATENCION, PROFESIONAL_DUEÑO, aCentavos, esPrecioV
 import { comisionParaCongelar, porcentajeDeLinea, type PorcentajesVigentes } from "@/lib/comisiones"
 import { profesionalParaLinea, whereDeProductos, type Actor, type ProfesionalDeLinea } from "@/lib/permisos"
 import { ErrorDeAtencion } from "@/lib/tablero"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Cómo se convierte lo que manda el navegador en las líneas que se guardan.
@@ -155,7 +156,7 @@ export async function resolverLineas(
     idsDeMiembros.length === 0
       ? Promise.resolve([])
       : db.businessMember.findMany({
-          where: { businessId: actor.businessId, id: { in: idsDeMiembros } },
+          where: { businessId: actor.businessId, id: { in: idsDeMiembros }, ...EN_EL_EQUIPO },
           select: { id: true, user: { select: { name: true } } },
           take: idsDeMiembros.length,
         }),

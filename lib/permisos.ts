@@ -228,6 +228,19 @@ export const puedeCambiarRolDe = (actor: Actor | null, miembro: Miembro): boolea
   mismoNegocio(actor, miembro.businessId) &&
   actor?.memberId !== miembro.id
 
+/**
+ * Sacar a alguien del equipo (archivarlo, `lib/sacar-del-equipo.ts`). La dueña
+ * saca a cualquiera; el encargado, sólo a profesionales; nadie se saca a sí
+ * mismo. La dueña no es miembro del equipo, así que nadie la puede sacar. Un
+ * rol desconocido no saca a nadie: se pregunta quién puede, no quién no.
+ */
+export const puedeSacarDelEquipo = (actor: Actor | null, miembro: Miembro & { role: string }): boolean => {
+  if (!actor || !puedeGestionarEquipo(actor) || !mismoNegocio(actor, miembro.businessId)) return false
+  if (actor.memberId === miembro.id) return false
+  if (actor.rol === "owner") return true
+  return actor.rol === "admin" && miembro.role === "worker"
+}
+
 /** El profesional ve su liquidación; dueño y encargado, la de cualquiera. */
 export const puedeVerLiquidacionDe = (actor: Actor | null, miembro: Miembro): boolean =>
   mismoNegocio(actor, miembro.businessId) &&

@@ -7,6 +7,7 @@ import {
   mismoNegocio,
   puedeGestionarEquipo,
   puedeCambiarRolDe,
+  puedeSacarDelEquipo,
   puedeEditarComisiones,
   puedeGestionarSuscripcion,
   veLaListaDeInicio,
@@ -249,6 +250,21 @@ describe("aislamiento entre negocios", () => {
     expect(mismoNegocio(dueño, NEGOCIO)).toBe(true)
     expect(mismoNegocio(dueño, OTRO_NEGOCIO)).toBe(false)
     expect(mismoNegocio(dueño, null)).toBe(false)
+  })
+
+  it("sacar del equipo: la dueña a cualquiera, el encargado sólo a profesionales, nadie a sí mismo", () => {
+    const profesionalDelEquipo = { ...miembro, role: "worker" }
+    const otroEncargado = { ...miembro, role: "admin" }
+    expect(puedeSacarDelEquipo(dueño, profesionalDelEquipo)).toBe(true)
+    expect(puedeSacarDelEquipo(dueño, otroEncargado)).toBe(true)
+    expect(puedeSacarDelEquipo(encargado, profesionalDelEquipo)).toBe(true)
+    expect(puedeSacarDelEquipo(encargado, otroEncargado)).toBe(false)
+    expect(puedeSacarDelEquipo(encargado, { ...yoMismo, role: "admin" })).toBe(false)
+    expect(puedeSacarDelEquipo(profesional, profesionalDelEquipo)).toBe(false)
+    expect(puedeSacarDelEquipo(profesional, { ...yoMismo, role: "worker" })).toBe(false)
+    expect(puedeSacarDelEquipo(null, profesionalDelEquipo)).toBe(false)
+    expect(puedeSacarDelEquipo(dueño, { ...ajeno, role: "worker" })).toBe(false)
+    expect(puedeSacarDelEquipo(actor("raro" as Rol), profesionalDelEquipo)).toBe(false)
   })
 
   it("ni el dueño alcanza a un miembro de otro negocio", () => {

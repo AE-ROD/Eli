@@ -24,6 +24,7 @@ import { prisma } from "@/lib/prisma"
 import { WHERE_HORARIO_VIGENTE, direccionDeLaCita, modoDeSedes, ordenarSedes, type ModoDeSedes } from "@/lib/sedes"
 import { servicioIdsPublicos } from "@/lib/servicios-del-profesional"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * (servidor) Lo que muestra la mini página pública de un negocio, leído por
@@ -145,6 +146,7 @@ export const leerPaginaDelNegocio = cache(async (slug: string): Promise<PaginaDe
       // Basta saber si hay alguna: la página no lista las franjas.
       franjasDeHoraValle: { select: { id: true }, take: 1 },
       members: {
+        where: EN_EL_EQUIPO,
         select: { id: true, role: true, especialidad: true, fotoUrl: true, user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
       },

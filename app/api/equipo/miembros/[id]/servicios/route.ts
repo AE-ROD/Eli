@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { cuerpoConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { actorDeSesion, gestionaElNegocio, puedeDefinirServiciosDe } from "@/lib/permisos"
 import { respuestaDeDatosInvalidos } from "@/lib/respuesta-de-validacion"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 /**
  * Los servicios que hace un profesional (`MemberService`). Sin filas, hace
@@ -41,7 +42,7 @@ type Contexto = { params: Promise<{ id: string }> }
 
 /** El miembro, sólo si es del negocio del actor. */
 async function miembroDelNegocio(id: string, businessId: string) {
-  return prisma.businessMember.findFirst({ where: { id, businessId }, select: { id: true, businessId: true } })
+  return prisma.businessMember.findFirst({ where: { id, businessId, ...EN_EL_EQUIPO }, select: { id: true, businessId: true } })
 }
 
 async function serviciosDelMiembro(memberId: string, businessId: string) {

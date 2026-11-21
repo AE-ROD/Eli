@@ -19,6 +19,7 @@ import {
 import { normalizarEmail } from "@/lib/validaciones"
 import { registrarError } from "@/lib/registro-de-errores"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
+import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
 
 // GET /api/equipo — lista de miembros del negocio
 export async function GET() {
@@ -31,7 +32,7 @@ export async function GET() {
 
   const [miembros, invitaciones] = await Promise.all([
     prisma.businessMember.findMany({
-      where: { businessId: actor.businessId },
+      where: { businessId: actor.businessId, ...EN_EL_EQUIPO },
       select: {
         id: true,
         role: true,
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     const yaExiste = await prisma.user.findFirst({
       where: { email: mismoEmail },
-      include: { memberships: { where: { businessId: actor.businessId } } },
+      include: { memberships: { where: { businessId: actor.businessId, ...EN_EL_EQUIPO } } },
     })
     if (yaExiste?.memberships.length) {
       return NextResponse.json({ error: "Este usuario ya es miembro del negocio" }, { status: 409 })

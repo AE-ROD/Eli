@@ -458,7 +458,7 @@ describe("PATCH /api/configuracion/plan: Equipo a Independiente", () => {
 
     await cambiar(sesionesDeSedes.dueñaEquipo, { plan: "independiente" })
 
-    expect(base.prisma.businessMember.count).toHaveBeenCalledWith({ where: { businessId: NEGOCIO } })
+    expect(base.prisma.businessMember.count).toHaveBeenCalledWith({ where: { businessId: NEGOCIO, archivadoEn: null } })
     expect(base.prisma.workerInvitation.count).toHaveBeenCalledWith({ where: { businessId: NEGOCIO, acceptedAt: null } })
     expect(base.transaccion.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(base.prisma.businessMember.count.mock.invocationCallOrder[0])
   })
