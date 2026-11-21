@@ -195,7 +195,7 @@ export function SeccionFunciones() {
                     className={cn(
                       "relative flex h-full animate-flotar items-center gap-4 rounded-[22px] border border-white px-4 py-3 shadow-sm squircle [--giro:0deg] lg:block lg:rounded-[28px] lg:p-0",
                       // En el teléfono, tarjeta compacta y quieta.
-                      "max-md:animate-none max-md:gap-2.5 max-md:rounded-[18px] max-md:px-3",
+                      "max-md:animate-none max-md:gap-2 max-md:rounded-[18px] max-md:px-2.5",
                       tono.suave,
                     )}
                     style={flotarDe(indice)}
@@ -203,13 +203,13 @@ export function SeccionFunciones() {
                     <span
                       aria-hidden="true"
                       className={cn(
-                        "grid size-10 shrink-0 place-items-center rounded-[14px] bg-tarjeta shadow-sm max-md:size-9 max-md:rounded-[12px] lg:absolute lg:left-5 lg:top-5 lg:size-[46px] lg:rounded-[16px]",
+                        "grid size-10 shrink-0 place-items-center rounded-[14px] bg-tarjeta shadow-sm max-md:size-8 max-md:rounded-[11px] lg:absolute lg:left-5 lg:top-5 lg:size-[46px] lg:rounded-[16px]",
                         tono.texto,
                       )}
                     >
                       <Icono className="size-5 lg:size-[22px]" strokeWidth={1.75} />
                     </span>
-                    <span className="min-w-0 flex-1 text-base font-semibold leading-[1.2] tracking-[-0.025em] max-md:text-[15px] lg:absolute lg:bottom-5 lg:left-[22px] lg:right-[18px] lg:text-lg">
+                    <span className="min-w-0 flex-1 text-base font-semibold leading-[1.2] tracking-[-0.025em] max-md:text-[15px] max-md:hyphens-auto lg:absolute lg:bottom-5 lg:left-[22px] lg:right-[18px] lg:text-lg">
                       {funcion.titulo}
                     </span>
                     <span
