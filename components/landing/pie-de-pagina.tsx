@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowUpRight } from "lucide-react"
+import { ArrowUpRight, Plus } from "lucide-react"
 import { OFICIOS, SECCION_DE_MODULO, SECCION_DE_OFICIOS } from "@/components/landing/menu-desplegable"
 import { Revelar } from "@/components/movimiento/revelar"
 import { MODULOS } from "@/lib/modulos"
@@ -47,6 +47,12 @@ export function PieDePagina() {
             <ColumnaDelPie titulo="Producto" enlaces={ENLACES_DE_PRODUCTO} />
             <ColumnaDelPie titulo="Para quién" enlaces={ENLACES_DE_OFICIOS} />
             <ColumnaDelPie titulo="Cuenta" enlaces={ENLACES_DE_CUENTA} />
+            {/* En el teléfono, las tres columnas van plegadas, una debajo de otra. */}
+            <div className="col-span-2 flex flex-col gap-2 md:hidden">
+              <ColumnaPlegada titulo="Producto" enlaces={ENLACES_DE_PRODUCTO} />
+              <ColumnaPlegada titulo="Para quién" enlaces={ENLACES_DE_OFICIOS} />
+              <ColumnaPlegada titulo="Cuenta" enlaces={ENLACES_DE_CUENTA} />
+            </div>
           </div>
 
           <div className="mt-12 flex flex-col gap-3 border-t border-white/18 pt-5 text-white/80 md:flex-row md:items-center md:justify-between md:gap-6">
@@ -70,10 +76,10 @@ export function PieDePagina() {
           <div className="mt-8 flex flex-col gap-10 lg:mt-6 lg:flex-row lg:items-center lg:gap-14">
             {/* La marca en grande. Decorativa: quién la hace lo dice el bloque de al lado. */}
             <div aria-hidden="true" className="flex shrink-0 select-none flex-col items-center self-center lg:self-auto">
-              <span className="degradado-frutos bg-clip-text px-[0.05em] text-[length:clamp(8rem,40vw,21.25rem)] font-bold leading-none tracking-[-0.03em] text-transparent">
+              <span className="degradado-frutos bg-clip-text px-[0.05em] text-[length:clamp(8rem,40vw,21.25rem)] font-bold max-md:text-[5.5rem] leading-none tracking-[-0.03em] text-transparent">
                 Eli
               </span>
-              <span className="-mt-1.5 text-[15px] uppercase leading-none tracking-[0.2em] text-[#b3a28e] md:text-[19px]">
+              <span className="-mt-1.5 text-[15px] uppercase leading-none tracking-[0.2em] text-[#b3a28e] max-md:mt-0 max-md:text-sm md:text-[19px]">
                 by <b className="font-bold text-white">Sistema One</b>
               </span>
             </div>
@@ -111,25 +117,53 @@ const ENLACE_DEL_PIE =
 
 function ColumnaDelPie({ titulo, enlaces }: { titulo: string; enlaces: Enlace[] }) {
   return (
-    <nav aria-label={titulo}>
+    <nav aria-label={titulo} className="max-md:hidden">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pistacho">{titulo}</p>
-      <ul className="mt-2">
-        {enlaces.map((enlace) => (
-          <li key={enlace.texto}>
-            {/* A una sección de esta página, un `<a>` común: con el `#` ya en
-                la dirección, `Link` no hace nada y el navegador sí vuelve a ella. */}
-            {enlace.href.startsWith("#") ? (
-              <a href={enlace.href} className={ENLACE_DEL_PIE}>
-                {enlace.texto}
-              </a>
-            ) : (
-              <Link href={enlace.href} className={ENLACE_DEL_PIE}>
-                {enlace.texto}
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
+      <ListaDelPie enlaces={enlaces} />
     </nav>
+  )
+}
+
+/**
+ * Una columna del pie en el teléfono: un `<details>` nativo con el título de
+ * 48px de alto y los enlaces adentro.
+ */
+function ColumnaPlegada({ titulo, enlaces }: { titulo: string; enlaces: Enlace[] }) {
+  return (
+    <details className="group rounded-[18px] bg-white/[.07] ring-1 ring-white/10 squircle">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-[18px] px-4 text-[15px] font-semibold anillo-foco [&::-webkit-details-marker]:hidden">
+        {titulo}
+        <Plus
+          aria-hidden="true"
+          strokeWidth={1.75}
+          className="size-[18px] shrink-0 text-white/80 transition-transform duration-200 ease-suave group-open:rotate-45"
+        />
+      </summary>
+      <nav aria-label={titulo} className="px-4 pb-2">
+        <ListaDelPie enlaces={enlaces} />
+      </nav>
+    </details>
+  )
+}
+
+function ListaDelPie({ enlaces }: { enlaces: Enlace[] }) {
+  return (
+    <ul className="mt-2">
+      {enlaces.map((enlace) => (
+        <li key={enlace.texto}>
+          {/* A una sección de esta página, un `<a>` común: con el `#` ya en
+              la dirección, `Link` no hace nada y el navegador sí vuelve a ella. */}
+          {enlace.href.startsWith("#") ? (
+            <a href={enlace.href} className={ENLACE_DEL_PIE}>
+              {enlace.texto}
+            </a>
+          ) : (
+            <Link href={enlace.href} className={ENLACE_DEL_PIE}>
+              {enlace.texto}
+            </Link>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

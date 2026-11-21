@@ -39,10 +39,12 @@ export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; cl
           </Avatar>
           <div className="min-w-0">
             <p className="truncate text-[17px] font-semibold tracking-[-0.02em]">María González</p>
-            <p className="mt-0.5 text-[12.5px] text-texto-2">Visita de hoy · 10:30</p>
+            <p className="mt-0.5 text-[12.5px] text-texto-2 max-md:text-sm">Visita de hoy · 10:30</p>
           </div>
         </div>
-        <Chip tono="pistacho">En atención</Chip>
+        <Chip tono="pistacho" className="max-md:text-sm">
+          En atención
+        </Chip>
       </div>
 
       <ul className="mt-4 flex flex-col gap-2 border-t border-borde-suave pt-3.5">
@@ -56,7 +58,7 @@ export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; cl
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="text-[14.5px] font-semibold">{linea.servicio}</p>
-              <p className="mt-px text-[12.5px] text-texto-2">{conEquipo ? linea.profesional : "Atiendes tú"}</p>
+              <p className="mt-px text-[12.5px] text-texto-2 max-md:text-sm">{conEquipo ? linea.profesional : "Atiendes tú"}</p>
             </div>
             <span className="text-[14.5px] font-semibold">{formatearPesos(linea.monto)}</span>
           </li>
@@ -64,7 +66,7 @@ export function MaquetaVisita({ conEquipo, className }: { conEquipo: boolean; cl
       </ul>
 
       <div className="mt-4 flex items-center justify-between border-t border-borde-suave pt-3.5">
-        <span className="text-[13.5px] font-semibold text-texto-2">Total de la visita</span>
+        <span className="text-[13.5px] font-semibold text-texto-2 max-md:text-sm">Total de la visita</span>
         <span className="text-2xl font-semibold tracking-[-0.04em]">{formatearPesos(TOTAL)}</span>
       </div>
     </MarcoDeMaqueta>

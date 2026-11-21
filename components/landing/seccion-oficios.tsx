@@ -12,6 +12,9 @@ import { useBloqueEnMovimiento } from "@/components/movimiento/usar-bloque-en-mo
 import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
 import { cn } from "@/lib/utils"
 
+/** Por debajo de md: el teléfono. */
+const CELULAR = "(max-width: 47.99rem)"
+
 /** Cada cuánto pasa sola de "con equipo" a "solo" y de vuelta. */
 const INTERVALO_MS = 5500
 
@@ -116,15 +119,21 @@ const OPCIONES = [
  * encima, con el foco del teclado adentro y fuera de la pantalla. Con
  * movimiento reducido no pasa solo y nada flota. Elegir una opción la muestra
  * y vuelve a contar desde ahí. Las opciones son botones con `aria-pressed`.
+ *
+ * En el teléfono (por debajo de md) todo queda quieto: los cuatro oficios van
+ * en una lista (foto chica, nombre y su línea), el selector cambia sólo al
+ * tocarlo y la maqueta va sola debajo de la historia, sin fotos ni pausa.
  */
 export function SeccionOficios() {
   const reducido = useCoincideMedia("(prefers-reduced-motion: reduce)")
+  // En el teléfono la sección queda quieta: no pasa sola ni flota, y no lleva pausa.
+  const celular = useCoincideMedia(CELULAR)
   const { ref, enPantalla, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
   const [conEquipo, setConEquipo] = useState(true)
   const [reinicio, setReinicio] = useState(0)
   const [conCursor, setConCursor] = useState(false)
   const [conFoco, setConFoco] = useState(false)
-  const avanzaSolo = !reducido && !pausado && !conCursor && !conFoco && enPantalla
+  const avanzaSolo = !reducido && !celular && !pausado && !conCursor && !conFoco && enPantalla
   const historia = conEquipo ? HISTORIA.equipo : HISTORIA.solo
 
   useEffect(() => {
@@ -172,10 +181,12 @@ export function SeccionOficios() {
           // La pausa va primera en el documento y se ve debajo de la maqueta: la
           // pone ahí la grilla ('pausa'), con 16px de separación como antes.
           "grid items-start gap-10 [grid-template-areas:'texto'_'maqueta'_'pausa'] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:grid-rows-[auto_1fr] lg:gap-y-4 lg:[grid-template-areas:'texto_maqueta'_'texto_pausa'] xl:gap-x-[68px]",
+          // En el teléfono, la maqueta va dentro del texto y sin pausa: una sola área.
+          "max-md:gap-0 max-md:[grid-template-areas:'texto']",
           quieto && "animaciones-en-pausa"
         )}
       >
-        <div className="-mt-6 flex justify-end [grid-area:pausa] lg:mt-0">
+        <div className="-mt-6 flex justify-end [grid-area:pausa] max-md:hidden lg:mt-0">
           {!reducido && (
             <BotonDePausa pausado={pausado} alCambiar={alternarPausa} etiqueta="Pausar el cambio entre solo y con equipo" />
           )}
@@ -192,6 +203,18 @@ export function SeccionOficios() {
             }
             subtitulo="Salones de belleza, barberías, salones de uñas y odontología, trabajes solo o con equipo."
           />
+
+          {/* En el teléfono, los cuatro oficios en una lista quieta, en vez de las etiquetas y las fotos que flotan. */}
+          <ul
+            aria-label="Los cuatro oficios"
+            className="mt-6 divide-y divide-borde-suave rounded-[24px] bg-tarjeta px-3 shadow-sm squircle md:hidden"
+          >
+            {OFICIOS.map((oficio) => (
+              <li key={oficio.nombre}>
+                <FilaDeOficio oficio={oficio} />
+              </li>
+            ))}
+          </ul>
 
           <div
             role="group"
@@ -218,12 +241,17 @@ export function SeccionOficios() {
           </div>
 
           <div className="mt-7 max-w-[500px]">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-frambuesa-texto">Salón de belleza</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-frambuesa-texto max-md:text-sm">Salón de belleza</p>
             <h3 className="mt-1.5 text-[1.625rem] font-semibold leading-[1.15] tracking-[-0.035em]">{historia.titulo}</h3>
-            <p className="mt-2.5 min-h-[70px] text-[15px] leading-[1.55] text-texto-2">{historia.texto}</p>
+            <p className="mt-2.5 min-h-[70px] text-[15px] leading-[1.55] text-texto-2 max-md:min-h-0">{historia.texto}</p>
           </div>
 
-          <ul aria-label="También para" className="mt-5 flex flex-wrap gap-3">
+          {/* En el teléfono, la visita sola: sin la caja, las fotos ni las líneas, y sin flotar. */}
+          <div className="mt-5 md:hidden">
+            <MaquetaVisita conEquipo={conEquipo} />
+          </div>
+
+          <ul aria-label="También para" className="mt-5 flex flex-wrap gap-3 max-md:hidden">
             {OTROS.map((oficio) => (
               <li key={oficio.nombre}>
                 <EtiquetaDeOficio oficio={oficio} />
@@ -232,7 +260,7 @@ export function SeccionOficios() {
           </ul>
         </div>
 
-        <div className="[grid-area:maqueta]">
+        <div className="[grid-area:maqueta] max-md:hidden">
           <div
             className="relative isolate min-h-[500px] overflow-hidden rounded-bloque border border-borde-suave bg-ciruela-suave squircle md:min-h-0 md:aspect-[668/572]"
           >
@@ -325,5 +353,39 @@ function EtiquetaDeOficio({ oficio }: { oficio: OficioDelMenu }) {
       </span>
       {oficio.nombre}
     </span>
+  )
+}
+
+/** Una fila de la lista del teléfono: la foto chica, el nombre del oficio y su línea del menú. */
+function FilaDeOficio({ oficio }: { oficio: OficioDelMenu }) {
+  const foto = FOTOS[oficio.nombre]
+  const [faltaElArchivo, setFaltaElArchivo] = useState(false)
+  const Icono = oficio.icono
+  return (
+    <div className="flex items-center gap-3.5 py-3">
+      {/* El nombre va al lado: la foto no aporta nada más, `alt` vacío a propósito. */}
+      <span
+        aria-hidden="true"
+        className={cn("relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-[14px]", foto?.relleno)}
+      >
+        {foto && !faltaElArchivo ? (
+          <Image
+            src={foto.src}
+            alt=""
+            width={168}
+            height={224}
+            loading="lazy"
+            onError={() => setFaltaElArchivo(true)}
+            className="absolute inset-0 size-full object-cover"
+          />
+        ) : (
+          <Icono strokeWidth={1.75} className={cn("size-6", foto?.texto)} />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-base font-semibold leading-[1.25] tracking-[-0.02em]">{oficio.nombre}</span>
+        <span className="mt-0.5 block text-sm leading-[1.35] text-texto-2">{oficio.descripcion}</span>
+      </span>
+    </div>
   )
 }

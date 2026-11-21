@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { BarraCrearCuenta } from "@/components/landing/barra-crear-cuenta"
 import { Encabezado } from "@/components/landing/encabezado"
 import { PieDePagina } from "@/components/landing/pie-de-pagina"
 import { SeccionAreas } from "@/components/landing/seccion-areas"
@@ -14,6 +15,7 @@ import { SeccionRecorrido } from "@/components/landing/seccion-recorrido"
 const SeccionUnDia = dynamic(() => import("@/components/landing/seccion-un-dia").then((m) => m.SeccionUnDia))
 const SeccionTablero = dynamic(() => import("@/components/landing/seccion-tablero").then((m) => m.SeccionTablero))
 const SeccionReportes = dynamic(() => import("@/components/landing/seccion-reportes").then((m) => m.SeccionReportes))
+const TocaYMira = dynamic(() => import("@/components/landing/toca-y-mira/toca-y-mira").then((m) => m.TocaYMira))
 const SeccionOficios = dynamic(() => import("@/components/landing/seccion-oficios").then((m) => m.SeccionOficios))
 const SeccionFunciones = dynamic(() =>
   import("@/components/landing/seccion-funciones").then((m) => m.SeccionFunciones)
@@ -43,16 +45,31 @@ export default function PaginaLanding() {
           <SeccionPortada />
           <SeccionAreas />
         </div>
-        <SeccionRecorrido />
-        <SeccionUnDia />
-        <SeccionTablero />
-        <SeccionReportes />
+        {/*
+          En el teléfono (por debajo de md) estas cuatro se reemplazan por
+          "Toca y mira". No se sacan del documento: cada `<section>` queda
+          con su `id` y sin alto (su contenido, `display: none`), así los
+          enlaces del menú y del pie a #recorrido, #tablero o #reportes
+          llevan a "Toca y mira", que va justo después. Lo de adentro no se
+          pinta, así que sus animaciones de CSS no corren y las de JavaScript
+          quedan en pausa (nunca están en pantalla). Desde md el envoltorio es
+          `display: contents`: la landing queda como siempre.
+        */}
+        <div className="md:contents max-md:[&>section>*]:hidden">
+          <SeccionRecorrido />
+          <SeccionUnDia />
+          <SeccionTablero />
+          <SeccionReportes />
+        </div>
+        <TocaYMira />
         <SeccionOficios />
         <SeccionFunciones />
         <SeccionPrecios />
         <SeccionCierre />
       </main>
       <PieDePagina />
+      {/* Fija abajo, sólo en el teléfono: ella misma lleva `md:hidden`. */}
+      <BarraCrearCuenta />
     </>
   )
 }

@@ -96,8 +96,9 @@ function medirCamino(bloque: HTMLElement, piezas: HTMLElement[]): Camino | null 
 /**
  * "Lo que trae Eli": las diez piezas del producto. Desde lg, en dos filas de
  * cinco unidas por un camino en S que entra y sale por los bordes de la
- * pantalla, con un punto de arena que lo recorre; en el teléfono y la
- * tableta, una columna unida por una línea, sin el punto.
+ * pantalla, con un punto de arena que lo recorre; en la tableta, una
+ * columna unida por una línea, sin el punto. En el teléfono (por debajo de
+ * md), una grilla de dos tarjetas compactas, quietas y sin pausa.
  *
  * Las piezas flotan y el punto avanza sin fin: el botón de pausa lo congela,
  * y fuera de la pantalla se congela solo. Con movimiento reducido nada se
@@ -181,10 +182,10 @@ export function SeccionFunciones() {
         )}
 
         <div className="relative">
-          {/* Por debajo de lg, la línea de la columna, detrás de los íconos: del primero al último. */}
-          <span aria-hidden="true" className="absolute bottom-7 left-[35px] top-7 w-[3px] rounded-full bg-ciruela/85 lg:hidden" />
+          {/* De md a lg, la línea de la columna, detrás de los íconos: del primero al último. En el teléfono, grilla de dos sin línea. */}
+          <span aria-hidden="true" className="absolute bottom-7 left-[35px] top-7 w-[3px] rounded-full bg-ciruela/85 max-md:hidden lg:hidden" />
 
-          <ul ref={lista} className="relative flex flex-col gap-3 lg:grid lg:grid-cols-5 lg:gap-x-5 lg:gap-y-9">
+          <ul ref={lista} className="relative flex flex-col gap-3 max-md:grid max-md:grid-cols-2 max-md:gap-2.5 lg:grid lg:grid-cols-5 lg:gap-x-5 lg:gap-y-9">
             {FUNCIONES.map((funcion, indice) => {
               const tono = CLASES_DE_TONO[tonoEn(indice)]
               const Icono = funcion.icono
@@ -193,6 +194,8 @@ export function SeccionFunciones() {
                   <div
                     className={cn(
                       "relative flex h-full animate-flotar items-center gap-4 rounded-[22px] border border-white px-4 py-3 shadow-sm squircle [--giro:0deg] lg:block lg:rounded-[28px] lg:p-0",
+                      // En el teléfono, tarjeta compacta y quieta.
+                      "max-md:animate-none max-md:gap-2.5 max-md:rounded-[18px] max-md:px-3",
                       tono.suave,
                     )}
                     style={flotarDe(indice)}
@@ -200,18 +203,18 @@ export function SeccionFunciones() {
                     <span
                       aria-hidden="true"
                       className={cn(
-                        "grid size-10 shrink-0 place-items-center rounded-[14px] bg-tarjeta shadow-sm lg:absolute lg:left-5 lg:top-5 lg:size-[46px] lg:rounded-[16px]",
+                        "grid size-10 shrink-0 place-items-center rounded-[14px] bg-tarjeta shadow-sm max-md:size-9 max-md:rounded-[12px] lg:absolute lg:left-5 lg:top-5 lg:size-[46px] lg:rounded-[16px]",
                         tono.texto,
                       )}
                     >
                       <Icono className="size-5 lg:size-[22px]" strokeWidth={1.75} />
                     </span>
-                    <span className="min-w-0 flex-1 text-base font-semibold leading-[1.2] tracking-[-0.025em] lg:absolute lg:bottom-5 lg:left-[22px] lg:right-[18px] lg:text-lg">
+                    <span className="min-w-0 flex-1 text-base font-semibold leading-[1.2] tracking-[-0.025em] max-md:text-[15px] lg:absolute lg:bottom-5 lg:left-[22px] lg:right-[18px] lg:text-lg">
                       {funcion.titulo}
                     </span>
                     <span
                       aria-hidden="true"
-                      className={cn("text-xs font-semibold opacity-70 lg:absolute lg:right-[18px] lg:top-6", tono.texto)}
+                      className={cn("text-xs font-semibold opacity-70 max-md:hidden lg:absolute lg:right-[18px] lg:top-6", tono.texto)}
                     >
                       {String(indice + 1).padStart(2, "0")}
                     </span>
@@ -222,7 +225,7 @@ export function SeccionFunciones() {
           </ul>
         </div>
 
-        <div className="mt-6 flex justify-end motion-reduce:hidden">
+        <div className="mt-6 flex justify-end max-md:hidden motion-reduce:hidden">
           <BotonDePausa pausado={pausado} alCambiar={setPausado} etiqueta="Pausar la animación de las funciones" />
         </div>
       </div>

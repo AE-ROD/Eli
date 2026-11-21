@@ -806,6 +806,17 @@ html:has([data-landing]) .shadow-md {
 }
 
 /*
+ * La barra fija "Crear cuenta gratis" del teléfono (`barra-crear-cuenta.tsx`):
+ * mientras se ve, el foco del teclado y las anclas se detienen por encima de
+ * ella y no quedan tapados. 68px de barra más la zona segura de abajo.
+ */
+@media (width < 48rem) {
+  html:has([data-barra-crear-cuenta="visible"]) {
+    scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+/*
  * El afiche del QR del local (`app/dashboard/_componentes/qr-del-local.tsx`).
  * Vive en un portal al final del <body> y no se ve en pantalla. Al tocar
  * "Imprimir afiche", <html> lleva `data-imprimiendo-afiche` mientras dura la

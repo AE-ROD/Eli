@@ -6,10 +6,10 @@ import { AnimatePresence, motion, useIsPresent } from "framer-motion"
 import { ArrowRight, ChevronRight, X } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { BotonIcono } from "@/components/comunes/boton-icono"
-import { HALO_DE_MODULO } from "@/components/comunes/colores-de-modulo"
-import { IconoDeModulo } from "@/components/comunes/icono-de-modulo"
+import { ICONOS_DE_MODULO } from "@/components/comunes/icono-de-modulo"
 import { LogoEli } from "@/components/comunes/logo-eli"
 import { OFICIOS, SECCION_DE_MODULO, SECCION_DE_OFICIOS } from "@/components/landing/menu-desplegable"
+import { CLASES_DE_TONO, tonoEn } from "@/components/landing/tonos-de-la-landing"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { MODULOS } from "@/lib/modulos"
 import { cn } from "@/lib/utils"
@@ -36,6 +36,10 @@ interface PropsDeMenuMovil {
  * fundido. Es un diálogo modal: el foco entra al abrirse (al botón de
  * cerrar), Tab y Shift+Tab dan la vuelta sin salir, Escape lo cierra, y la
  * página de atrás no se desplaza mientras está abierto.
+ *
+ * Va con los tintes de la landing (burdeos, rojo, arena y tierra sobre la
+ * crema), no con los pasteles de los módulos del panel: los íconos se reparten
+ * los tintes en orden (`tonoEn`) y el halo del foco es arena.
  */
 export function MenuMovil({ id, abierto, alCerrar }: PropsDeMenuMovil) {
   return <AnimatePresence>{abierto && <PanelDelMenu key="menu" id={id} alCerrar={alCerrar} />}</AnimatePresence>
@@ -123,7 +127,7 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
       role="dialog"
       aria-modal="true"
       aria-label="Menú"
-      className="fixed inset-0 z-[100] flex flex-col bg-crema text-navy md:hidden"
+      className="fixed inset-0 z-[100] flex flex-col bg-crema text-navy [--halo:var(--color-pistacho-suave)] md:hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -142,42 +146,51 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
       </div>
 
       <nav aria-label="Menú principal" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-1">
-        <h2 id={idProducto} className="antetitulo m-2">
+        <h2 id={idProducto} className="antetitulo-pildora m-2">
           Producto
         </h2>
         <ul
           aria-labelledby={idProducto}
           className="flex flex-col gap-0.5 rounded-panel bg-tarjeta p-2 shadow-sm squircle"
         >
-          {MODULOS.map((modulo) => (
-            <li key={modulo.id}>
-              <a
-                href={SECCION_DE_MODULO[modulo.id]}
-                onClick={irA}
-                className={cn(
-                  "flex min-h-14 items-center gap-3.5 rounded-[24px] p-2 text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco squircle",
-                  HALO_DE_MODULO[modulo.id]
-                )}
-              >
-                <IconoDeModulo modulo={modulo.id} activo />
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[15px] font-semibold leading-[1.3]">{modulo.nombre}</span>
-                  <span className="line-clamp-2 text-[13px] leading-[1.35] text-texto-2">{modulo.descripcion}</span>
-                </span>
-              </a>
-            </li>
-          ))}
+          {MODULOS.map((modulo, indice) => {
+            const tono = CLASES_DE_TONO[tonoEn(indice)]
+            const Icono = ICONOS_DE_MODULO[modulo.id]
+            return (
+              <li key={modulo.id}>
+                <a
+                  href={SECCION_DE_MODULO[modulo.id]}
+                  onClick={irA}
+                  className="flex min-h-14 items-center gap-3.5 rounded-[24px] p-2 text-navy transition-colors duration-150 ease-suave hover:bg-superficie anillo-foco squircle"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn("grid size-10 shrink-0 place-items-center rounded-[12px] squircle", tono.suave, tono.texto)}
+                  >
+                    <Icono className="size-5" strokeWidth={1.75} />
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[15px] font-semibold leading-[1.3]">{modulo.nombre}</span>
+                    <span className="line-clamp-2 text-sm leading-[1.35] text-texto-2">{modulo.descripcion}</span>
+                  </span>
+                </a>
+              </li>
+            )
+          })}
         </ul>
 
-        <h2 id={idOficios} className="antetitulo mx-2 mb-1.5 mt-5">
+        <h2 id={idOficios} className="antetitulo-pildora mx-2 mb-1.5 mt-5">
           Para quién
         </h2>
         <ul aria-labelledby={idOficios} className="flex flex-col gap-0.5">
-          {OFICIOS.map((oficio) => (
+          {OFICIOS.map((oficio, indice) => (
             <li key={oficio.nombre}>
               <a href={SECCION_DE_OFICIOS} onClick={irA} className={cn(FILA, "min-h-11 font-medium")}>
-                <span>{oficio.nombre}</span>
-                <ChevronRight aria-hidden="true" strokeWidth={1.75} className="size-[18px] shrink-0 text-texto-2" />
+                <span className="flex items-center gap-3">
+                  <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", CLASES_DE_TONO[tonoEn(indice)].relleno)} />
+                  {oficio.nombre}
+                </span>
+                <ChevronRight aria-hidden="true" strokeWidth={1.75} className="size-[18px] shrink-0 text-frambuesa-texto" />
               </a>
             </li>
           ))}
@@ -190,7 +203,7 @@ function PanelDelMenu({ id, alCerrar }: Omit<PropsDeMenuMovil, "abierto">) {
           <ArrowRight
             aria-hidden="true"
             strokeWidth={1.75}
-            className="size-[18px] shrink-0 transition-transform duration-150 ease-suave group-hover:translate-x-0.5"
+            className="size-[18px] shrink-0 text-frambuesa-texto transition-transform duration-150 ease-suave group-hover:translate-x-0.5"
           />
         </a>
       </nav>

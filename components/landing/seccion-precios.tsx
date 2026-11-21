@@ -27,6 +27,7 @@ import { TRAZOS_DE_INCLUIDO, TRAZOS_DE_PRECIOS } from "@/components/landing/traz
 import { BotonDePausa } from "@/components/movimiento/boton-de-pausa"
 import { TrazosOndulantes } from "@/components/movimiento/trazos-ondulantes"
 import { useBloqueEnMovimiento } from "@/components/movimiento/usar-bloque-en-movimiento"
+import { useCoincideMedia } from "@/components/movimiento/usar-coincide-media"
 import {
   calcularPrecio,
   DIAS_DE_PRUEBA,
@@ -114,6 +115,12 @@ const PERSONAS_MINIMAS = 1
 const PERSONAS_MAXIMAS = 30
 const PERSONAS_AL_EMPEZAR = 7
 
+/** En el teléfono, la calculadora va dentro de Equipo: desde dos personas, que es cuando corresponde Equipo. */
+const PERSONAS_MINIMAS_EQUIPO = 2
+
+/** Por debajo de md: el teléfono. */
+const CELULAR = "(max-width: 47.99rem)"
+
 const TEXTO_DE_PRUEBA = `Probar ${DIAS_DE_PRUEBA} días gratis`
 
 const ORDINALES = ["primera", "segunda", "tercera", "cuarta", "quinta", "sexta", "séptima", "octava", "novena", "décima"]
@@ -131,6 +138,11 @@ const TEXTO_SOBRE_TINTE = "text-navy/75"
  * se ondulan; abajo, lo que traen los dos planes, las tarjetas de
  * Independiente y Equipo, y la calculadora. La tarjeta del plan que da la
  * calculadora queda resaltada.
+ *
+ * En el teléfono (por debajo de md) va otra disposición, más corta: dos
+ * botones grandes eligen el plan y se ve uno a la vez, la calculadora va
+ * dentro de Equipo y lo largo queda plegado (`PlanesEnElTelefono`). Desde md
+ * no cambia nada.
  *
  * Todo precio, las personas incluidas y los días de prueba salen de
  * `lib/precios.ts` (`calcularPrecio`, `formatearPesos` y las constantes):
@@ -153,12 +165,15 @@ export function SeccionPrecios() {
         <h2 id="planes-titulo" className="sr-only">
           Los planes
         </h2>
-        <Incluido />
-        <div className="mt-7 grid items-stretch gap-6 md:grid-cols-2">
-          <TarjetaIndependiente resaltada={calculo.plan === "independiente"} />
-          <TarjetaEquipo resaltada={calculo.plan === "equipo"} />
+        <div className="max-md:hidden">
+          <Incluido />
+          <div className="mt-7 grid items-stretch gap-6 md:grid-cols-2">
+            <TarjetaIndependiente resaltada={calculo.plan === "independiente"} />
+            <TarjetaEquipo resaltada={calculo.plan === "equipo"} />
+          </div>
+          <Calculadora personas={personas} alCambiar={setPersonas} />
         </div>
-        <Calculadora personas={personas} alCambiar={setPersonas} />
+        <PlanesEnElTelefono />
       </SeccionDeLanding>
     </>
   )
@@ -167,6 +182,8 @@ export function SeccionPrecios() {
 /** El titular de precios, las tres píldoras y las líneas que se ondulan debajo, de borde a borde. */
 function EncabezadoDePrecios() {
   const { ref, pausado, setPausado, quieto } = useBloqueEnMovimiento<HTMLDivElement>()
+  // En el teléfono las líneas no se muestran: quietas y sin pausa.
+  const celular = useCoincideMedia(CELULAR)
   return (
     <SeccionDeLanding
       id="precios"
@@ -209,17 +226,17 @@ function EncabezadoDePrecios() {
             </li>
           ))}
         </ul>
-        <div aria-hidden="true" className="relative mt-4 h-[130px] md:h-[170px]">
+        <div aria-hidden="true" className="relative mt-4 h-[130px] max-md:hidden md:h-[170px]">
           <svg
             viewBox="0 0 1440 170"
             width="1440"
             height="170"
             className="pointer-events-none absolute -left-5 top-0 overflow-visible md:left-1/2 md:-translate-x-1/2"
           >
-            <TrazosOndulantes trazos={TRAZOS_DE_PRECIOS} enPausa={quieto} />
+            <TrazosOndulantes trazos={TRAZOS_DE_PRECIOS} enPausa={quieto || celular} />
           </svg>
         </div>
-        <div className="flex justify-end motion-reduce:hidden">
+        <div className="flex justify-end max-md:hidden motion-reduce:hidden">
           <BotonDePausa pausado={pausado} alCambiar={setPausado} etiqueta="Pausar las líneas de precios" />
         </div>
       </div>
@@ -322,7 +339,7 @@ interface PropsDeCabeceraDePlan {
 function CabeceraDePlan({ id, para, punto, colorDelPara, nombre, bajada, precio, nota }: PropsDeCabeceraDePlan) {
   return (
     <>
-      <p className={cn("inline-flex items-center gap-2 text-[13px] font-semibold", colorDelPara)}>
+      <p className={cn("inline-flex items-center gap-2 text-[13px] font-semibold max-md:text-sm", colorDelPara)}>
         <span aria-hidden="true" className={cn("size-2 rounded-full", punto)} />
         {para}
       </p>
@@ -379,19 +396,7 @@ function TarjetaIndependiente({ resaltada }: { resaltada: boolean }) {
           </div>
         </Recuadro>
         <Recuadro titulo="Tu día con Eli">
-          <ul className="mt-1">
-            {DIA_CON_ELI.map((texto) => (
-              <li key={texto} className="flex items-start gap-3 py-[9px] text-[15px] leading-[1.45]">
-                <span
-                  aria-hidden="true"
-                  className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-pistacho text-navy"
-                >
-                  <Check className="size-[13px]" strokeWidth={1.75} />
-                </span>
-                {texto}
-              </li>
-            ))}
-          </ul>
+          <ListaDiaConEli />
         </Recuadro>
       </div>
       <p className="mt-auto pt-[22px] text-[14.5px] leading-normal">
@@ -419,9 +424,84 @@ function Avatar({ indice, children }: { indice: number; children: ReactNode }) {
   )
 }
 
-function TarjetaEquipo({ resaltada }: { resaltada: boolean }) {
+/** Lo que trae un día con Eli, con un tic en cada línea. */
+function ListaDiaConEli() {
+  return (
+    <ul className="mt-1">
+      {DIA_CON_ELI.map((texto) => (
+        <li key={texto} className="flex items-start gap-3 py-[9px] text-[15px] leading-[1.45]">
+          <span
+            aria-hidden="true"
+            className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-pistacho text-navy"
+          >
+            <Check className="size-[13px]" strokeWidth={1.75} />
+          </span>
+          {texto}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Las personas incluidas en Equipo, en círculos, y desde cuál se cobra aparte. */
+function EquipoDeEjemplo() {
   const adicional = formatearPesos(PRECIO_PERSONA_ADICIONAL)
   const iniciales = INICIALES_DE_EJEMPLO.slice(0, PERSONAS_INCLUIDAS_EQUIPO)
+  return (
+    <>
+      <div
+        role="img"
+        aria-label={`${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden incluidas, y un lugar más por ${adicional} al mes`}
+        className="mt-3 flex flex-wrap items-center pl-0.5"
+      >
+        {iniciales.map((inicial, indice) => (
+          <Avatar key={inicial} indice={indice}>
+            {inicial}
+          </Avatar>
+        ))}
+        <span
+          aria-hidden="true"
+          className="-ml-[9px] grid size-[42px] shrink-0 place-items-center rounded-full border-[1.5px] border-dashed border-ciruela bg-tarjeta text-[12.5px] font-semibold text-ciruela"
+        >
+          +1
+        </span>
+      </div>
+      <p className="mt-3 text-[14.5px] leading-[1.45]">
+        {PERSONAS_INCLUIDAS_EQUIPO} incluidas. Desde la {ordinal(PERSONAS_INCLUIDAS_EQUIPO + 1)}, {adicional} al mes por
+        persona.
+      </p>
+    </>
+  )
+}
+
+/** Dueño, encargado y profesional: qué ve y qué hace cada uno. */
+function ListaDeRoles() {
+  return (
+    <dl className="mt-0.5">
+      {ROLES.map(({ rol, texto, icono: Icono, tono }, orden) => (
+        <div key={rol} className={cn("flex items-start gap-3.5 py-3", orden > 0 && "border-t border-borde-suave")}>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "grid size-9 shrink-0 place-items-center rounded-[13px]",
+              CLASES_DE_TONO[tono].suave,
+              CLASES_DE_TONO[tono].texto,
+            )}
+          >
+            <Icono className="size-[18px]" strokeWidth={1.75} />
+          </span>
+          <div>
+            <dt className="text-[15.5px] font-semibold">{rol}</dt>
+            <dd className="mt-0.5 text-sm leading-[1.45] text-texto-2">{texto}</dd>
+          </div>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function TarjetaEquipo({ resaltada }: { resaltada: boolean }) {
+  const adicional = formatearPesos(PRECIO_PERSONA_ADICIONAL)
   return (
     <article
       aria-labelledby="equipo-titulo"
@@ -445,49 +525,10 @@ function TarjetaEquipo({ resaltada }: { resaltada: boolean }) {
       <BotonDePrueba />
       <div className="mt-3">
         <Recuadro titulo="Quién atiende">
-          <div
-            role="img"
-            aria-label={`${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden incluidas, y un lugar más por ${adicional} al mes`}
-            className="mt-3 flex flex-wrap items-center pl-0.5"
-          >
-            {iniciales.map((inicial, indice) => (
-              <Avatar key={inicial} indice={indice}>
-                {inicial}
-              </Avatar>
-            ))}
-            <span
-              aria-hidden="true"
-              className="-ml-[9px] grid size-[42px] shrink-0 place-items-center rounded-full border-[1.5px] border-dashed border-ciruela bg-tarjeta text-[12.5px] font-semibold text-ciruela"
-            >
-              +1
-            </span>
-          </div>
-          <p className="mt-3 text-[14.5px] leading-[1.45]">
-            {PERSONAS_INCLUIDAS_EQUIPO} incluidas. Desde la {ordinal(PERSONAS_INCLUIDAS_EQUIPO + 1)}, {adicional} al mes por
-            persona.
-          </p>
+          <EquipoDeEjemplo />
         </Recuadro>
         <Recuadro titulo="Cada uno con su rol">
-          <dl className="mt-0.5">
-            {ROLES.map(({ rol, texto, icono: Icono, tono }, orden) => (
-              <div key={rol} className={cn("flex items-start gap-3.5 py-3", orden > 0 && "border-t border-borde-suave")}>
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "grid size-9 shrink-0 place-items-center rounded-[13px]",
-                    CLASES_DE_TONO[tono].suave,
-                    CLASES_DE_TONO[tono].texto,
-                  )}
-                >
-                  <Icono className="size-[18px]" strokeWidth={1.75} />
-                </span>
-                <div>
-                  <dt className="text-[15.5px] font-semibold">{rol}</dt>
-                  <dd className="mt-0.5 text-sm leading-[1.45] text-texto-2">{texto}</dd>
-                </div>
-              </div>
-            ))}
-          </dl>
+          <ListaDeRoles />
         </Recuadro>
       </div>
       <p className="mt-auto pt-[22px] text-[14.5px] leading-normal">
@@ -604,5 +645,197 @@ function Calculadora({ personas, alCambiar }: { personas: number; alCambiar: (pe
         </div>
       </div>
     </article>
+  )
+}
+
+type PlanDelTelefono = "independiente" | "equipo"
+
+const PLANES_DEL_TELEFONO: readonly { id: PlanDelTelefono; nombre: string; para: string }[] = [
+  { id: "independiente", nombre: "Independiente", para: "Para quien atiende solo" },
+  { id: "equipo", nombre: "Equipo", para: "Para el negocio con equipo" },
+]
+
+/**
+ * Los planes en el teléfono: dos botones grandes (`aria-pressed`) eligen cuál
+ * se ve, uno a la vez. Equipo trae la calculadora junto al precio, que cambia
+ * con ella. Lo largo (quién atiende, el día con Eli, los roles y lo incluido
+ * en los dos planes) va plegado. Desde md no se muestra.
+ */
+function PlanesEnElTelefono() {
+  const [plan, setPlan] = useState<PlanDelTelefono>("independiente")
+  return (
+    <div className="md:hidden">
+      <div role="group" aria-label="Elige un plan" className="grid grid-cols-2 gap-2.5">
+        {PLANES_DEL_TELEFONO.map((opcion) => {
+          const elegido = opcion.id === plan
+          return (
+            <button
+              key={opcion.id}
+              type="button"
+              aria-pressed={elegido}
+              onClick={() => setPlan(opcion.id)}
+              className={cn(
+                "flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded-[22px] border-[1.5px] px-2 py-2.5 text-center anillo-foco anillo-foco-claro squircle transition-colors duration-200 ease-suave",
+                elegido ? "border-white bg-tarjeta text-navy shadow-sm" : "border-white/35 bg-navy/40 text-white",
+              )}
+            >
+              <span className="text-lg font-semibold leading-tight tracking-[-0.02em]">{opcion.nombre}</span>
+              <span className={cn("mt-0.5 text-sm leading-[1.25]", elegido ? "text-texto-2" : "text-white/85")}>
+                {opcion.para}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {plan === "independiente" ? <IndependienteEnElTelefono /> : <EquipoEnElTelefono />}
+
+      <Plegable titulo="Incluido en los dos planes" className="mt-4">
+        <p className={cn("text-[15px] leading-normal", TEXTO_SOBRE_TINTE)}>
+          Prueba {DIAS_DE_PRUEBA} días gratis, sin tarjeta, contados desde que creas tu negocio.
+        </p>
+        <ul className="mt-3 flex flex-col gap-2">
+          {FUNCIONES.map((funcion, indice) => {
+            const tono = CLASES_DE_TONO[tonoEn(indice)]
+            const Icono = funcion.icono
+            return (
+              <li key={funcion.id} className="flex items-center gap-3 text-[15px] font-semibold leading-[1.25]">
+                <span
+                  aria-hidden="true"
+                  className={cn("grid size-8 shrink-0 place-items-center rounded-[11px]", tono.suave, tono.texto)}
+                >
+                  <Icono className="size-4" strokeWidth={1.75} />
+                </span>
+                {funcion.titulo}
+              </li>
+            )
+          })}
+        </ul>
+      </Plegable>
+    </div>
+  )
+}
+
+const CUERPO_DE_PLAN_EN_EL_TELEFONO = "mt-4 flex flex-col rounded-[30px] p-5 squircle"
+
+function IndependienteEnElTelefono() {
+  return (
+    <article
+      aria-labelledby="independiente-telefono-titulo"
+      className={cn(CUERPO_DE_PLAN_EN_EL_TELEFONO, "bg-frambuesa-suave")}
+    >
+      <CabeceraDePlan
+        id="independiente-telefono-titulo"
+        para="Para quien atiende solo"
+        punto="bg-frambuesa"
+        colorDelPara="text-frambuesa-texto"
+        nombre="Independiente"
+        bajada="Tu agenda, tu página de reservas, el tablero del día y los reportes. Todo Eli, para ti."
+        precio={PRECIO_INDEPENDIENTE}
+        nota="IVA incluido"
+      />
+      <BotonDePrueba className="w-full self-stretch" />
+      <div className="mt-4 flex flex-col gap-2">
+        <Plegable titulo="Quién atiende">
+          <div className="flex items-center gap-3.5">
+            <Avatar indice={0}>Tú</Avatar>
+            <span className="text-[15px] leading-[1.45]">Atiendes y administras todo, sin equipo que coordinar.</span>
+          </div>
+        </Plegable>
+        <Plegable titulo="Tu día con Eli">
+          <ListaDiaConEli />
+        </Plegable>
+        <Plegable titulo="¿Sumas a alguien?">
+          <p className="text-[15px] leading-normal">Te pasas a Equipo y tu agenda, tus clientes y tu historial siguen ahí.</p>
+        </Plegable>
+      </div>
+    </article>
+  )
+}
+
+function EquipoEnElTelefono() {
+  const [personas, setPersonas] = useState(PERSONAS_AL_EMPEZAR)
+  const calculo = calcularPrecio(personas)
+  const nota =
+    calculo.adicionales > 0
+      ? `${formatearPesos(PRECIO_EQUIPO)} + ${calculo.adicionales} × ${formatearPesos(PRECIO_PERSONA_ADICIONAL)} · IVA incluido`
+      : `IVA incluido · ${PERSONAS_INCLUIDAS_EQUIPO} personas que atienden`
+
+  return (
+    <article aria-labelledby="equipo-telefono-titulo" className={cn(CUERPO_DE_PLAN_EN_EL_TELEFONO, "bg-ciruela-suave")}>
+      <CabeceraDePlan
+        id="equipo-telefono-titulo"
+        para="Para el negocio con equipo"
+        punto="bg-ciruela"
+        colorDelPara="text-ciruela"
+        nombre="Equipo"
+        bajada="Tú, tu encargado y tus profesionales, cada uno con su rol."
+        precio={calculo.total}
+        nota={nota}
+      />
+
+      <div className="mt-4 rounded-[24px] bg-tarjeta px-4 py-5 text-center shadow-sm squircle">
+        <p id="calculadora-telefono-titulo" className="text-sm font-semibold uppercase tracking-[0.06em] text-texto-2">
+          ¿Cuánto pagarías?
+        </p>
+        <div
+          role="group"
+          aria-labelledby="calculadora-telefono-titulo"
+          className="mt-3 flex items-center justify-between gap-3"
+        >
+          <BotonDePaso
+            etiqueta="Una persona menos"
+            icono={Minus}
+            bloqueado={personas <= PERSONAS_MINIMAS_EQUIPO}
+            alPulsar={() => setPersonas(Math.max(PERSONAS_MINIMAS_EQUIPO, personas - 1))}
+          />
+          <span className="text-[3.25rem] font-semibold leading-none tracking-[-0.06em] tabular-nums">{personas}</span>
+          <BotonDePaso
+            etiqueta="Una persona más"
+            icono={Plus}
+            bloqueado={personas >= PERSONAS_MAXIMAS}
+            alPulsar={() => setPersonas(Math.min(PERSONAS_MAXIMAS, personas + 1))}
+          />
+        </div>
+        <p className="mt-2 text-[15px] font-semibold text-texto-2">personas atienden</p>
+        {/* El precio de arriba cambia con el contador; aquí se anuncia entero. */}
+        <p aria-live="polite" aria-atomic="true" className="sr-only">
+          {personas} personas atienden. Al mes, IVA incluido: {formatearPesos(calculo.total)}.
+        </p>
+        <p className="mt-3 text-left text-sm leading-[1.45] text-texto-2">
+          Cuentan los profesionales, y tú si atiendes. Los cambios se cobran desde el mes siguiente, sin cobros a medio mes.
+        </p>
+      </div>
+
+      <BotonDePrueba className="w-full self-stretch" />
+      <div className="mt-4 flex flex-col gap-2">
+        <Plegable titulo="Quién atiende">
+          <EquipoDeEjemplo />
+        </Plegable>
+        <Plegable titulo="Cada uno con su rol">
+          <ListaDeRoles />
+        </Plegable>
+      </div>
+    </article>
+  )
+}
+
+/**
+ * Un bloque plegado del teléfono: `<details>` nativo, que se abre y se cierra
+ * con el dedo o el teclado sin JavaScript. El título ocupa 48px de alto.
+ */
+function Plegable({ titulo, className, children }: { titulo: string; className?: string; children: ReactNode }) {
+  return (
+    <details className={cn("group rounded-[20px] bg-tarjeta shadow-sm squircle", className)}>
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-[20px] px-4 py-3 text-[15px] font-semibold anillo-foco [&::-webkit-details-marker]:hidden">
+        {titulo}
+        <Plus
+          aria-hidden="true"
+          strokeWidth={1.75}
+          className="size-[18px] shrink-0 transition-transform duration-200 ease-suave group-open:rotate-45"
+        />
+      </summary>
+      <div className="px-4 pb-4">{children}</div>
+    </details>
   )
 }
