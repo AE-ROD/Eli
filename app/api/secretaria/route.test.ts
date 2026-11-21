@@ -27,7 +27,7 @@ const canal = () => import("./canal/route")
 const simulador = () => import("./simulador/route")
 const devolver = () => import("./conversaciones/[id]/devolver/route")
 
-const AJUSTES = { activa: true, maxTurnos: 10, maxTokens: 200, presupuestoMensualUsd: 7.5, reglas: "Sin reservas los sábados" }
+const AJUSTES = { activa: true, maxTurnos: 10, maxTokens: 200, reglas: "Sin reservas los sábados" }
 const CANAL = { phoneNumberId: "1234567890", wabaId: "9876543210", accessToken: "EAAG-secreto", activo: true }
 
 function escenario() {
@@ -71,13 +71,21 @@ describe("ajustes y canal: sólo la dueña", () => {
     expect(base.buscar("canalDeWhatsapp")).toHaveLength(0)
   })
 
-  it("la dueña guarda los ajustes de su negocio, con el presupuesto en centavos", async () => {
+  it("la dueña guarda los ajustes de su negocio; el presupuesto queda en el del plan", async () => {
     como(sesiones.dueña)
     const respuesta = await (await ajustes()).PUT(pedido("http://x/api/secretaria/ajustes", AJUSTES))
     expect(respuesta.status).toBe(200)
     expect(base.buscar("ajustesDeSecretaria")).toEqual([
-      expect.objectContaining({ businessId: NEGOCIO, activa: true, maxTurnos: 10, presupuestoMensualCentavos: 750 }),
+      expect.objectContaining({ businessId: NEGOCIO, activa: true, maxTurnos: 10, presupuestoMensualCentavos: null }),
     ])
+  })
+
+  it("la dueña no puede poner su presupuesto: lo define Eli", async () => {
+    como(sesiones.dueña)
+    const conPresupuesto = { ...AJUSTES, presupuestoMensualUsd: 500 }
+    const respuesta = await (await ajustes()).PUT(pedido("http://x/api/secretaria/ajustes", conPresupuesto))
+    expect(respuesta.status).toBe(400)
+    expect(base.buscar("ajustesDeSecretaria")).toHaveLength(0)
   })
 
   it("la dueña conecta su número: el token queda cifrado y no vuelve en la respuesta", async () => {

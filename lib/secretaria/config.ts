@@ -1,3 +1,4 @@
+import { planConocido, type PlanId } from "@/lib/planes"
 /**
  * Configuración de la Secretaria Eli: el modelo, lo que cuesta y los topes
  * fijos. Lo que cambia por negocio está en `AjustesDeSecretaria`.
@@ -36,6 +37,29 @@ export const MAX_HORARIOS_OFRECIDOS = 3
 
 /** Largo máximo de un mensaje entrante que se le pasa al modelo. */
 export const LARGO_MAXIMO_DEL_MENSAJE = 1000
+
+/**
+ * El presupuesto mensual de IA de cada negocio, en centavos de dólar, según
+ * su plan. Lo paga Eli, no el negocio: por eso lo define Eli y la dueña no lo
+ * puede cambiar (sólo ve el % usado). Dimensionado con una simulación del
+ * 2026-11-20: una reserva completa cuesta ~US$0,0016, así que US$3 cubre
+ * ~1.800 reservas al mes y US$9, ~5.600.
+ */
+export const PRESUPUESTO_MENSUAL_POR_PLAN: Record<PlanId, number> = {
+  independiente: 300,
+  equipo: 900,
+}
+
+/**
+ * El presupuesto del mes de un negocio: el que Eli le puso a mano a esa
+ * cuenta (`AjustesDeSecretaria.presupuestoMensualCentavos`, sólo desde la
+ * base), o el de su plan. Un plan que no se conoce recibe el más chico.
+ */
+export function presupuestoDelNegocio(plan: unknown, puestoAMano: number | null | undefined): number {
+  if (typeof puestoAMano === "number") return puestoAMano
+  const conocido = planConocido(plan)
+  return conocido ? PRESUPUESTO_MENSUAL_POR_PLAN[conocido] : Math.min(...Object.values(PRESUPUESTO_MENSUAL_POR_PLAN))
+}
 
 /** Porcentajes del presupuesto mensual en que se avisa a la dueña. */
 export const ALERTA_DE_PRESUPUESTO = 80

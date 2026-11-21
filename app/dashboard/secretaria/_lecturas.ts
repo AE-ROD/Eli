@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Actor } from "@/lib/permisos"
 import { periodoDe, porcentajeGastado } from "@/lib/secretaria/costo"
+import { presupuestoDelNegocio } from "@/lib/secretaria/config"
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 
 /** Sin fila de ajustes la Secretaria está apagada, con los valores por defecto del esquema. */
@@ -14,7 +15,6 @@ export const AJUSTES_POR_DEFECTO = {
   activa: false,
   maxTurnos: 8,
   maxTokens: 200,
-  presupuestoMensualCentavos: 500,
   reglas: null as string | null,
 }
 
@@ -26,9 +26,9 @@ export interface CanalDeLaSecretaria {
   activo: boolean
 }
 
+/** Sin montos: la dueña ve sólo el % del mes usado (el presupuesto lo paga Eli). */
 export interface ConsumoDelMes {
   periodo: string
-  costoMicrodolares: number
   mensajesEnviados: number
   porcentaje: number
 }
@@ -56,7 +56,7 @@ const TOPE_DE_AVISOS = 10
 
 export async function leerLaSecretaria(actor: Actor) {
   const businessId = actor.businessId
-  const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
+  const negocio = await prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true, plan: true } })
   const zona = zonaDelNegocio(negocio?.timezone)
   const periodo = periodoDe(new Date(), zona)
 
@@ -98,13 +98,14 @@ export async function leerLaSecretaria(actor: Actor) {
     }),
   ])
 
-  const ajustesLeidos: AjustesDeLaSecretaria = ajustes ?? AJUSTES_POR_DEFECTO
-  const costoMicrodolares = consumo?.costoMicrodolares ?? 0
+  const ajustesLeidos: AjustesDeLaSecretaria = ajustes
+    ? { activa: ajustes.activa, maxTurnos: ajustes.maxTurnos, maxTokens: ajustes.maxTokens, reglas: ajustes.reglas }
+    : AJUSTES_POR_DEFECTO
+  const presupuesto = presupuestoDelNegocio(negocio?.plan, ajustes?.presupuestoMensualCentavos)
   const consumoDelMes: ConsumoDelMes = {
     periodo,
-    costoMicrodolares,
     mensajesEnviados: consumo?.mensajesWhatsappEnviados ?? 0,
-    porcentaje: porcentajeGastado(costoMicrodolares, ajustesLeidos.presupuestoMensualCentavos),
+    porcentaje: porcentajeGastado(consumo?.costoMicrodolares ?? 0, presupuesto),
   }
 
   return {

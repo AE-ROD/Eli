@@ -313,8 +313,8 @@ describe("Secretaria Eli: derivación y presupuesto", () => {
   })
 
   it("con el presupuesto del mes agotado se pausa: no llama al modelo y deriva", async () => {
-    // 500 centavos = US$5 = 5.000.000 microdólares.
-    escenario({ consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 5_000_000 }] })
+    // El negocio 1 es plan Equipo: US$9 = 9.000.000 microdólares.
+    escenario({ consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 9_000_000 }] })
     await escribe("56911111111", "hola")
 
     expect(crearMensaje).not.toHaveBeenCalled()
@@ -322,9 +322,29 @@ describe("Secretaria Eli: derivación y presupuesto", () => {
     expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human" })
   })
 
+  it("el presupuesto sale del plan: un Independiente se pausa con US$3", async () => {
+    escenario({ consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 3_000_000 }] })
+    // Cargado tal cual (un Independiente con equipo no pasaría el trigger, pero acá sólo importa el plan).
+    const volcado = base.volcado()
+    base.reiniciar({ ...volcado, business: volcado.business.map((n) => (n.id === NEGOCIO ? { ...n, plan: "independiente" } : n)) })
+    await escribe("56911111111", "hola")
+    expect(crearMensaje).not.toHaveBeenCalled()
+    expect(base.buscar("conversacionDeSecretaria")[0]).toMatchObject({ estado: "human" })
+  })
+
+  it("un presupuesto puesto a mano por Eli en la cuenta manda sobre el del plan", async () => {
+    escenario({
+      ajustes: { presupuestoMensualCentavos: 2_000 },
+      consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 9_000_000 }],
+    })
+    crearMensaje.mockResolvedValueOnce(texto("¡Hola!"))
+    await escribe("56911111111", "hola")
+    expect(crearMensaje).toHaveBeenCalledTimes(1)
+  })
+
   it("al cruzar el 80 % avisa una sola vez a la dueña", async () => {
     // A 20 microdólares del 80 %: una llamada (100 de entrada + 50 de salida = 35) lo cruza.
-    escenario({ consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 3_999_980 }] })
+    escenario({ consumo: [{ id: "co-1", businessId: NEGOCIO, periodo: "2030-01", costoMicrodolares: 7_199_980 }] })
     crearMensaje.mockResolvedValue(texto("¡Hola!"))
     await escribe("56911111111", "hola")
     await escribe("56911111111", "¿sigues ahí?")

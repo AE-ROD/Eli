@@ -770,13 +770,13 @@ Lo que no es texto (audio, foto, sticker, archivo) le llega como "un mensaje que
 
 Al derivar: la clienta recibe **"Le paso tu consulta a [nombre], te responde pronto 🙌"** (el primer nombre del profesional con quien conversaba la reserva, o el de la dueña; si no hay, "el equipo"); a quien atiende le llega un **correo** con la clienta (o "Sin registrar"), su teléfono, el motivo y los últimos mensajes (si fue a un profesional, a su correo; si no, al de la dueña); y queda un **aviso en el panel**. Desde ese momento **la Secretaria deja de responder esa conversación** (lo que escriba la clienta se guarda) hasta que alguien la **"devuelve a Eli"** desde el panel: entonces vuelve a atenderla desde el próximo mensaje, con el contador de respuestas en cero. La persona le responde desde su propio WhatsApp.
 
-**Presupuesto mensual.** Cada negocio tiene un presupuesto en **dólares (USD)** por mes calendario en su zona horaria (USD 5 por defecto, de 0 a 1.000). Cada respuesta suma su costo según los tokens usados. Al **80 %** la dueña recibe un correo y un aviso en el panel; al **100 %**, otro correo y otro aviso, y **la Secretaria se pausa**: hasta el mes siguiente cada consulta nueva se deriva a una persona. Cada aviso sale una sola vez por mes. Las pruebas del simulador también cuentan: son llamadas pagadas.
+**Presupuesto mensual.** Lo paga Eli, no el negocio, así que **lo define Eli según el plan** y la dueña no lo puede cambiar: **Independiente US$3** y **Equipo US$9** al mes (calendario, en la zona horaria del negocio). Se dimensionó con una simulación (2026-11-20): una reserva completa cuesta ~US$0,0016, así que US$3 cubre ~1.800 reservas al mes y US$9, ~5.600; el uso normal queda muy por debajo y el tope frena sobre todo el abuso. Si una cuenta puntual necesita más, Eli le pone su propio monto a mano en la base (`ajustes_de_secretaria.presupuestoMensualCentavos`; vacío = el del plan). Cada respuesta suma su costo según los tokens usados. Al **80 %** la dueña recibe un correo y un aviso en el panel; al **100 %**, otro correo y otro aviso, y **la Secretaria se pausa**: hasta el mes siguiente cada consulta nueva se deriva a una persona. Cada aviso sale una sola vez por mes. Las pruebas del simulador también cuentan: son llamadas pagadas.
 
 **La sección del panel "Secretaria Eli".**
 - **Simulador.** Se elige el teléfono de una clienta de prueba y se le escribe como si fuera ella, sin pasar por Meta: misma lógica que el WhatsApp real. Funciona aunque la Secretaria esté apagada. **Sus reservas son reales** (quedan en la agenda) y la clienta que registre queda en Clientes. Al derivar en el simulador no se manda correo ni aviso. "Empezar de nuevo" borra la conversación de prueba de ese número (las reservas y la clienta quedan). Tope: 60 mensajes por hora por negocio.
-- **Consumo del mes.** Si está encendida, apagada o en pausa por presupuesto, cuánto se gastó del presupuesto y los últimos avisos.
+- **Consumo del mes.** Si está encendida, apagada o en pausa, el **% del uso del mes** (sin montos en dólares: los paga Eli), los mensajes enviados y los últimos avisos.
 - **Con una persona.** Las conversaciones derivadas (hasta 50, la más reciente primero), con la clienta, el teléfono, el motivo y "Devolver a Eli".
-- **Ajustes.** Encendida o apagada (viene apagada: apagada, las clientas no reciben respuesta automática), presupuesto mensual, respuestas antes de derivar (1 a 50) y reglas del negocio en texto libre (hasta 2.000 caracteres, p. ej. "no agendar alisados los sábados").
+- **Ajustes.** Encendida o apagada (viene apagada: apagada, las clientas no reciben respuesta automática), respuestas antes de derivar (1 a 50) y reglas del negocio en texto libre (hasta 2.000 caracteres, p. ej. "no agendar alisados los sábados").
 - **Número de WhatsApp.** Se conecta **sin Embedded Signup**: la dueña copia del panel de Meta el identificador del número (`phone_number_id`), el de la cuenta (WABA) y el token de acceso, y pega en Meta la dirección del webhook que le muestra la pantalla. El token se guarda protegido y no se vuelve a mostrar; dejarlo vacío conserva el que había. El número se puede poner en pausa. Al guardar, Eli le pregunta a Meta, con ese token, si el número es de esa cuenta: si Meta no lo confirma, no se conecta (así nadie conecta el número de otro negocio sabiendo sólo su id). Un número ya conectado a otro negocio se rechaza sin decir a cuál.
 
 Por WhatsApp responde sólo con la Secretaria encendida **y** el número activo; si no, el mensaje se guarda y no se contesta.
@@ -785,7 +785,7 @@ Por WhatsApp responde sólo con la Secretaria encendida **y** el número activo;
 |---|---|---|---|
 | Ver la sección, usar el simulador, ver el consumo y las derivadas | ✅ | ✅ | ❌ |
 | Devolver a Eli una conversación derivada | ✅ | ✅ | ❌ |
-| Cambiar los ajustes (encenderla, presupuesto, tope, reglas) | ✅ | Sólo los ve | ❌ |
+| Cambiar los ajustes (encenderla, tope, reglas) | ✅ | Sólo los ve | ❌ |
 | Conectar el número de WhatsApp | ✅ | ❌ (no ve esa parte) | ❌ |
 | Recibir el correo de una derivación | Si va a ella | ❌ | Si va a él |
 

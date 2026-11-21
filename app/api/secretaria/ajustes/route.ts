@@ -8,18 +8,18 @@ import { registrarError } from "@/lib/registro-de-errores"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 /**
- * Los ajustes de la Secretaria del negocio de la sesión: encendida, topes,
- * presupuesto mensual y reglas propias. Sólo el dueño (toca plata).
+ * Los ajustes de la Secretaria del negocio de la sesión: encendida, topes y
+ * reglas propias. Sólo el dueño. El presupuesto mensual no está acá: lo paga
+ * y lo define Eli según el plan (`presupuestoDelNegocio`), y un pedido que lo
+ * mande se rechaza (el esquema es estricto).
  */
 
 const ajustesSchema = z.object({
   activa: z.boolean(),
   maxTurnos: z.number().int().min(1).max(50),
   maxTokens: z.number().int().min(50).max(2000),
-  /** En dólares, con hasta dos decimales. */
-  presupuestoMensualUsd: z.number().min(0).max(1_000, "El presupuesto mensual puede ser de hasta US$1.000"),
   reglas: z.string().trim().max(2000).nullable(),
-})
+}).strict()
 
 export async function PUT(request: NextRequest) {
   const actor = actorDeSesion(await getServerSession(authOptions))
@@ -30,14 +30,13 @@ export async function PUT(request: NextRequest) {
       activa: datos.activa,
       maxTurnos: datos.maxTurnos,
       maxTokens: datos.maxTokens,
-      presupuestoMensualCentavos: Math.round(datos.presupuestoMensualUsd * 100),
       reglas: datos.reglas || null,
     }
     const ajustes = await prisma.ajustesDeSecretaria.upsert({
       where: { businessId: actor.businessId },
       create: { businessId: actor.businessId, ...valores },
       update: valores,
-      select: { activa: true, maxTurnos: true, maxTokens: true, presupuestoMensualCentavos: true, reglas: true },
+      select: { activa: true, maxTurnos: true, maxTokens: true, reglas: true },
     })
     return NextResponse.json(ajustes)
   } catch (error) {

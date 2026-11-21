@@ -10,30 +10,21 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { CAMPO, CAMPO_CON_ERROR, ERROR_DE_CAMPO, ETIQUETA, TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import { guardarAjustes } from "../_datos"
-import { leerPresupuestoUsd, presupuestoEnUsd } from "../_formato"
 import type { AjustesDeLaSecretaria } from "../_lecturas"
 
 /** El mismo tope que el servidor. */
 const LARGO_DE_LAS_REGLAS = 2000
 
-/** El presupuesto como se escribe en el campo: "5" o "5,50". */
-function presupuestoComoTexto(centavos: number): string {
-  return centavos % 100 === 0 ? String(centavos / 100) : (centavos / 100).toFixed(2).replace(".", ",")
-}
-
 /**
- * Cómo atiende Eli: encendida, cuánto puede gastar al mes, cuántas respuestas
- * da antes de pasar la conversación a una persona y las reglas propias del
+ * Cómo atiende Eli: encendida, cuántas respuestas da antes de pasar la conversación a una persona y las reglas propias del
  * negocio. Sólo la dueña la cambia; el encargado la ve.
  */
 export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecretaria; editable: boolean }) {
   const router = useRouter()
   const idDelTitulo = useId()
-  const idDelPresupuesto = useId()
   const idDeTurnos = useId()
   const idDeReglas = useId()
   const [activa, setActiva] = useState(inicial.activa)
-  const [presupuesto, setPresupuesto] = useState(presupuestoComoTexto(inicial.presupuestoMensualCentavos))
   const [turnos, setTurnos] = useState(String(inicial.maxTurnos))
   const [reglas, setReglas] = useState(inicial.reglas ?? "")
   const [guardando, setGuardando] = useState(false)
@@ -41,7 +32,6 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
   const [error, setError] = useState("")
   const [listo, setListo] = useState(false)
 
-  const presupuestoUsd = leerPresupuestoUsd(presupuesto)
   const turnosNumero = /^\d+$/.test(turnos.trim()) ? Number(turnos.trim()) : NaN
   const turnosValidos = Number.isInteger(turnosNumero) && turnosNumero >= 1 && turnosNumero <= 50
 
@@ -49,7 +39,7 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
 
   const guardar = async (evento: React.FormEvent) => {
     evento.preventDefault()
-    if (enviado.current || presupuestoUsd === null || !turnosValidos) return
+    if (enviado.current || !turnosValidos) return
     enviado.current = true
     setError("")
     setListo(false)
@@ -59,7 +49,6 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
       maxTurnos: turnosNumero,
       // No se muestra: se conserva el que tenía.
       maxTokens: inicial.maxTokens,
-      presupuestoMensualUsd: presupuestoUsd,
       reglas: reglas.trim() || null,
     })
     enviado.current = false
@@ -78,20 +67,16 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
           subtitulo="Sólo la dueña del negocio los puede cambiar."
           icono={{ figura: SlidersHorizontal }}
         />
-        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
+        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-texto-2">Estado</dt>
             <dd className="mt-0.5 font-medium text-navy">{inicial.activa ? "Encendida" : "Apagada"}</dd>
           </div>
           <div>
-            <dt className="text-texto-2">Presupuesto mensual</dt>
-            <dd className="mt-0.5 font-medium text-navy">{presupuestoEnUsd(inicial.presupuestoMensualCentavos)}</dd>
-          </div>
-          <div>
             <dt className="text-texto-2">Respuestas antes de pasarte la conversación</dt>
             <dd className="mt-0.5 font-medium text-navy">{inicial.maxTurnos}</dd>
           </div>
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
             <dt className="text-texto-2">Reglas del negocio</dt>
             <dd className="mt-0.5 whitespace-pre-wrap text-navy">{inicial.reglas || "Sin reglas propias."}</dd>
           </div>
@@ -120,32 +105,6 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor={idDelPresupuesto} className={ETIQUETA}>
-              Presupuesto mensual (US$)
-            </label>
-            <input
-              id={idDelPresupuesto}
-              inputMode="decimal"
-              value={presupuesto}
-              onChange={(evento) => {
-                setPresupuesto(evento.target.value)
-                cambio()
-              }}
-              aria-invalid={presupuestoUsd === null}
-              aria-describedby={`${idDelPresupuesto}-ayuda`}
-              className={cn(CAMPO, presupuestoUsd === null && CAMPO_CON_ERROR)}
-            />
-            {presupuestoUsd === null ? (
-              <p id={`${idDelPresupuesto}-ayuda`} className={ERROR_DE_CAMPO}>
-                Escribe un monto en dólares, por ejemplo 5 o 7,50.
-              </p>
-            ) : (
-              <p id={`${idDelPresupuesto}-ayuda`} className="mt-1 text-xs text-texto-2">
-                Al llegar al 80 % te avisamos; al 100 % Eli se pausa hasta el mes siguiente.
-              </p>
-            )}
-          </div>
           <div>
             <label htmlFor={idDeTurnos} className={ETIQUETA}>
               Respuestas antes de pasarte la conversación
@@ -203,7 +162,7 @@ export function SeccionAjustes({ inicial, editable }: { inicial: AjustesDeLaSecr
           tamaño="sm"
           icono={<Save className="h-4 w-4" />}
           cargando={guardando}
-          disabled={presupuestoUsd === null || !turnosValidos}
+          disabled={!turnosValidos}
         >
           {listo ? "Guardado" : "Guardar"}
         </BotonPrimario>

@@ -13,6 +13,7 @@ import {
   MENSAJES_DE_HISTORIAL,
   MODELO_DE_LA_SECRETARIA,
   PRESUPUESTO_AGOTADO,
+  presupuestoDelNegocio,
   type EstadoDeConversacion,
 } from "@/lib/secretaria/config"
 import {
@@ -45,7 +46,7 @@ export function mensajeDeDerivacion(nombre: string): string {
   return `Le paso tu consulta a ${nombre}, te responde pronto 🙌`
 }
 
-const AJUSTES_POR_DEFECTO = { activa: false, maxTurnos: 8, maxTokens: 200, presupuestoMensualCentavos: 500, reglas: null }
+const AJUSTES_POR_DEFECTO = { activa: false, maxTurnos: 8, maxTokens: 200, presupuestoMensualCentavos: null, reglas: null }
 
 const TEXTO_SIN_TEXTO = "[La clienta envió un mensaje que no es texto: audio, foto, sticker o archivo.]"
 
@@ -132,6 +133,7 @@ interface Negocio {
   id: string
   name: string
   timezone: string | null
+  plan: string
   user: { email: string; name: string }
 }
 
@@ -216,7 +218,7 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
     }),
     prisma.business.findUnique({
       where: { id: negocioId },
-      select: { id: true, name: true, timezone: true, user: { select: { email: true, name: true } } },
+      select: { id: true, name: true, timezone: true, plan: true, user: { select: { email: true, name: true } } },
     }),
     prisma.ajustesDeSecretaria.findUnique({ where: { businessId: negocioId } }),
   ])
@@ -248,7 +250,8 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
     where: { businessId_periodo: { businessId: negocioId, periodo } },
     select: { costoMicrodolares: true },
   })
-  if (porcentajeGastado(consumo?.costoMicrodolares ?? 0, ajustes.presupuestoMensualCentavos) >= PRESUPUESTO_AGOTADO) {
+  const presupuesto = presupuestoDelNegocio(negocio.plan, ajustes.presupuestoMensualCentavos)
+  if (porcentajeGastado(consumo?.costoMicrodolares ?? 0, presupuesto) >= PRESUPUESTO_AGOTADO) {
     await derivar(negocio, conversacion, { motivo: "La Secretaria está en pausa: se agotó el presupuesto del mes.", memberId: null }, enviar, ahora)
     return { respuestas, estado: "human", derivada: true }
   }
@@ -297,7 +300,7 @@ async function responderUnaVez(negocioId: string, conversacionId: string, ahora:
     }
     return { respuestas, estado: conversacion.estado as EstadoDeConversacion, derivada: false, sinRespuesta: "error" }
   } finally {
-    await registrarConsumo(negocio, ajustes.presupuestoMensualCentavos, periodo, tokens, respuestas.length, conversacion.simulacion, ahora)
+    await registrarConsumo(negocio, presupuesto, periodo, tokens, respuestas.length, conversacion.simulacion, ahora)
   }
 }
 

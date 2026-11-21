@@ -3,22 +3,21 @@ import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import type { AvisoDeLaSecretaria, ConsumoDelMes } from "../_lecturas"
-import { fechaCorta, gastoEnUsd, porcentajeParaLaBarra, presupuestoEnUsd } from "../_formato"
+import { fechaCorta, porcentajeParaLaBarra } from "../_formato"
 
 interface PropsDeSeccionConsumo {
   activa: boolean
   consumo: ConsumoDelMes
-  presupuestoCentavos: number
   avisos: AvisoDeLaSecretaria[]
   zona: string
 }
 
 /**
- * Cómo va el mes: si está encendida, cuánto gastó contra el presupuesto y
- * cuántos mensajes mandó; debajo, los últimos avisos (derivaciones y alertas
+ * Cómo va el mes: si está encendida, qué % del uso del mes lleva (sin montos:
+ * lo paga Eli) y cuántos mensajes mandó; debajo, los últimos avisos (derivaciones y alertas
  * de presupuesto). Sólo lectura.
  */
-export function SeccionConsumo({ activa, consumo, presupuestoCentavos, avisos, zona }: PropsDeSeccionConsumo) {
+export function SeccionConsumo({ activa, consumo, avisos, zona }: PropsDeSeccionConsumo) {
   const porcentaje = porcentajeParaLaBarra(consumo.porcentaje)
   const agotado = consumo.porcentaje >= 100
 
@@ -30,7 +29,7 @@ export function SeccionConsumo({ activa, consumo, presupuestoCentavos, avisos, z
         subtitulo={
           activa
             ? agotado
-              ? "Se acabó el presupuesto del mes: Eli está en pausa hasta el próximo."
+              ? "Eli usó todo su cupo del mes: está en pausa hasta el próximo y las consultas te llegan a ti."
               : "Eli está encendida y respondiendo tu WhatsApp."
             : "Eli está apagada: tus clientas no reciben respuesta automática."
         }
@@ -39,14 +38,12 @@ export function SeccionConsumo({ activa, consumo, presupuestoCentavos, avisos, z
 
       <div className="mt-5">
         <div className="flex items-baseline justify-between gap-3 text-sm">
-          <span className="font-medium text-navy">
-            {gastoEnUsd(consumo.costoMicrodolares)} de {presupuestoEnUsd(presupuestoCentavos)}
-          </span>
+          <span className="font-medium text-navy">Uso del mes</span>
           <span className="text-texto-2">{porcentaje} %</span>
         </div>
         <div
           role="progressbar"
-          aria-label="Presupuesto del mes usado"
+          aria-label="Uso del mes"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={porcentaje}

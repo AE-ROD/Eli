@@ -24,7 +24,6 @@ export interface AjustesParaGuardar {
   activa: boolean
   maxTurnos: number
   maxTokens: number
-  presupuestoMensualUsd: number
   reglas: string | null
 }
 

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { describe, it, expect, beforeEach } from "vitest"
 import { LlaveDeCifradoInvalida, cifrarToken, descifrarToken } from "./cifrado"
 import { costoEnMicrodolares, periodoDe, porcentajeGastado } from "./costo"
+import { presupuestoDelNegocio } from "./config"
 
 describe("cifrado del token de WhatsApp", () => {
   beforeEach(() => {
@@ -47,5 +48,16 @@ describe("costo y presupuesto", () => {
     // 1 de febrero 02:00 UTC es todavía 31 de enero en Santiago.
     expect(periodoDe(new Date("2030-02-01T02:00:00.000Z"), "America/Santiago")).toBe("2030-01")
     expect(periodoDe(new Date("2030-02-01T02:00:00.000Z"), "UTC")).toBe("2030-02")
+  })
+})
+
+describe("presupuesto por plan", () => {
+  it("Independiente US$3 y Equipo US$9; uno puesto a mano manda; un plan raro recibe el más chico", () => {
+    expect(presupuestoDelNegocio("independiente", null)).toBe(300)
+    expect(presupuestoDelNegocio("equipo", null)).toBe(900)
+    expect(presupuestoDelNegocio("equipo", 2_000)).toBe(2_000)
+    expect(presupuestoDelNegocio("equipo", 0)).toBe(0)
+    expect(presupuestoDelNegocio("otro", null)).toBe(300)
+    expect(presupuestoDelNegocio(undefined, undefined)).toBe(300)
   })
 })

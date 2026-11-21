@@ -1916,7 +1916,8 @@ model AjustesDeSecretaria {
   /// Tope de tokens de salida por llamada al modelo.
   maxTokens                  Int      @default(200)
   /// Presupuesto mensual en centavos de dólar. Al 100 % la Secretaria se pausa.
-  presupuestoMensualCentavos Int      @default(500)
+  /// Sólo lo pone Eli, a mano en la base, para una cuenta puntual. Null = el de su plan (`PRESUPUESTO_MENSUAL_POR_PLAN`).
+  presupuestoMensualCentavos Int?
   /// Reglas propias del negocio para el system prompt (texto libre, opcional).
   reglas                     String?
   createdAt                  DateTime @default(now())

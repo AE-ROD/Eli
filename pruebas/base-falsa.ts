@@ -337,7 +337,7 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     activa: false,
     maxTurnos: 8,
     maxTokens: 200,
-    presupuestoMensualCentavos: 500,
+    presupuestoMensualCentavos: null,
     reglas: null,
     createdAt: new Date(),
     updatedAt: new Date(),

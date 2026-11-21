@@ -12,8 +12,8 @@ import { SeccionWhatsapp } from "./_componentes/seccion-whatsapp"
 /**
  * Secretaria Eli: el agente que atiende el WhatsApp del negocio. Dueño y
  * encargado la ven, la prueban en el simulador y devuelven a Eli las
- * conversaciones derivadas. Encenderla, el presupuesto y el número de WhatsApp
- * son sólo del dueño. El permiso se mira en el servidor: sin él, de vuelta al
+ * conversaciones derivadas. Encenderla y el número de WhatsApp son sólo del
+ * dueño; el presupuesto lo define Eli por plan y aquí sólo se ve el % usado. El permiso se mira en el servidor: sin él, de vuelta al
  * inicio. Los endpoints lo vuelven a mirar (404).
  */
 export default async function PaginaSecretaria() {
@@ -36,13 +36,7 @@ export default async function PaginaSecretaria() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
           <Simulador activa={ajustes.activa} />
           <div className="space-y-6">
-            <SeccionConsumo
-              activa={ajustes.activa}
-              consumo={consumo}
-              presupuestoCentavos={ajustes.presupuestoMensualCentavos}
-              avisos={avisos}
-              zona={zona}
-            />
+            <SeccionConsumo activa={ajustes.activa} consumo={consumo} avisos={avisos} zona={zona} />
             <SeccionDerivadas derivadas={derivadas} zona={zona} />
           </div>
         </div>
