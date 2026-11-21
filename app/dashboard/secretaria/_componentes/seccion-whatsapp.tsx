@@ -1,6 +1,6 @@
-import { MessageCircle } from "lucide-react"
 import { Insignia } from "@/components/comunes/insignia"
 import { EncabezadoDeTarjeta } from "@/components/panel/encabezado-de-tarjeta"
+import { IconoWhatsapp } from "@/components/panel/icono-whatsapp"
 import { TARJETA_DEL_PANEL } from "@/components/panel/estilos"
 import { cn } from "@/lib/utils"
 import type { CanalDeLaSecretaria } from "../_lecturas"
@@ -20,7 +20,7 @@ export function SeccionWhatsapp({ inicial }: { inicial: CanalDeLaSecretaria | nu
         id="secretaria-whatsapp"
         titulo="Tu WhatsApp"
         subtitulo="El número donde Eli atiende a tus clientas."
-        icono={{ figura: MessageCircle }}
+        icono={{ figura: IconoWhatsapp }}
       />
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <Insignia tono={estado === "conectado" ? "lima" : "gris"}>
