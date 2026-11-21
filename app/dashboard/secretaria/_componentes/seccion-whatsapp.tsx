@@ -176,12 +176,27 @@ export function SeccionWhatsapp({ inicial, editable }: { inicial: CanalDeLaSecre
         {editable && canal.estado === "desconectado" && (
           <div className="space-y-4">
             <div className="rounded-campo bg-superficie px-4 py-3 text-sm text-navy squircle">
-              <p>
-                Es una conexión no oficial de WhatsApp: WhatsApp podría restringir tu número si detecta uso
-                automatizado. Eli sólo responde, nunca escribe primero.
-              </p>
-              <CasillaDeSeleccion etiqueta="Entiendo y acepto" marcada={acepto} alCambiar={setAcepto} className="mt-2">
-                <span className="font-medium">Entiendo y acepto</span>
+              <p className="font-medium">Eli se conecta a tu WhatsApp igual que WhatsApp Web.</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-texto-2">
+                <li>Sigues usando tu WhatsApp como siempre: todos los mensajes te llegan al celular.</li>
+                <li>Eli sólo responde a quien te escribe. Nunca manda mensajes por su cuenta ni promociones.</li>
+                <li>La pausas o la desconectas cuando quieras.</li>
+              </ul>
+              <details className="mt-3 text-texto-2">
+                <summary className="cursor-pointer font-medium text-navy">Lo que tienes que saber</summary>
+                <p className="mt-2">
+                  Esta conexión no es un servicio oficial de WhatsApp. Para cuidar tu número, Eli responde a ritmo de
+                  persona y nunca envía mensajes masivos. Aun así, WhatsApp puede limitar los números que detecta con
+                  uso automatizado, así que no podemos garantizar que nunca pase.
+                </p>
+              </details>
+              <CasillaDeSeleccion
+                etiqueta="Acepto las condiciones de uso"
+                marcada={acepto}
+                alCambiar={setAcepto}
+                className="mt-3"
+              >
+                <span className="font-medium">Acepto las condiciones de uso</span>
               </CasillaDeSeleccion>
             </div>
             <BotonPrimario
