@@ -9,20 +9,20 @@ datasource db {
 }
 
 model User {
-  id                   String    @id @default(cuid())
-  name                 String
-  email                String    @unique
-  password             String
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  name                  String
+  email                 String    @unique
+  password              String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
   /// Las sesiones iniciadas antes de este momento ya no valen: lo pone
   /// restablecer la contraseña. `lib/auth.ts` lo revisa cada 5 minutos. Null es
   /// "nunca se cerraron". Columna en camelCase y sin `@map`, como el resto del
   /// modelo (`createdAt`, `updatedAt`).
-  sesionesValidasDesde DateTime?
+  sesionesValidasDesde  DateTime?
   /// Baja de los correos del ciclo de prueba (bienvenida, consejo, avisos de
   /// fin). No afecta los correos de la cuenta (recuperar contraseña, etc.).
-  correosDesactivados  Boolean   @default(false)
+  correosDesactivados   Boolean   @default(false)
   /// La foto de la CUENTA (la persona, no un negocio), como ruta del propio
   /// sitio: `/fotos/usuarios/<id>/cuenta-<uuid>.webp` (`lib/almacenamiento-de-fotos.ts`).
   /// La sigue en todos sus contextos (clínica y negocio propio) y sólo la ve ella,
@@ -32,7 +32,22 @@ model User {
   /// integrante: la forma de la ruta y que sea de su carpeta las exige la
   /// aplicación (`claveDeFotoDeLaCuenta`) al escribir y al leer. Columna en
   /// camelCase y sin `@map`, como el resto del modelo.
-  fotoUrl              String?
+  fotoUrl               String?
+  /// Cuándo la persona demostró que el correo es suyo: abrió el enlace de
+  /// "Confirma tu correo", entró con Google, aceptó una invitación al equipo o
+  /// restableció la contraseña (`lib/verificacion-de-correo.ts`). Null es "sin
+  /// confirmar": la cuenta funciona igual, pero no recibe los correos del ciclo
+  /// de prueba (`lib/enviar-correo-de-prueba.ts`) y ve un aviso en el panel.
+  /// Las cuentas de antes de esta columna quedaron confirmadas en la migración.
+  emailVerificadoEn     DateTime?
+  /// sha256 del token del enlace de confirmación (`lib/tokens.ts`): el token en
+  /// claro sólo existe en el correo. Uno por cuenta: pedir otro enlace lo pisa,
+  /// y confirmar lo borra. Null es "sin enlace pendiente".
+  verificacionTokenHash String?   @unique
+  /// Hasta cuándo vale ese enlace (48 horas desde que se mandó).
+  verificacionVenceEn   DateTime?
+  /// Cuándo se mandó el último enlace de confirmación.
+  verificacionEnviadaEn DateTime?
 
   business             Business?
   memberships          BusinessMember[]
@@ -1923,7 +1938,6 @@ model PaqueteDeSesiones {
  * vendió (`lineaDeVentaId`, la línea de esa venta): si esa atención se anula,
  * el paquete deja de valer. Las sesiones usadas son sus `usos` en atenciones
  * no anuladas; el saldo nunca se guarda, se cuenta.
- *
  * `valorPorSesionCents` = `priceCents / sesiones` hacia abajo: es el precio
  * con que queda la línea de cada sesión usada (la base de la comisión de
  * quien atiende) y lo que se devuelve por cada sesión sin usar.
@@ -1966,7 +1980,9 @@ model PaqueteDeCliente {
   @@map("paquetes_de_clientes")
 }
 
-/** Una sesión usada: la línea de una atención que se pagó con el paquete. Una línea usa a lo más una. */
+/**
+ * Una sesión usada: la línea de una atención que se pagó con el paquete. Una línea usa a lo más una.
+ */
 model UsoDePaquete {
   id         String           @id @default(cuid())
   businessId String
