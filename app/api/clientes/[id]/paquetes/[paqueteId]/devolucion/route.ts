@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { deCentavos } from "@/lib/atenciones"
-import { horaDeLaBase } from "@/lib/bloqueos-de-dinero"
+import { horaDeLaBase, tomarCandadoDeCajaCompartido } from "@/lib/bloqueos-de-dinero"
 import { clienteNoEliminado } from "@/lib/clientes-eliminados"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 import { esMedioDePago } from "@/lib/medios-de-pago"
@@ -67,6 +67,10 @@ export async function POST(request: NextRequest, { params }: Contexto) {
 
     const usuarioId = session?.user?.id ?? null
     const { devueltoCents } = await prisma.$transaction(async (tx) => {
+      // Como el cobro: si la caja se está cerrando, la devolución espera a que
+      // termine y su hora queda después de ese cierre. Así entra entera en un
+      // cierre (el siguiente) y nunca queda fuera de los dos.
+      await tomarCandadoDeCajaCompartido(tx, actor.businessId)
       const ahora = await horaDeLaBase(tx)
       const nombre = (await nombreEnElNegocio(tx, actor, usuarioId)) ?? "La dueña"
       return devolverPaquete(tx, actor.businessId, paquete.id, medio, ahora, { id: usuarioId, nombre })
