@@ -13,6 +13,9 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 const prismaMock = {
   service: { findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  // Paquetes de sesiones: sin paquetes, salvo que un test diga otra cosa.
+  paqueteDeCliente: { count: vi.fn(async () => 0) },
+  paqueteDeSesiones: { count: vi.fn(async () => 0) },
 }
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -390,5 +393,31 @@ describe("PUT /api/configuracion/servicios/[id] — urgencia (sólo clínica den
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: "Urgencia tiene que ser sí o no" })
     expect(prismaMock.service.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("DELETE /api/configuracion/servicios/[id] — servicio con paquetes de sesiones", () => {
+  async function borrar() {
+    const { DELETE } = await import("./route")
+    mockGetServerSession.mockResolvedValueOnce(sesionEncargado)
+    prismaMock.service.findFirst.mockResolvedValueOnce({ id: "s-1", businessId: "negocio-1" })
+    return DELETE({} as never, { params: Promise.resolve({ id: "s-1" }) })
+  }
+
+  it("con paquetes vendidos no se elimina: 409 y dice que se desactive", async () => {
+    prismaMock.paqueteDeCliente.count.mockResolvedValueOnce(2)
+    const respuesta = await borrar()
+    expect(respuesta.status).toBe(409)
+    expect((await respuesta.json()).error).toContain("paquetes de sesiones vendidos")
+    expect(prismaMock.service.delete).not.toHaveBeenCalled()
+    expect(prismaMock.paqueteDeCliente.count).toHaveBeenCalledWith({ where: { businessId: "negocio-1", serviceId: "s-1" } })
+  })
+
+  it("con paquetes en oferta tampoco se los lleva por delante sin avisar: 409", async () => {
+    prismaMock.paqueteDeSesiones.count.mockResolvedValueOnce(1)
+    const respuesta = await borrar()
+    expect(respuesta.status).toBe(409)
+    expect((await respuesta.json()).error).toContain("Elimínalos primero")
+    expect(prismaMock.service.delete).not.toHaveBeenCalled()
   })
 })

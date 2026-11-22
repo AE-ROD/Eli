@@ -329,16 +329,31 @@ export interface AvisoDeSaldo {
  * usó de otros paquetes vuelven solas (dejan de contar).
  */
 export async function motivoParaNoAnularPorPaquetes(db: Db, businessId: string, visitId: string): Promise<string | null> {
-  const vendidos = await db.paqueteDeCliente.findMany({
-    where: { businessId, lineaDeVenta: { is: { visitId } } },
-    select: { devueltoAt: true, usos: { where: { linea: { visitId: { not: visitId }, visit: { is: { status: { not: "anulada" } } } } }, select: { id: true } } },
-    take: MAXIMO_DE_PAQUETES_POR_COBRO,
-  })
+  // Los candados de las filas, antes de leer: un cobro que esté usando una
+  // sesión de un paquete vendido acá, o una devolución en curso, toman el
+  // mismo candado (`FOR UPDATE` por id). Así esta anulación ve lo que dejaron,
+  // o ellos ven la atención ya anulada: nunca las dos cosas a medias (una
+  // sesión gratis, o la plata devuelta dos veces).
+  await db.$queryRaw`SELECT id FROM paquetes_de_clientes WHERE "businessId" = ${businessId} AND ("lineaDeVentaId" IN (SELECT id FROM atencion_servicios WHERE "visitId" = ${visitId}) OR id IN (SELECT u."paqueteId" FROM usos_de_paquete u JOIN atencion_servicios l ON l.id = u."lineaId" WHERE l."visitId" = ${visitId})) ORDER BY id FOR UPDATE`
+
+  const [vendidos, usadosYaDevueltos] = await Promise.all([
+    db.paqueteDeCliente.findMany({
+      where: { businessId, lineaDeVenta: { is: { visitId } } },
+      select: { devueltoAt: true, usos: { where: { linea: { visitId: { not: visitId }, visit: { is: { status: { not: "anulada" } } } } }, select: { id: true } } },
+      take: MAXIMO_DE_PAQUETES_POR_COBRO,
+    }),
+    // Una sesión usada acá de un paquete que después se devolvió: la devolución
+    // ya se calculó sin esa sesión, y anular no se la devolvería a nadie.
+    db.usoDePaquete.count({ where: { businessId, linea: { visitId }, paquete: { is: { devueltoAt: { not: null } } } } }),
+  ])
   if (vendidos.some((paquete) => paquete.devueltoAt)) {
     return "En esta atención se vendió un paquete que ya fue devuelto: no se anula."
   }
   if (vendidos.some((paquete) => paquete.usos.length > 0)) {
     return "En esta atención se vendió un paquete del que ya se usaron sesiones. Si hay que devolver plata, devuelve el paquete desde la ficha de la clienta."
+  }
+  if (usadosYaDevueltos > 0) {
+    return "En esta atención se usó una sesión de un paquete que después se devolvió: no se anula."
   }
   return null
 }

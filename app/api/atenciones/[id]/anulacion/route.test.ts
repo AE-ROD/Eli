@@ -424,3 +424,39 @@ describe("POST /api/atenciones/[id]/anulacion: paquetes de sesiones", () => {
     expect(atencionGuardada("v-otra").status).toBe("anulada")
   })
 })
+
+describe("POST /api/atenciones/[id]/anulacion: paquetes, lo que encontró la revisión", () => {
+  const paquete = (datos: Record<string, unknown> = {}) => ({
+    id: "pc-1",
+    businessId: NEGOCIO,
+    customerId: "c-maria",
+    serviceId: "s-corte",
+    serviceName: "Corte",
+    sesiones: 6,
+    priceCents: centavos(42000),
+    valorPorSesionCents: centavos(7000),
+    lineaDeVentaId: "l-espera",
+    vendidoAt: new Date("2026-10-01T14:00:00.000Z"),
+    ...datos,
+  })
+
+  it("no se anula la atención que usó una sesión de un paquete ya devuelto", async () => {
+    base.reiniciar({
+      ...escenario(),
+      paqueteDeCliente: [paquete({ devueltoAt: new Date("2026-10-06T14:30:00.000Z"), devueltoCents: centavos(35000), devueltoMedio: "efectivo", devueltoPorNombre: "Ana Dueña" })],
+      usoDePaquete: [{ id: "u-1", businessId: NEGOCIO, paqueteId: "pc-1", lineaId: "l-cobrada" }],
+    })
+    const respuesta = await anular(sesiones.dueña, "v-cobrada", { motivo: "Error" })
+    expect(respuesta.status).toBe(409)
+    expect((await respuesta.json()).error).toContain("después se devolvió")
+    expect(atencionGuardada("v-cobrada").status).toBe("finalizada")
+  })
+
+  it("toma el candado de los paquetes de la atención, con el negocio de la sesión, antes de decidir", async () => {
+    base.reiniciar({ ...escenario(), paqueteDeCliente: [paquete()], usoDePaquete: [] })
+    await anular(sesiones.dueña, "v-cobrada", { motivo: "Error" })
+    const candado = base.prisma.$queryRaw.mock.calls.find(([partes]) => (partes as TemplateStringsArray).join("?").includes("paquetes_de_clientes"))
+    expect(candado).toBeDefined()
+    expect(candado?.slice(1)).toEqual([NEGOCIO, "v-cobrada", "v-cobrada"])
+  })
+})

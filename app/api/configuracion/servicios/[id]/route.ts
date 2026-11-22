@@ -117,6 +117,23 @@ export async function DELETE(
     return NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 })
   }
 
+  // Paquetes de sesiones (lib/paquetes.ts): un servicio con paquetes vendidos
+  // no se puede borrar (la base lo impide) y, sin esto, uno con paquetes en
+  // oferta se los llevaría por delante sin avisar. Se dice antes de intentar.
+  const [vendidos, enOferta] = await Promise.all([
+    prisma.paqueteDeCliente.count({ where: { businessId: actor.businessId, serviceId: existente.id } }),
+    prisma.paqueteDeSesiones.count({ where: { businessId: actor.businessId, serviceId: existente.id } }),
+  ])
+  if (vendidos > 0) {
+    return NextResponse.json({ error: "Este servicio tiene paquetes de sesiones vendidos: no se elimina. Desactívalo para que deje de ofrecerse." }, { status: 409 })
+  }
+  if (enOferta > 0) {
+    return NextResponse.json(
+      { error: "Este servicio tiene paquetes de sesiones. Elimínalos primero en Configuración › Paquetes de sesiones, o desactiva el servicio." },
+      { status: 409 }
+    )
+  }
+
   try {
     await prisma.service.delete({ where: { id } })
   } catch (error) {
