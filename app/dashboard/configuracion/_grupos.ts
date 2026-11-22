@@ -12,13 +12,15 @@ import type { PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
 
 /**
- * Las quince secciones, por su ancla: el `id` del elemento al que llevan los
+ * Las dieciséis secciones, por su ancla: el `id` del elemento al que llevan los
  * enlaces de otras pantallas (`#horario`, `#servicios`, `#sillones`…).
  *
  * `sedes` (plan Independiente, sólo la dueña) y `plan` (sólo la dueña) las
  * arma `page.tsx` con `puedeGestionarSedes` y `puedeCambiarDePlan`. Con alguna
  * sede activa, «Sedes y horarios» reemplaza a «Horario» (`page.tsx` no arma las
  * dos a la vez: el servidor rechaza el horario general mientras haya sedes activas).
+ * `paquetes` (los paquetes de sesiones) va debajo de los servicios, para quien
+ * los gestiona (`puedeGestionarPaquetes`): no existe en la clínica dental.
  */
 export type AnclaDeConfiguracion =
   | "horario"
@@ -28,6 +30,7 @@ export type AnclaDeConfiguracion =
   | "pagina"
   | "plan"
   | "servicios"
+  | "paquetes"
   | "sillones"
   | "laboratorios"
   | "productos"
@@ -52,6 +55,7 @@ export const NOMBRE_DE_SECCION: Readonly<Record<AnclaDeConfiguracion, string>> =
   pagina: "Página pública",
   plan: "Plan",
   servicios: "Servicios",
+  paquetes: "Paquetes de sesiones",
   sillones: "Sillones",
   laboratorios: "Laboratorios",
   productos: "Productos",
@@ -86,7 +90,7 @@ export function nombreDeLaSeccion(ancla: AnclaDeConfiguracion, palabras: Palabra
 export const GRUPOS: readonly { id: IdDeGrupo; secciones: readonly AnclaDeConfiguracion[] }[] = [
   { id: "horario-y-equipo", secciones: ["horario", "sedes", "mi-foto"] },
   { id: "tu-negocio", secciones: ["pagina", "productos", "plan"] },
-  { id: "catalogo-y-clinica", secciones: ["servicios", "sillones", "laboratorios"] },
+  { id: "catalogo-y-clinica", secciones: ["servicios", "paquetes", "sillones", "laboratorios"] },
   { id: "mensajes", secciones: ["mensajes"] },
   { id: "mas-adelante", secciones: ["hora-valle", "por-confirmar", "fila-virtual", "zona-horaria", "plazo-de-cambios"] },
 ]

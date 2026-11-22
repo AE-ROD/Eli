@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { esAbono, nombreDelAbono, type Atencion, type LineaDeServicio as Linea, type PagoRegistrado } from "../_datos"
 import { frasesDelTablero } from "../_frases"
+import { separarLoCubiertoPorPaquete } from "./paquetes-del-cobro"
 import { CLASES_DE_TARJETA, Herramienta, LineaDeServicio, MomentoDeTarjeta, NombreDeTarjeta } from "./partes-de-tarjeta"
 import type { PropsDeArrastre } from "./tarjeta-de-reserva"
 
@@ -45,6 +46,7 @@ function momentoDe(atencion: Atencion, ahora: number): { texto: string; iso: str
 /**
  * Cómo se pagó, en una línea: "Efectivo + Tarjeta de débito". Un medio usado
  * dos veces se nombra una sola. Sin pagos, el total era cero: una cortesía.
+ * Lo que cubrió un paquete no llega acá: no es plata recibida, va aparte.
  */
 function medioDelCobro(pagos: PagoRegistrado[]): string {
   if (pagos.length === 0) return "Sin pago (cortesía)"
@@ -126,6 +128,8 @@ export function TarjetaDeAtencion({
   const abonable = puedeCobrarAbonosDeProtesis(actor) && esEstadoActivo(atencion.estado) && atencion.cliente.id !== null
   const servicios = atencion.lineas.filter((linea) => !esAbono(linea))
   const abonos = atencion.lineas.filter(esAbono)
+  // Paquetes de sesiones: lo que cubrió un paquete ya estaba pagado, no es plata que entró en este cobro.
+  const delCobro = atencion.pagos === undefined ? null : separarLoCubiertoPorPaquete(atencion.pagos)
   const hayHerramientas = secundarias.editar || volverA !== null || deshacer || secundarias.anular || abonable
 
   return (
@@ -159,6 +163,23 @@ export function TarjetaDeAtencion({
                   <span className="sr-only"> (ya no está en el equipo)</span>{" "}
                   <Insignia tono="naranja" className="h-5 px-2 align-middle">
                     Falta asignar
+                  </Insignia>
+                </>
+              )}
+              {/* Paquetes de sesiones: la que se pagó con una sesión, y la línea con que se vendió uno. */}
+              {linea.conPaquete && (
+                <>
+                  {" "}
+                  <Insignia tono="lila" className="h-5 px-2 align-middle">
+                    Con paquete
+                  </Insignia>
+                </>
+              )}
+              {linea.ventaDePaquete && (
+                <>
+                  {" "}
+                  <Insignia tono="lila" className="h-5 px-2 align-middle">
+                    Venta de paquete
                   </Insignia>
                 </>
               )}
@@ -231,13 +252,23 @@ export function TarjetaDeAtencion({
           </p>
         ))}
 
-      {/* Cómo se pagó: también sólo para quien ve los pagos. */}
-      {cobrada && atencion.pagos !== undefined && (
+      {/* Lo que cubrió su paquete: ya estaba pagado, así que va aparte de cómo se pagó el resto. */}
+      {cobrada && delCobro !== null && delCobro.cubiertoCentavos > 0 && (
+        <p className="flex items-baseline justify-between gap-2 text-[13px]">
+          <span className="text-texto-2">Cubierto por su paquete</span>
+          <span className="font-medium tabular-nums [overflow-wrap:anywhere]">
+            {formatearMonto(deCentavos(delCobro.cubiertoCentavos))}
+          </span>
+        </p>
+      )}
+
+      {/* Cómo se pagó: también sólo para quien ve los pagos. Si todo lo cubrió el paquete, no hubo pago que nombrar. */}
+      {cobrada && delCobro !== null && (delCobro.recibidos.length > 0 || delCobro.cubiertoCentavos === 0) && (
         <p className="flex items-start gap-1.5 rounded-[12px] bg-superficie px-2.5 py-1.5 text-[13px] leading-snug font-medium">
           <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" strokeWidth={2} />
           <span className="min-w-0 break-words">
-            {atencion.pagos.length > 0 && <span className="sr-only">Pagado con </span>}
-            {medioDelCobro(atencion.pagos)}
+            {delCobro.recibidos.length > 0 && <span className="sr-only">Pagado con </span>}
+            {medioDelCobro(delCobro.recibidos)}
           </span>
         </p>
       )}

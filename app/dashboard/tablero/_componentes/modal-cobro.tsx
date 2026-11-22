@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
-import { CircleAlert, CircleCheck, CircleDashed, HandCoins, Plus, Trash2, type LucideIcon } from "lucide-react"
+import { CircleAlert, CircleCheck, CircleDashed, HandCoins, PackagePlus, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { Boton } from "@/components/comunes/boton"
 import { Esqueleto } from "@/components/comunes/esqueleto"
 import { useRubroDelPanel } from "@/components/panel/contexto-rubro"
@@ -21,13 +21,25 @@ import {
   type PropinaPedida,
 } from "@/lib/acciones-del-tablero"
 import { formatearMonto } from "@/lib/dinero"
+import { MAXIMO_DE_PAQUETES_POR_COBRO, nombreDelPaquete } from "@/lib/paquetes"
 import { cn } from "@/lib/utils"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { Insignia } from "@/components/comunes/insignia"
-import { esAbono, leerLineasSinPorcentaje, nombreDelAbono, type Atencion } from "../_datos"
+import { esAbono, leerLineasSinPorcentaje, leerPaquetesParaCobrar, nombreDelAbono, type Atencion } from "../_datos"
 import { frasesDelTablero } from "../_frases"
 import { Aviso } from "@/components/panel/aviso"
 import { BotonesDelPie } from "./botones-del-pie"
+import {
+  SIN_PAQUETES_PARA_COBRAR,
+  paqueteLibrePara,
+  resolverPaquetes,
+  usosPorDefecto,
+  type PaqueteOfrecido,
+  type PaquetesParaCobrar,
+  type PaquetesPedidos,
+  type UsosElegidos,
+  type VentaElegida,
+} from "./paquetes-del-cobro"
 
 /**
  * Cuánto se espera la revisión de comisiones antes de mostrar el cobro igual.
@@ -37,6 +49,16 @@ const ESPERA_MAXIMA_DE_LA_REVISION_MS = 3000
 
 let pagosAgregados = 0
 let propinasAgregadas = 0
+
+/** Toda la fila es el área táctil (44 px de alto), como las demás casillas del panel. */
+const CASILLA_DE_PAQUETE = "flex min-h-11 cursor-pointer items-start gap-3 py-2.5 text-[13px] leading-snug font-medium text-navy"
+
+/** `$150.000 · $25.000 por sesión`, y cuánto dura si la dueña le puso vigencia. */
+function detalleDelPaquete(paquete: PaqueteOfrecido): string {
+  const vigencia =
+    paquete.vigenciaMeses === null ? "" : ` · vale por ${paquete.vigenciaMeses === 1 ? "1 mes" : `${paquete.vigenciaMeses} meses`}`
+  return `${formatearMonto(paquete.precio)} · ${formatearMonto(paquete.valorPorSesion)} por sesión${vigencia}`
+}
 
 interface PropsDeModalCobro {
   /**
@@ -50,11 +72,14 @@ interface PropsDeModalCobro {
   profesionales: { id: string; nombre: string }[]
   /** Si se ofrece registrar propinas (`puedeRegistrarPropina`): no en una clínica dental. */
   conPropinas: boolean
+  /** Si se venden y se usan paquetes de sesiones (`puedeVenderPaquetes`): no en una clínica dental. */
+  conPaquetes: boolean
   /** Por qué no se pudo cobrar, si falló. */
   aviso: string
   guardando: boolean
-  onCobrar: (pagos: PagoPedido[], propinas: PropinaPedida[]) => void
-  /** Se tocó un pago: el aviso del intento anterior ya no es de lo que se ve. */
+  /** `pagos` son los medios normales: lo que cubre un paquete no va ahí, lo calcula el servidor. */
+  onCobrar: (pagos: PagoPedido[], propinas: PropinaPedida[], paquetes: PaquetesPedidos) => void
+  /** Se tocó un pago o un paquete: el aviso del intento anterior ya no es de lo que se ve. */
   onCambiarPagos: () => void
   onCerrar: () => void
 }
@@ -74,12 +99,18 @@ function totalEnCentavosDe(atencion: Atencion): number {
  * repartirse entre varios medios. Lo que falta o sobra se calcula en vivo y
  * en centavos, y "Cobrar" se habilita sólo cuando los pagos dan el total
  * exacto: con la misma regla que aplica el servidor (`errorDeCobro`).
+ *
+ * Con paquetes de sesiones (`lib/paquetes.ts`): un servicio para el que la
+ * clienta tiene un paquete usa una sesión y deja de sumar, y se le puede
+ * vender un paquete ahí mismo. Lo que hay que pagar es lo que queda
+ * (`resolverPaquetes`); si no queda nada, se registra la sesión sin pagos.
  */
 export function ModalCobro({
   atencion,
   mediosDePago,
   profesionales,
   conPropinas,
+  conPaquetes,
   aviso,
   guardando,
   onCobrar,
@@ -95,17 +126,14 @@ export function ModalCobro({
   const deDonde = frasesDelTablero(palabras).titulo
   const botonAgregar = useRef<HTMLButtonElement>(null)
   const botonAgregarPropina = useRef<HTMLButtonElement>(null)
+  const botonVenderPaquete = useRef<HTMLButtonElement>(null)
+  /** Para la clave de cada paquete que se agrega al cobro: el mismo paquete se puede vender dos veces. */
+  const paquetesAgregados = useRef(0)
   const totalCentavos = totalEnCentavosDe(atencion)
   // La propina va a quien atendió esta atención (el servidor rechaza a otro):
   // sólo se ofrece a quien tiene una línea en ella.
   const quienesAtendieron = new Set(atencion.lineas.map((linea) => linea.profesional.id))
   const paraPropina = profesionales.filter((profesional) => quienesAtendieron.has(profesional.id))
-
-  // Arranca con todo en el primer medio, que es el caso de todos los días.
-  // Con total cero no hay nada que pagar: se cobra sin pagos.
-  const [filas, setFilas] = useState<FilaDePago[]>(() =>
-    totalCentavos > 0 ? [filaDePagoSugerida(mediosDePago, [], totalCentavos, "pago-inicial")] : []
-  )
 
   // Las propinas (#66) arrancan vacías: son opcionales y van aparte del total.
   const [propinas, setPropinas] = useState<FilaDePropina[]>([])
@@ -116,7 +144,6 @@ export function ModalCobro({
   // abiertos. Los montos se calculan igual en los dos casos.
   const [variosMediosAbierto, setVariosMediosAbierto] = useState(false)
   const [propinasAbiertas, setPropinasAbiertas] = useState(false)
-  const conVariosMedios = variosMediosAbierto || filas.length !== 1
   const conPropinasAbiertas = propinasAbiertas || propinas.length > 0
 
   // Antes de cobrar (#118): qué líneas quedarían sin % de comisión. Se pide
@@ -145,18 +172,73 @@ export function ModalCobro({
     const espera = setTimeout(() => setEsperaVencida(true), ESPERA_MAXIMA_DE_LA_REVISION_MS)
     return () => clearTimeout(espera)
   }, [])
-  const revisando = sinPorcentaje === null && !esperaVencida
+
+  // Paquetes de sesiones: lo que se ofrece y lo que le queda a la clienta se
+  // pide al abrir, y se espera igual que la revisión de arriba, porque cambia
+  // el total. Si llega después de la espera, se ofrece pero no se marca nada
+  // solo: el total no se mueve bajo el dedo. Si no se puede leer, se cobra
+  // como siempre, sin paquetes.
+  const [paquetesLeidos, setPaquetesLeidos] = useState<{ datos: PaquetesParaCobrar; aTiempo: boolean } | null>(
+    conPaquetes ? null : { datos: SIN_PAQUETES_PARA_COBRAR, aTiempo: true }
+  )
+  useEffect(() => {
+    if (!conPaquetes) return
+    let vigente = true
+    const desde = Date.now()
+    leerPaquetesParaCobrar(atencion.id).then((resultado) => {
+      if (!vigente) return
+      setPaquetesLeidos({
+        datos: resultado.ok ? resultado.datos : SIN_PAQUETES_PARA_COBRAR,
+        aTiempo: Date.now() - desde < ESPERA_MAXIMA_DE_LA_REVISION_MS,
+      })
+    })
+    return () => {
+      vigente = false
+    }
+  }, [atencion.id, conPaquetes])
+  const paquetes = paquetesLeidos?.datos ?? SIN_PAQUETES_PARA_COBRAR
+
+  // Qué línea usa una sesión de qué paquete. Mientras nadie toque una casilla
+  // (`null`) vale lo marcado por defecto: cada servicio con paquete usa una.
+  const [usosElegidos, setUsosElegidos] = useState<UsosElegidos | null>(null)
+  const usos = usosElegidos ?? (paquetesLeidos?.aTiempo ? usosPorDefecto(atencion.lineas, paquetes.deLaClienta) : {})
+  // Los paquetes que se venden en este cobro, y la lista de los que se ofrecen, plegada.
+  const [ventas, setVentas] = useState<VentaElegida[]>([])
+  const [ofreciendoPaquetes, setOfreciendoPaquetes] = useState(false)
+  const conPaquete = resolverPaquetes(atencion.lineas, totalCentavos, paquetes, usos, ventas)
+  const hayPaquetesEnElCobro = conPaquete.cubiertas.size > 0 || conPaquete.ventas.length > 0
+  // Lo que se paga con los medios normales: lo que no cubre un paquete, más los paquetes que se venden.
+  const aPagarCentavos = conPaquete.aPagarCentavos
+  // Todo lo de hoy lo cubre su paquete: se registra la sesión sin pedir medio de pago.
+  const nadaQuePagar = aPagarCentavos === 0 && hayPaquetesEnElCobro
+
+  // Los pagos arrancan con todo en el primer medio, que es el caso de todos
+  // los días, y mientras nadie escriba un monto (`null`) siguen a lo que hay
+  // que pagar, que cambia al marcar un paquete. Con cero no hay nada que
+  // pagar: se cobra sin pagos.
+  const [filasEscritas, setFilasEscritas] = useState<FilaDePago[] | null>(null)
+  const [medioInicial, setMedioInicial] = useState<string | null>(null)
+  const filasSolas: FilaDePago[] =
+    aPagarCentavos > 0
+      ? [{ ...filaDePagoSugerida(mediosDePago, [], aPagarCentavos, "pago-inicial"), ...(medioInicial !== null && { medio: medioInicial }) }]
+      : []
+  const filas = filasEscritas === null || nadaQuePagar ? filasSolas : filasEscritas
+  const conVariosMedios = variosMediosAbierto || filas.length !== 1
+
+  const revisando = (sinPorcentaje === null || paquetesLeidos === null) && !esperaVencida
   const idsSinPorcentaje = new Set(sinPorcentaje?.firma === firmaDeLineas ? sinPorcentaje.ids : [])
   const lineasSinPorcentaje = atencion.lineas.filter((linea) => idsSinPorcentaje.has(linea.id)).length
   const avisoDeComisiones = avisoAntesDeCobrar(lineasSinPorcentaje, palabras)
 
-  const cobro = estadoDelCobro(totalCentavos, filas)
+  const cobro = estadoDelCobro(aPagarCentavos, filas)
   const deLasPropinas = propinasDesdeFilas(propinas)
   const listo = cobro.error === null && deLasPropinas.ok
   const hayMontoInvalido = filas.some((fila) => errorDeMontoDePago(fila.monto) !== null)
 
   const cambiarFila = (clave: string, cambios: Partial<FilaDePago>) => {
-    setFilas((previas) => previas.map((fila) => (fila.clave === clave ? { ...fila, ...cambios } : fila)))
+    // Elegir el medio no fija el monto: sigue a lo que haya que pagar.
+    if (filasEscritas === null && cambios.monto === undefined && cambios.medio !== undefined) setMedioInicial(cambios.medio)
+    else setFilasEscritas(filas.map((fila) => (fila.clave === clave ? { ...fila, ...cambios } : fila)))
     onCambiarPagos()
   }
 
@@ -167,15 +249,43 @@ export function ModalCobro({
     setVariosMediosAbierto(true)
     pagosAgregados += 1
     const clave = `pago-${pagosAgregados}`
-    setFilas((previas) => [...previas, filaDePagoSugerida(mediosDePago, previas, totalCentavos, clave)])
+    setFilasEscritas([...filas, filaDePagoSugerida(mediosDePago, filas, aPagarCentavos, clave)])
     onCambiarPagos()
     requestAnimationFrame(() => document.getElementById(`${idBase}-${clave}-monto`)?.focus())
   }
 
   const quitar = (clave: string) => {
-    setFilas((previas) => previas.filter((fila) => fila.clave !== clave))
+    setFilasEscritas(filas.filter((fila) => fila.clave !== clave))
     onCambiarPagos()
     requestAnimationFrame(() => botonAgregar.current?.focus())
+  }
+
+  // Marcar o desmarcar "usar 1 sesión de su paquete" en una línea.
+  const usarSesion = (lineaId: string, paqueteId: string | null) => {
+    const resto = Object.fromEntries(Object.entries(usos).filter(([id]) => id !== lineaId))
+    setUsosElegidos(paqueteId === null ? resto : { ...resto, [lineaId]: paqueteId })
+    onCambiarPagos()
+  }
+
+  // Al elegir un paquete la lista se pliega y el foco vuelve al botón, que sigue ahí para vender otro.
+  const venderPaquete = (paquete: PaqueteOfrecido) => {
+    paquetesAgregados.current += 1
+    const clave = `paquete-${paquetesAgregados.current}`
+    setVentas((previas) => [...previas, { clave, paqueteId: paquete.id, usarHoy: true }])
+    setOfreciendoPaquetes(false)
+    onCambiarPagos()
+    requestAnimationFrame(() => botonVenderPaquete.current?.focus())
+  }
+
+  const cambiarVenta = (clave: string, usarHoy: boolean) => {
+    setVentas((previas) => previas.map((venta) => (venta.clave === clave ? { ...venta, usarHoy } : venta)))
+    onCambiarPagos()
+  }
+
+  const quitarVenta = (clave: string) => {
+    setVentas((previas) => previas.filter((venta) => venta.clave !== clave))
+    onCambiarPagos()
+    requestAnimationFrame(() => botonVenderPaquete.current?.focus())
   }
 
   const cambiarPropina = (clave: string, cambios: Partial<FilaDePropina>) => {
@@ -206,7 +316,7 @@ export function ModalCobro({
   const cobrar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault()
     // Sin propinas en pantalla (`conPropinas` falso), tampoco se mandan.
-    if (listo && deLasPropinas.ok) onCobrar(cobro.pagos, conPropinas ? deLasPropinas.propinas : [])
+    if (listo && deLasPropinas.ok) onCobrar(cobro.pagos, conPropinas ? deLasPropinas.propinas : [], conPaquete.pedido)
   }
 
   const nombreDeMedio = (id: string) => mediosDePago.find((medio) => medio.id === id)?.nombre ?? "medio"
@@ -215,7 +325,7 @@ export function ModalCobro({
     <MarcoDeModal
       antetitulo={deDonde}
       titulo={`Cobrar a ${atencion.cliente.nombre}`}
-      descripcion={`Total: ${formatearMonto(deCentavos(totalCentavos))}`}
+      descripcion={`${hayPaquetesEnElCobro ? "Total a pagar" : "Total"}: ${formatearMonto(deCentavos(aPagarCentavos))}`}
       ancho="lg"
       bloqueado={guardando}
       alCerrar={onCerrar}
@@ -228,9 +338,9 @@ export function ModalCobro({
             onCancelar={onCerrar}
             guardando={guardando}
             deshabilitado={!listo}
-            mientrasGuarda="Cobrando"
+            mientrasGuarda={nadaQuePagar ? "Registrando la sesión" : "Cobrando"}
           >
-            Cobrar {formatearMonto(deCentavos(totalCentavos))}
+            {nadaQuePagar ? "Registrar sesión" : `Cobrar ${formatearMonto(deCentavos(aPagarCentavos))}`}
           </BotonesDelPie>
         )
       }
@@ -249,29 +359,150 @@ export function ModalCobro({
               Lo que se hizo
             </h3>
             <ul className="space-y-2">
-              {atencion.lineas.map((linea) => (
-                <li key={linea.id} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="min-w-0 break-words">
-                    {/* Un abono de prótesis suma como cualquier línea y no lleva %: su reparto sale de la prótesis. */}
-                    {esAbono(linea) ? nombreDelAbono(linea.servicio) : linea.servicio}{" "}
-                    <span className="text-texto-2">· {linea.profesional.nombre}</span>
-                    {idsSinPorcentaje.has(linea.id) && (
-                      <>
-                        <span className="sr-only"> (quedará sin porcentaje de comisión)</span>{" "}
-                        <Insignia tono="naranja" className="h-5 px-2 align-middle">
-                          Sin %
-                        </Insignia>
-                      </>
+              {atencion.lineas.map((linea) => {
+                const cobertura = conPaquete.cubiertas.get(linea.id)
+                // La casilla de su paquete: en la línea que ya usa una sesión, o en la que todavía podría usarla.
+                const suPaquete =
+                  cobertura?.origen === "comprado" ? cobertura.paquete : cobertura ? null : paqueteLibrePara(linea, usos, paquetes.deLaClienta)
+                return (
+                  <li key={linea.id} className="text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 break-words">
+                        {/* Un abono de prótesis suma como cualquier línea y no lleva %: su reparto sale de la prótesis. */}
+                        {esAbono(linea) ? nombreDelAbono(linea.servicio) : linea.servicio}{" "}
+                        <span className="text-texto-2">· {linea.profesional.nombre}</span>
+                        {idsSinPorcentaje.has(linea.id) && (
+                          <>
+                            <span className="sr-only"> (quedará sin porcentaje de comisión)</span>{" "}
+                            <Insignia tono="naranja" className="h-5 px-2 align-middle">
+                              Sin %
+                            </Insignia>
+                          </>
+                        )}
+                      </span>
+                      {cobertura ? (
+                        // No suma a lo que hay que pagar: ya está pagada con el paquete.
+                        <span className="max-w-[9.5rem] shrink-0 text-right text-[13px] font-medium">Cubierta por el paquete</span>
+                      ) : (
+                        <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
+                      )}
+                    </div>
+                    {suPaquete && (
+                      <label className={CASILLA_DE_PAQUETE}>
+                        <input
+                          type="checkbox"
+                          checked={cobertura !== undefined}
+                          disabled={guardando}
+                          onChange={(evento) => usarSesion(linea.id, evento.target.checked ? suPaquete.id : null)}
+                          className="anillo-foco mt-px size-5 shrink-0 accent-navy"
+                        />
+                        <span className="min-w-0">
+                          Usar 1 sesión de su paquete{" "}
+                          <span className="font-normal text-texto-2">
+                            ({suPaquete.restantes === 1 ? "le queda 1" : `le quedan ${suPaquete.restantes}`})
+                          </span>
+                        </span>
+                      </label>
                     )}
-                  </span>
-                  <span className="shrink-0 tabular-nums">{formatearMonto(linea.precio)}</span>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
+
+              {/* Los paquetes que se venden en este cobro: un renglón más, que se puede quitar. */}
+              {conPaquete.ventas.map((venta) => {
+                const nombre = nombreDelPaquete(venta.paquete.sesiones, venta.paquete.servicio)
+                return (
+                  <li key={venta.clave} className="text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 break-words">
+                        {nombre}{" "}
+                        <Insignia tono="lila" className="h-5 px-2 align-middle">
+                          Paquete nuevo
+                        </Insignia>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <span className="tabular-nums">{formatearMonto(venta.paquete.precio)}</span>
+                        <Boton
+                          variante="fantasma"
+                          onClick={() => quitarVenta(venta.clave)}
+                          disabled={guardando}
+                          aria-label={`Quitar del cobro: ${nombre}`}
+                          title="Quitar"
+                          className="-mr-2 size-11 px-0 text-texto-2 hover:bg-error/8 hover:text-error"
+                        >
+                          <Trash2 aria-hidden="true" className="size-[18px]" strokeWidth={1.75} />
+                        </Boton>
+                      </span>
+                    </div>
+                    {venta.lineaDeHoy !== null && (
+                      <label className={CASILLA_DE_PAQUETE}>
+                        <input
+                          type="checkbox"
+                          checked={venta.usarHoy}
+                          disabled={guardando}
+                          onChange={(evento) => cambiarVenta(venta.clave, evento.target.checked)}
+                          className="anillo-foco mt-px size-5 shrink-0 accent-navy"
+                        />
+                        <span className="min-w-0">
+                          Usar la primera sesión hoy{" "}
+                          <span className="font-normal text-texto-2">(el servicio de hoy queda cubierto)</span>
+                        </span>
+                      </label>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
-            <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-borde pt-3 font-semibold">
-              <span>Total</span>
-              <span className="text-lg tabular-nums">{formatearMonto(deCentavos(totalCentavos))}</span>
+            <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-borde pt-3 font-semibold" aria-live="polite">
+              <span>{hayPaquetesEnElCobro ? "Total a pagar" : "Total"}</span>
+              <span className="text-lg tabular-nums">{formatearMonto(deCentavos(aPagarCentavos))}</span>
             </p>
+
+            {/*
+              Vender un paquete de sesiones: se suma al cobro como un renglón más y la plata entra hoy.
+              Queda a nombre de la clienta, así que la atención tiene que ser de alguien de la lista.
+            */}
+            {paquetes.ofrecidos.length > 0 &&
+              (paquetes.tieneClienta ? (
+                <div className="mt-3">
+                  <Boton
+                    ref={botonVenderPaquete}
+                    variante="fantasma"
+                    tamano="sm"
+                    aria-expanded={ofreciendoPaquetes}
+                    aria-controls={`${idBase}-paquetes`}
+                    onClick={() => setOfreciendoPaquetes((abierto) => !abierto)}
+                    disabled={guardando || conPaquete.ventas.length >= MAXIMO_DE_PAQUETES_POR_COBRO}
+                    className="max-escritorio:h-11"
+                  >
+                    <PackagePlus aria-hidden="true" className="size-4" strokeWidth={2} />
+                    Vender paquete
+                  </Boton>
+                  {ofreciendoPaquetes && (
+                    <ul id={`${idBase}-paquetes`} aria-label="Paquetes para vender" className="mt-2 space-y-2">
+                      {paquetes.ofrecidos.map((paquete) => (
+                        <li key={paquete.id}>
+                          <button
+                            type="button"
+                            onClick={() => venderPaquete(paquete)}
+                            disabled={guardando}
+                            className="anillo-foco block min-h-11 w-full cursor-pointer rounded-[16px] bg-tarjeta px-3.5 py-2.5 text-left shadow-sm transition-shadow duration-200 ease-suave hover:shadow-md"
+                          >
+                            <span className="block text-sm font-medium break-words">
+                              {nombreDelPaquete(paquete.sesiones, paquete.servicio)}
+                            </span>
+                            <span className="block text-[13px] text-texto-2 tabular-nums">{detalleDelPaquete(paquete)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-[13px] leading-snug text-texto-2">
+                  Para vender un paquete, la atención tiene que ser de una clienta de tu lista.
+                </p>
+              ))}
           </section>
 
           {avisoDeComisiones && (
@@ -280,10 +511,15 @@ export function ModalCobro({
             </Aviso>
           )}
 
-          <fieldset className="space-y-3">
+          {/* Todo cubierto por su paquete: no se pide medio de pago, se registra la sesión. */}
+          {nadaQuePagar && (
+            <p className="text-sm text-texto-2">No hay nada que pagar hoy: lo cubre su paquete, que ya está pagado.</p>
+          )}
+
+          <fieldset className={cn("space-y-3", nadaQuePagar && "hidden")}>
             <legend className="mb-3 text-sm font-semibold">Cómo pagó</legend>
 
-            {totalCentavos === 0 && filas.length === 0 && (
+            {aPagarCentavos === 0 && filas.length === 0 && (
               <p className="text-sm text-texto-2">El total es {formatearMonto(0)}: se registra como cortesía, sin pagos.</p>
             )}
 

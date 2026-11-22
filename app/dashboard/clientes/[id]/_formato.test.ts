@@ -195,3 +195,16 @@ describe("profesionalDeLaFila y cambioDeProfesional", () => {
     expect(cambioDeProfesional(PROFESIONAL_ACTUAL)).toBeNull()
   })
 })
+
+describe("textoDeLaDevolucion", () => {
+  it("dice cuánto se devuelve y por cuántas sesiones", async () => {
+    const { textoDeLaDevolucion } = await import("./_formato")
+    expect(textoDeLaDevolucion({ aDevolver: 100000, restantes: 4, usadas: 2, sesiones: 6 })).toBe(
+      "Se devuelven $100.000: las 4 sesiones que no usó. Desde ahora el paquete no se puede usar."
+    )
+    expect(textoDeLaDevolucion({ aDevolver: 25000, restantes: 1, usadas: 5, sesiones: 6 })).toContain("$25.000: la sesión que no usó.")
+    expect(textoDeLaDevolucion({ aDevolver: 150000, restantes: 6, usadas: 0, sesiones: 6 })).toContain(
+      "$150.000: no usó ninguna de las 6 sesiones."
+    )
+  })
+})

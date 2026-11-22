@@ -100,6 +100,12 @@ export interface AtencionParaExportar {
   status: string
   totalCents: number | null
   services: { serviceName: string; professionalName: string; priceCents: number }[]
+  /**
+   * Lo que quedó pagado con sesiones de paquete (`lib/paquetes.ts`), en
+   * centavos: se resta del total, porque esa plata entró el día en que se
+   * vendió el paquete. Ausente = nada.
+   */
+  prepagoCents?: number
 }
 
 /**
@@ -142,7 +148,7 @@ export function filasDeAtenciones(
       nombreDeEstado(atencion.status),
       atencion.services.map((linea) => linea.serviceName).join(", "),
       [...new Set(atencion.services.map((linea) => linea.professionalName))].join(", "),
-      montoParaPlanilla(atencion.totalCents ?? totalEnCentavos(atencion.services)),
+      montoParaPlanilla((atencion.totalCents ?? totalEnCentavos(atencion.services)) - (atencion.prepagoCents ?? 0)),
       fechaYHora(atencion.paidAt, zona),
     ]),
   ]

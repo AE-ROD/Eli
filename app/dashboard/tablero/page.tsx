@@ -30,6 +30,7 @@ import {
   puedeCobrar,
   puedeGestionarServicios,
   puedeRegistrarPropina,
+  puedeVenderPaquetes,
   puedeVaciarFilaVirtual,
   puedeVerTodoElTablero,
 } from "@/lib/permisos"
@@ -64,6 +65,7 @@ import { TableroCargando, TableroDeColumnas, type DestinoDelFoco } from "./_comp
 import { ModalAnotarSinReserva } from "./_componentes/modal-anotar-sin-reserva"
 import { ModalServicios } from "./_componentes/modal-servicios"
 import { ModalCobro } from "./_componentes/modal-cobro"
+import type { PaquetesPedidos } from "./_componentes/paquetes-del-cobro"
 import { ModalAbono } from "./_componentes/modal-abono"
 import { frasesDelTablero } from "./_frases"
 
@@ -495,9 +497,9 @@ export default function PaginaTablero() {
       recargar()
     })
 
-  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[], propinas: PropinaPedida[]) =>
+  const cobrarCon = (atencion: Atencion, pagos: PagoPedido[], propinas: PropinaPedida[], paquetes: PaquetesPedidos) =>
     desdeUnModal(async () => {
-      const resultado = await cobrarAtencion(atencion.id, pagos, propinas)
+      const resultado = await cobrarAtencion(atencion.id, pagos, propinas, paquetes)
 
       if (resultado.ok) {
         ponerAtencion(resultado.datos)
@@ -506,6 +508,13 @@ export default function PaginaTablero() {
         seguirA(resultado.datos)
         recargar()
         return
+      }
+
+      // Con paquetes, lo que cambió puede ser el paquete (se le acabaron las
+      // sesiones, venció, lo dejaron de ofrecer): el servidor dice cuál, y se
+      // muestra en vez del aviso genérico.
+      if (resultado.motivo === "desactualizada" && (paquetes.ventas.length > 0 || paquetes.usos.length > 0)) {
+        return tableroDesactualizado(tarjetaDe(atencion), frases.conRecarga(resultado.error))
       }
 
       if (resultado.motivo !== "falta-requisito") return falloEnModal(resultado, atencion)
@@ -866,9 +875,10 @@ export default function PaginaTablero() {
             mediosDePago={tablero.catalogo.mediosDePago}
             profesionales={tablero.catalogo.profesionales}
             conPropinas={puedeRegistrarPropina(actor)}
+            conPaquetes={puedeVenderPaquetes(actor)}
             aviso={avisoDelModal}
             guardando={guardando}
-            onCobrar={(pagos, propinas) => cobrarCon(modal.atencion, pagos, propinas)}
+            onCobrar={(pagos, propinas, paquetes) => cobrarCon(modal.atencion, pagos, propinas, paquetes)}
             onCambiarPagos={() => setAvisoDelModal("")}
             onCerrar={cerrarModal}
           />

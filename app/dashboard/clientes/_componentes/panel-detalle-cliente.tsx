@@ -35,6 +35,7 @@ import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { Aviso } from "@/components/panel/aviso"
 import { EtiquetaDeCliente, type ClienteEnTarjeta } from "./tarjeta-cliente"
 import type { CitaDeCliente } from "../_datos"
+import { PaquetesDeLaClienta } from "../[id]/_componentes/paquetes-de-la-clienta"
 import { asuntoDelSaludo, enlaceDeCorreo, enlaceDeWhatsapp, saludoSugerido } from "../_escribirle"
 import { frasesDeClientes } from "../_frases"
 
@@ -395,6 +396,9 @@ export function PanelDetalleCliente({
           </div>
         )}
       </section>
+
+      {/* Paquetes de sesiones: no existen en la clínica dental. Sin paquetes, no se ve nada. */}
+      {!fichaClinica && <PaquetesDeLaClienta clienteId={cliente.id} zona={zona} />}
 
       {/* Historial, con la tarjeta compacta de las citas */}
       <section aria-labelledby={idDelHistorial} className={BLOQUE}>

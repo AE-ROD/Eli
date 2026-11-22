@@ -16,6 +16,7 @@ import {
 import { zonaDelNegocio } from "@/lib/zona-horaria"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { actorDeSesion, puedeImportarExportarClientes, whereDeAtenciones } from "@/lib/permisos"
+import { MEDIO_PAQUETE } from "@/lib/paquetes"
 
 /**
  * Descarga en CSV las atenciones (visitas al local) que llegaron entre dos
@@ -59,6 +60,8 @@ export async function GET(request: NextRequest) {
         status: true,
         totalCents: true,
         services: { select: { serviceName: true, professionalName: true, priceCents: true } },
+        // Lo pagado con sesiones de paquete: se resta del total (no es plata de ese día).
+        payments: { where: { method: MEDIO_PAQUETE }, select: { amountCents: true } },
       },
       orderBy: { arrivedAt: "asc" },
       // Una de más para saber si el período se pasa del tope sin contarlas aparte.
@@ -74,7 +77,16 @@ export async function GET(request: NextRequest) {
     // El rubro sale de la sesión, nunca del navegador: la cabecera dice "Servicios" o "Prestaciones".
     const { palabras } = vocabularioDe(actor.rubro)
     return respuestaCsv(
-      escribirCsv(filasDeAtenciones(atenciones, zona, palabras)),
+      escribirCsv(
+        filasDeAtenciones(
+          atenciones.map(({ payments, ...atencion }) => ({
+            ...atencion,
+            prepagoCents: payments.reduce((suma, pago) => suma + pago.amountCents, 0),
+          })),
+          zona,
+          palabras
+        )
+      ),
       nombreDeArchivo("atenciones", `${desdeTexto}-al-${hastaTexto}`)
     )
   } catch (error) {

@@ -20,6 +20,8 @@ import type {
   ProtesisRespuesta,
 } from "@/lib/edicion-de-protesis"
 import type { EstadoDeProtesis, TonoVita } from "@/lib/protesis"
+import type { MedioDePagoId } from "@/lib/medios-de-pago"
+import type { PaquetesDeLaFichaRespuesta } from "@/app/api/clientes/[id]/paquetes/route"
 
 const deLaFicha = (id: string) => `/api/clientes/${encodeURIComponent(id)}`
 
@@ -275,5 +277,29 @@ export async function leerServicios(): Promise<Resultado<ServicioDeLaClinica[]>>
 export async function leerOdontologos(): Promise<Resultado<{ id: string; nombre: string }[]>> {
   return pedir<{ miembros: { id: string; nombre: string }[] }>("/api/equipo/miembros", "No se pudo cargar el equipo").then(
     (resultado) => (resultado.ok ? { ok: true, datos: resultado.datos.miembros } : resultado)
+  )
+}
+
+// ─── Paquetes de sesiones ────────────────────────────────────────────────────
+// No son de la clínica dental (que tiene su plan de tratamiento): los usa la
+// ficha de la clienta de los demás rubros, en la lista de clientes.
+
+export type { PaqueteDeLaFicha, PaquetesDeLaFichaRespuesta } from "@/app/api/clientes/[id]/paquetes/route"
+
+/** Los paquetes de la clienta, el más nuevo primero, y si quien mira puede devolverlos. */
+export async function leerPaquetes(id: string): Promise<Resultado<PaquetesDeLaFichaRespuesta>> {
+  return pedir<PaquetesDeLaFichaRespuesta>(`${deLaFicha(id)}/paquetes`, "No se pudieron cargar los paquetes")
+}
+
+/** Devuelve lo no usado de un paquete. `devuelto`, en pesos. */
+export async function devolverPaquete(
+  id: string,
+  paqueteId: string,
+  medio: MedioDePagoId
+): Promise<Resultado<{ ok: true; devuelto: number }>> {
+  return pedir<{ ok: true; devuelto: number }>(
+    `${deLaFicha(id)}/paquetes/${encodeURIComponent(paqueteId)}/devolucion`,
+    "No se pudo devolver el paquete",
+    conJson("POST", { medio })
   )
 }

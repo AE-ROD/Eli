@@ -48,18 +48,30 @@ describe("GRUPOS", () => {
 })
 
 describe("agruparSecciones", () => {
-  it("reparte las quince secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
+  it("reparte las dieciséis secciones en los cinco grupos, en su orden, lleguen como lleguen", () => {
     const grupos = agruparSecciones(
-      [...DUEÑA_DE_UN_SALON, seccion("sillones"), seccion("laboratorios"), seccion("mi-foto"), seccion("sedes"), seccion("plan")].reverse(),
+      [...DUEÑA_DE_UN_SALON, seccion("paquetes"), seccion("sillones"), seccion("laboratorios"), seccion("mi-foto"), seccion("sedes"), seccion("plan")].reverse(),
       DE_SIEMPRE
     )
     expect(grupos.map((grupo) => [grupo.id, grupo.secciones.map((s) => s.id)])).toEqual([
       ["horario-y-equipo", ["horario", "sedes", "mi-foto"]],
       ["tu-negocio", ["pagina", "productos", "plan"]],
-      ["catalogo-y-clinica", ["servicios", "sillones", "laboratorios"]],
+      ["catalogo-y-clinica", ["servicios", "paquetes", "sillones", "laboratorios"]],
       ["mensajes", ["mensajes"]],
       ["mas-adelante", ["hora-valle", "por-confirmar", "fila-virtual", "zona-horaria", "plazo-de-cambios"]],
     ])
+  })
+
+  it("los paquetes de sesiones van debajo de los servicios, en «Catálogo», y #paquetes abre ese grupo", () => {
+    const grupos = agruparSecciones([seccion("paquetes"), ...DUEÑA_DE_UN_SALON], DE_SIEMPRE)
+    const catalogo = grupos.find((grupo) => grupo.id === "catalogo-y-clinica")
+
+    expect(catalogo?.titulo).toBe("Catálogo")
+    expect(catalogo?.secciones.map((s) => s.id)).toEqual(["servicios", "paquetes"])
+    expect(catalogo?.resumen).toBe("Servicios · Paquetes de sesiones")
+    expect(grupoDeAncla("#paquetes", grupos)).toBe("catalogo-y-clinica")
+    // Quien no los gestiona (o una clínica dental) no tiene la sección: el ancla no abre nada.
+    expect(grupoDeAncla("#paquetes", agruparSecciones(DUEÑA_DE_UNA_CLINICA, DE_LA_CLINICA))).toBeNull()
   })
 
   it("lo opcional va al final, en «Más adelante»: descuentos, faltas, fila, zona horaria y plazo para cancelar", () => {

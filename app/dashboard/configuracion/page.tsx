@@ -7,6 +7,7 @@ import { SeccionHorario } from "./_componentes/seccion-horario"
 import { SeccionPaginaPublica } from "./_componentes/seccion-pagina-publica"
 import { SeccionServicios } from "./_componentes/seccion-servicios"
 import { SeccionProductos } from "./_componentes/seccion-productos"
+import { SeccionPaquetes } from "./_componentes/seccion-paquetes"
 import { SelectorHorarioMiembro } from "./_componentes/selector-horario-miembro"
 import { SeccionPlazoDeCambios } from "./_componentes/seccion-plazo-de-cambios"
 import { SeccionPorConfirmar } from "./_componentes/seccion-por-confirmar"
@@ -48,6 +49,7 @@ import {
   puedeEditarPlazoDeCambios,
   puedeFijarComisionDeProducto,
   puedeGestionarLaboratorios,
+  puedeGestionarPaquetes,
   puedeGestionarProductos,
   puedeGestionarSedes,
   puedeGestionarServicios,
@@ -57,6 +59,7 @@ import {
   whereDeProductos,
   whereDeSillones,
 } from "@/lib/permisos"
+import { MAXIMO_DE_PAQUETES } from "@/lib/paquetes"
 import { planConocido } from "@/lib/planes"
 import { formatearProducto } from "@/lib/productos"
 import { leerSedes } from "@/lib/sedes-servidor"
@@ -64,6 +67,7 @@ import { ORDEN_DE_SILLONES, SELECCION_DE_SILLON } from "@/lib/sillones"
 import { mostrarTelefono } from "@/lib/telefono"
 import { vocabularioDe } from "@/lib/vocabulario"
 import { zonaVigente } from "@/lib/zonas-de-chile"
+import { SELECCION_DE_PAQUETE, formatearPaquete } from "@/app/api/configuracion/paquetes/_paquetes"
 import { frasesDeConfiguracion } from "./_frases"
 import { sedesDeLaRespuesta } from "./_sedes"
 import { EN_EL_EQUIPO } from "@/lib/equipo-activo"
@@ -104,7 +108,10 @@ export default async function PaginaConfiguracion() {
   // El plan lo cambia sólo la dueña (lo paga ella).
   const cambiaDePlan = puedeCambiarDePlan(actor)
 
-  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios, miMembresia, sedes, invitacionesPendientes] = await Promise.all([
+  // Paquetes de sesiones: quien gestiona los servicios, y no en una clínica dental.
+  const gestionaPaquetes = puedeGestionarPaquetes(actor)
+
+  const [horariosActuales, horarioDelNegocio, servicios, productos, pagina, sillones, laboratorios, miMembresia, sedes, invitacionesPendientes, paquetes] = await Promise.all([
     prisma.workSchedule.findMany({
       // `sedeId: null`: el horario de una sede es de la sede (sección "Sedes y horarios"), no el general ni el de nadie.
       where: { businessId: actor.businessId, memberId: horarioInicial, sedeId: null },
@@ -181,6 +188,15 @@ export default async function PaginaConfiguracion() {
     cambiaDePlan
       ? prisma.workerInvitation.count({ where: { businessId: actor.businessId, acceptedAt: null } })
       : Promise.resolve(0),
+    // Los paquetes del negocio de la sesión: lo mismo que responde `GET /api/configuracion/paquetes`.
+    gestionaPaquetes
+      ? prisma.paqueteDeSesiones.findMany({
+          where: { businessId: actor.businessId },
+          select: SELECCION_DE_PAQUETE,
+          orderBy: { createdAt: "asc" },
+          take: MAXIMO_DE_PAQUETES,
+        })
+      : Promise.resolve([]),
   ])
 
   // Las sedes como las usa la pantalla (franjas `{ startTime, endTime }`); sin ellas, la lista vacía.
@@ -337,6 +353,19 @@ export default async function PaginaConfiguracion() {
     secciones.push({
       id: "servicios",
       contenido: <SeccionServicios serviciosIniciales={servicios} puedeMarcarUrgencia={puedeMarcarServicioComoUrgencia(actor)} />,
+    })
+  }
+
+  // Paquetes de sesiones: debajo de los servicios, para quien los gestiona; no existen en la clínica dental
+  if (gestionaPaquetes) {
+    secciones.push({
+      id: "paquetes",
+      contenido: (
+        <SeccionPaquetes
+          paquetesIniciales={paquetes.map(formatearPaquete)}
+          serviciosIniciales={servicios.map(({ id, name, price, active }) => ({ id, name, price, active }))}
+        />
+      ),
     })
   }
 

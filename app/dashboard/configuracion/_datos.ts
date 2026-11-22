@@ -2,8 +2,8 @@
  * Todo lo que la configuración le pide al servidor desde el navegador: el
  * horario de un miembro (leer y guardar), el catálogo de servicios (uno a uno
  * y en lote: la carga rápida, los cambios de varios a la vez y las categorías),
- * las fotos de la página pública, las sedes del plan Independiente y el
- * cambio de plan. Lo que se
+ * las fotos de la página pública, los paquetes de sesiones, las sedes del
+ * plan Independiente y el cambio de plan. Lo que se
  * ve al entrar ya viene resuelto por `page.tsx`, que es de servidor y consulta
  * la base directo.
  *
@@ -33,6 +33,7 @@ import type { LaboratorioRespuesta } from "@/lib/edicion-de-protesis"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDeConfiguracion } from "./_frases"
 import type { AccionDeSedes } from "./_frases-de-sedes"
+import { cuerpoDePaquete, type DatosDePaquete, type Paquete } from "./_paquetes"
 import { choquesDelCuerpo, sedeDeLaRespuesta, sedesDeLaRespuesta, type CuerpoDeSede } from "./_sedes"
 
 /**
@@ -394,6 +395,47 @@ export async function activarODesactivarProducto(id: string, activo: boolean): P
     activo ? "No se pudo activar el producto" : "No se pudo desactivar el producto",
     conJson("PUT", { activo })
   )
+}
+
+// ─── Paquetes de sesiones ────────────────────────────────────────────────────
+
+/** Como `conJson`, que sólo sabe de POST y PUT, para el PATCH de un paquete. */
+const conPatch = (cuerpo: unknown): RequestInit => ({ ...conJson("PUT", cuerpo), method: "PATCH" })
+
+/** Devuelve el paquete tal como quedó guardado, con lo que vale cada sesión y el ahorro. */
+export async function crearPaquete(datos: DatosDePaquete, palabras: PalabrasDelRubro = PALABRAS_NEUTRAS): Promise<Resultado<Paquete>> {
+  const cuerpo = cuerpoDePaquete(datos, "crear", palabras)
+  if (!cuerpo.ok) return cuerpo
+  return pedir<Paquete>("/api/configuracion/paquetes", "No se pudo crear el paquete", conJson("POST", cuerpo.datos))
+}
+
+/** Editar no cambia los paquetes ya vendidos: llevan sus datos copiados. */
+export async function editarPaquete(
+  id: string,
+  datos: DatosDePaquete,
+  palabras: PalabrasDelRubro = PALABRAS_NEUTRAS
+): Promise<Resultado<Paquete>> {
+  const cuerpo = cuerpoDePaquete(datos, "editar", palabras)
+  if (!cuerpo.ok) return cuerpo
+  return pedir<Paquete>(
+    `/api/configuracion/paquetes/${encodeURIComponent(id)}`,
+    "No se pudo guardar el paquete",
+    conPatch(cuerpo.datos)
+  )
+}
+
+/** Un paquete pausado no se ofrece al cobrar; los ya vendidos siguen valiendo. */
+export async function pausarOReactivarPaquete(id: string, activo: boolean): Promise<Resultado<Paquete>> {
+  return pedir<Paquete>(
+    `/api/configuracion/paquetes/${encodeURIComponent(id)}`,
+    activo ? "No se pudo reactivar el paquete" : "No se pudo pausar el paquete",
+    conPatch({ activo })
+  )
+}
+
+/** Borra la definición: los paquetes ya vendidos siguen valiendo. */
+export async function eliminarPaquete(id: string): Promise<Resultado> {
+  return pedir(`/api/configuracion/paquetes/${encodeURIComponent(id)}`, "No se pudo eliminar el paquete", { method: "DELETE" })
 }
 
 /** La especialidad de un profesional en la página pública ("Colorista"). */

@@ -365,3 +365,62 @@ describe("POST /api/atenciones/[id]/anulacion: lo ya rendido no se anula (#65)",
     expect((await anular(sesiones.dueña, "v-cobrada")).status).toBe(200)
   })
 })
+
+describe("POST /api/atenciones/[id]/anulacion: paquetes de sesiones", () => {
+  /** En `v-cobrada` se vendió un paquete de 6 Cortes; `usadaEn` es la atención donde se usó una sesión (o ninguna). */
+  function conPaquete(usadaEn: string | null, datos: Record<string, unknown> = {}) {
+    const inicial = escenario()
+    return {
+      ...inicial,
+      visit: [...inicial.visit, atencion("v-otra", { status: "finalizada", paidAt: new Date("2026-10-06T14:30:00.000Z"), totalCents: centavos(7000) })],
+      visitService: [...inicial.visitService, linea("l-venta", "v-cobrada", { serviceName: "Paquete de 6 sesiones: Corte" }), linea("l-otra", "v-otra")],
+      paqueteDeCliente: [
+        {
+          id: "pc-1",
+          businessId: NEGOCIO,
+          customerId: "c-maria",
+          serviceId: "s-corte",
+          serviceName: "Corte",
+          sesiones: 6,
+          priceCents: centavos(42000),
+          valorPorSesionCents: centavos(7000),
+          lineaDeVentaId: "l-venta",
+          vendidoAt: new Date("2026-10-06T14:00:00.000Z"),
+          ...datos,
+        },
+      ],
+      usoDePaquete: usadaEn ? [{ id: "u-1", businessId: NEGOCIO, paqueteId: "pc-1", lineaId: usadaEn }] : [],
+    }
+  }
+
+  it("se anula la atención donde se vendió un paquete que nadie usó: el paquete deja de valer", async () => {
+    base.reiniciar(conPaquete(null))
+    expect((await anular(sesiones.dueña, "v-cobrada", { motivo: "Se arrepintió" })).status).toBe(200)
+    expect(atencionGuardada("v-cobrada").status).toBe("anulada")
+  })
+
+  it("si la única sesión usada fue en esa misma atención, también se anula", async () => {
+    base.reiniciar(conPaquete("l-cobrada"))
+    expect((await anular(sesiones.dueña, "v-cobrada", { motivo: "Error" })).status).toBe(200)
+  })
+
+  it("con una sesión ya usada en otra atención no se anula: 409, y dice cómo devolver la plata", async () => {
+    base.reiniciar(conPaquete("l-otra"))
+    const respuesta = await anular(sesiones.dueña, "v-cobrada", { motivo: "Error" })
+    expect(respuesta.status).toBe(409)
+    expect((await respuesta.json()).error).toContain("devuelve el paquete desde la ficha")
+    expect(atencionGuardada("v-cobrada").status).toBe("finalizada")
+  })
+
+  it("con el paquete ya devuelto tampoco: 409", async () => {
+    base.reiniciar(conPaquete(null, { devueltoAt: new Date("2026-10-06T14:10:00.000Z"), devueltoCents: centavos(42000), devueltoMedio: "efectivo", devueltoPorNombre: "Ana Dueña" }))
+    expect((await anular(sesiones.dueña, "v-cobrada", { motivo: "Error" })).status).toBe(409)
+    expect(atencionGuardada("v-cobrada").status).toBe("finalizada")
+  })
+
+  it("anular la atención donde se USÓ una sesión sí se puede: la sesión vuelve al paquete", async () => {
+    base.reiniciar(conPaquete("l-otra"))
+    expect((await anular(sesiones.dueña, "v-otra", { motivo: "No era" })).status).toBe(200)
+    expect(atencionGuardada("v-otra").status).toBe("anulada")
+  })
+})

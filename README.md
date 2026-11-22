@@ -734,6 +734,26 @@ SELECT count(*) FROM information_schema.columns
 WHERE table_name = 'miembros_negocio' AND column_name = 'archivadoEn';
 ```
 
+### `20261122120000_paquetes_de_sesiones`
+
+**Antes de desplegar.** Crea `paquetes`, `paquetes_de_clientes` y
+`usos_de_paquete` (paquetes de sesiones, `lib/paquetes.ts`), suma el medio
+interno `'paquete'` al CHECK `atencion_pagos_method_check` y el rubro
+`'estetica'` al CHECK `negocios_type_check`. Aditiva: no reescribe ni borra
+filas, no necesita respaldo aparte. El código viejo sigue andando con ella; el
+nuevo lee las tablas al abrir el cobro y la ficha de la clienta, y sin el CHECK
+nuevo no se puede crear un Centro de estética. La última sentencia
+(`VALIDATE CONSTRAINT`) va fuera de la transacción a propósito.
+
+Para comprobarla (tiene que responder 3 y `t`):
+
+```sql
+SELECT count(*) FROM information_schema.tables
+WHERE table_name IN ('paquetes', 'paquetes_de_clientes', 'usos_de_paquete');
+SELECT pg_get_constraintdef(oid) LIKE '%paquete%' FROM pg_constraint
+WHERE conname = 'atencion_pagos_method_check';
+```
+
 ### Qué migraciones están aplicadas
 
 Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de

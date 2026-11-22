@@ -13,18 +13,21 @@ Gestiona la agenda, los clientes y el equipo de negocios de belleza y cuidado pe
 
 ### A quién le habla
 
-Eli atiende **cuatro rubros**:
+Eli atiende **cinco rubros**:
 
 | Rubro | Id interno (`Business.type`) |
 |---|---|
 | **Salones de belleza** | `salon` |
 | **Barberías** | `barberia` |
 | **Salones de uñas** | `spa-de-unas` |
+| **Centros de estética** | `estetica` |
 | **Clínicas dentales** | `odontologia` |
 
-El catálogo vive en un solo lugar, `lib/rubros.ts`; el registro sólo acepta esos cuatro. El rubro se elige al crear la cuenta (o al completar el perfil después de entrar con Google) y no se cambia después.
+El catálogo vive en un solo lugar, `lib/rubros.ts`; el registro sólo acepta esos cinco. El rubro se elige al crear la cuenta (o al completar el perfil después de entrar con Google) y no se cambia después.
 
 **Por qué estos rubros.** Comparten exactamente el modelo que Eli resuelve: atienden con reserva, trabajan con un equipo de profesionales y a cada profesional se le paga un porcentaje de lo que atiende. Elegir un nicho permite que el producto hable un solo idioma y sea el mejor en algo, en vez de servir a medias a siete rubros distintos.
+
+**El centro de estética** (cosmetología, depilación láser, pestañas y cejas; agregado el 2026-11-22) se comporta como un salón, con sus palabras ("cosmetóloga", "centro") y sus servicios de ejemplo. Es el rubro que más usa los paquetes de sesiones (sección 7).
 
 **La clínica dental, el cuarto.** También atiende con reserva y con un equipo (odontólogos que trabajan en sillones), y además lleva lo clínico de cada paciente: ficha, odontograma, evoluciones y plan de tratamiento. Por eso es el único rubro que **cambia la interfaz** (sección 6, "Clínica dental"). La comisión sigue como en los otros rubros.
 
@@ -646,6 +649,21 @@ Para los locales que atienden por orden de llegada (barberías, sobre todo). El 
 - **Aviso "ya casi es tu turno".** A quien dejó su correo le llega un correo una sola vez, cuando queda con una persona adelante (o con ninguna, si salieron dos a la vez). Lo saluda sólo por su primer nombre. Sale cuando alguien de la fila deja de esperar (pasa a atención, sale o lo anulan) y cuando alguien se anota, por si quedó con una o ninguna persona adelante. Es de servicio (lo pidió al anotarse) y no trae enlace a su turno: Eli no guarda el código del enlace, sólo una huella. Si el envío falla, se reintenta en el siguiente movimiento de la fila.
 - **Vaciar la fila de hoy.** Dueña y encargado, desde el Tablero cuando hay alguien esperando en la fila (aunque esté apagada): anula de una vez a todos los que esperan en la fila de la jornada, después de confirmarlo. Los que ya se atienden siguen. Sirve si alguien la llenó con nombres inventados. Cada atención anulada guarda quién la vació.
 - **Límites.** Desde una misma conexión, 10 intentos por hora (los clientes en el wifi del local comparten conexión). Por negocio, 60 anotaciones por hora: sólo cuentan las que quedaron anotadas, no los intentos rechazados (local cerrado o fila llena), para que nadie pueda gastar ese cupo y dejar afuera a la gente real. El nombre, hasta 40 caracteres. Mirar el turno, unas 4 consultas por minuto por enlace.
+
+### Paquetes de sesiones (decidido el 2026-11-22)
+
+"6 sesiones de Depilación láser por $150.000". Para todos los rubros menos la clínica dental, que tiene su plan de tratamiento. Reglas (`lib/paquetes.ts`):
+
+- **Se crean en Configuración › Paquetes de sesiones** (dueña y encargado): servicio, cuántas sesiones (2 a 50), precio total y vigencia (no vence, o 3, 6 o 12 meses). La pantalla muestra cuánto queda cada sesión y el ahorro frente a pagarla suelta. Editar o borrar un paquete no toca los ya vendidos.
+- **Se venden al cobrar, en el Tablero**, a una clienta de la lista (una atención sin clienta no vende ni usa paquetes). No se venden en la reserva pública: Eli no cobra en línea. La venta es una línea más de la atención y la plata entra a la caja ese día.
+- **Usar una sesión:** al cobrar una atención con un servicio para el que la clienta tiene un paquete vigente, el cobro ofrece "Usar 1 sesión" (marcado). La línea queda con el valor de la sesión (precio ÷ sesiones, hacia abajo) y pagada con el medio interno **"Paquete (ya pagado)"**; se paga sólo lo demás. Se puede comprar el paquete y usar la primera sesión en el mismo cobro.
+- **Comisión: se gana al atender cada sesión**, no al vender. La línea de la venta queda con la comisión congelada en 0 % (nunca "pendiente de %"); cada sesión usada sigue la cascada de siempre (sección 3) sobre el valor de la sesión, para quien la atendió. Liquidaciones y Mi plata no cambian.
+- **Plata:** lo pagado con paquete no es plata de ese día. El cierre de caja, el inicio y los reportes no lo cuentan; en Reportes la sesión aparece en $0 con "(con paquete)" y el total del día es lo que de verdad entró. La planilla de atenciones resta lo mismo.
+- **El saldo no se guarda, se cuenta:** sesiones del paquete menos las usadas en atenciones no anuladas. Anular una atención donde se usó una sesión la devuelve al paquete. La atención donde se vendió un paquete no se anula si ya se usó una sesión en otra atención o si el paquete fue devuelto; si nadie lo usó, anularla deja el paquete sin valor.
+- **Vencimiento:** sólo si la dueña le puso vigencia; vencido, no se usa (sí se puede devolver).
+- **Devolver** (sólo la dueña, desde la ficha de la clienta): sin sesiones usadas se devuelve todo; con alguna, las que quedan por el valor de cada una. Queda quién, cuándo, cuánto y por qué medio, y el paquete no se usa más. **Pendiente:** la devolución no se descuenta del cierre de caja ni de Reportes (se ve en la ficha); decidir si debe restar.
+- **La ficha de la clienta** muestra sus paquetes ("Le quedan 4 de 6", estado, compra y vencimiento) a todo el equipo; los montos, sólo a dueña y encargado.
+- **Avisos por correo a la clienta** (de servicio, sin consentimiento de novedades): "Te queda 1 sesión" y "Terminaste tu paquete", después del cobro donde pasó.
 
 ### Cierre de caja
 

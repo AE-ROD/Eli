@@ -194,3 +194,15 @@ export function cambioDeProfesional(valor: string): { delDueño: true } | { memb
   if (valor === PROFESIONAL_SIN_ASIGNAR) return { memberId: null }
   return { memberId: valor }
 }
+
+/** Lo que dice la confirmación de devolver un paquete (`aDevolver`, en pesos): "Se devuelven $100.000: las 4 sesiones que no usó. Desde ahora el paquete no se puede usar." */
+export function textoDeLaDevolucion(paquete: { aDevolver: number | null; restantes: number; usadas: number; sesiones: number }): string {
+  const monto = formatearMonto(paquete.aDevolver ?? 0)
+  const que =
+    paquete.usadas === 0
+      ? `no usó ninguna de las ${paquete.sesiones} sesiones`
+      : paquete.restantes === 1
+        ? "la sesión que no usó"
+        : `las ${paquete.restantes} sesiones que no usó`
+  return `Se devuelven ${monto}: ${que}. Desde ahora el paquete no se puede usar.`
+}

@@ -26,6 +26,7 @@ import {
 import { mostrarTelefono } from "@/lib/telefono"
 import { vocabularioDe, type PalabrasDelRubro } from "@/lib/vocabulario"
 import { frasesDelTablero } from "./_frases"
+import type { PaquetesParaCobrar, PaquetesPedidos } from "./_componentes/paquetes-del-cobro"
 
 /**
  * Las palabras de un rubro sin palabras propias: lo que dicen los mensajes de
@@ -50,6 +51,10 @@ export type LineaDeServicio = LineaGuardada & {
    * (`null`). Antes de cobrar, `null` para todos.
    */
   abono?: AbonoDeLinea
+  /** Paquetes de sesiones: esta línea se pagó con una sesión de un paquete. */
+  conPaquete?: boolean
+  /** Paquetes de sesiones: con esta línea se vendió un paquete. */
+  ventaDePaquete?: boolean
 }
 
 export interface AbonoDeLinea {
@@ -411,15 +416,27 @@ export async function moverAtencion(id: string, estado: EstadoActivo): Promise<R
 export async function cobrarAtencion(
   id: string,
   pagos: PagoPedido[],
-  propinas: PropinaPedida[] = []
+  propinas: PropinaPedida[] = [],
+  paquetes?: PaquetesPedidos
 ): Promise<ResultadoDeAccion<Atencion>> {
+  // Los paquetes que se venden y las sesiones que se usan: lo que cubren no va en `pagos`.
+  const conPaquetes = paquetes !== undefined && (paquetes.ventas.length > 0 || paquetes.usos.length > 0)
   return conMotivo(
     await pedirConCodigo<Atencion>(
       `${urlDeAtencion(id)}/cobro`,
       "No se pudo registrar el cobro",
-      conJson("POST", { pagos, ...(propinas.length > 0 && { propinas }) })
+      conJson("POST", { pagos, ...(propinas.length > 0 && { propinas }), ...(conPaquetes && { paquetes }) })
     )
   )
+}
+
+/**
+ * Paquetes de sesiones para el cobro: los que el negocio ofrece y los que la
+ * clienta de la atención todavía puede usar. Sólo para quien cobra
+ * (`puedeVenderPaquetes`): la pantalla no lo pide para nadie más.
+ */
+export async function leerPaquetesParaCobrar(id: string): Promise<Resultado<PaquetesParaCobrar>> {
+  return pedir<PaquetesParaCobrar>(`${urlDeAtencion(id)}/paquetes`, "No se pudieron cargar los paquetes")
 }
 
 // ─── Abonos de prótesis (clínica dental) ─────────────────────────────────────
