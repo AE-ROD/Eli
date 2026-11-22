@@ -270,6 +270,8 @@ function baseDeEnlaces() {
   }
   const user = {
     update: vi.fn(async ({ data }: { data: Partial<typeof usuario> }) => Object.assign(usuario, data)),
+    // La cuenta ya tenía el correo confirmado: no hay nada que marcar.
+    updateMany: vi.fn(async () => ({ count: 0 })),
   }
   const cliente = { passwordResetToken, user }
   const transaccion = vi.fn(async (pasos: unknown) =>

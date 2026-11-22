@@ -5,9 +5,10 @@ import { hashDeToken } from "@/lib/tokens"
 
 /**
  * Confirmar el correo con el enlace que llega al registrarse (deuda B4). Con
- * la base falsa y el módulo de verdad (`lib/verificacion-de-correo-servidor.ts`
- * y `lib/enviar-correo-de-prueba.ts`): lo único simulado es el envío, el
- * límite y `after`.
+ * la base falsa y el módulo de verdad (`lib/verificacion-de-correo-servidor.ts`):
+ * lo simulado es el límite, `after` y la bienvenida. Que la bienvenida salga
+ * una sola vez por negocio (el candado de `CorreoDeCuenta`) y que no le llegue
+ * a quien se dio de baja se prueba en `lib/enviar-correo-de-prueba.test.ts`.
  */
 
 const mockVerificarLimite = vi.fn()
@@ -20,13 +21,13 @@ vi.mock("@/lib/rate-limit", () => ({
 const base = crearBaseFalsa()
 vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 
-const mockEnviarCorreoDePrueba = vi.fn()
-const mockEnviarVerificacion = vi.fn()
+const mockEnviarBienvenida = vi.fn()
 
-vi.mock("@/lib/email", () => ({
-  enviarCorreoDePrueba: (...args: unknown[]) => mockEnviarCorreoDePrueba(...args),
-  enviarVerificacionDeCorreo: (...args: unknown[]) => mockEnviarVerificacion(...args),
+vi.mock("@/lib/enviar-correo-de-prueba", () => ({
+  enviarBienvenida: (...args: unknown[]) => mockEnviarBienvenida(...args),
 }))
+
+vi.mock("@/lib/email", () => ({ enviarVerificacionDeCorreo: vi.fn() }))
 
 const mockAfter = vi.fn()
 
@@ -57,7 +58,7 @@ describe("POST /api/cuenta/verificar-correo", () => {
     vi.stubEnv("NEXTAUTH_SECRET", "secreto-de-prueba")
     vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
-    mockEnviarCorreoDePrueba.mockResolvedValue({ data: { id: "correo-1" }, error: null })
+    mockEnviarBienvenida.mockResolvedValue("enviado")
     base.reiniciar({
       user: [
         // Ana se registró hace un día: enlace vigente, dueña de un negocio en prueba.
@@ -125,28 +126,28 @@ describe("POST /api/cuenta/verificar-correo", () => {
     expect(usuario("beto").verificacionTokenHash).toBe(hashDeToken(TOKEN_VENCIDO))
   })
 
-  it("al confirmar sale la bienvenida del negocio, una sola vez, al correo de la dueña", async () => {
+  it("al confirmar, después de responder, sale la bienvenida del negocio de esa cuenta (y de ningún otro)", async () => {
     const { POST } = await import("./route")
 
     await POST(pedidoFalso({ token: TOKEN }))
-    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
     await correrLoPendiente()
 
-    expect(mockEnviarCorreoDePrueba).toHaveBeenCalledTimes(1)
-    expect(mockEnviarCorreoDePrueba.mock.calls[0][0]).toBe("bienvenida")
-    expect(mockEnviarCorreoDePrueba.mock.calls[0][1]).toMatchObject({ emailDueno: "ana@uno.test", nombreNegocio: "Spa Ana" })
-    expect(base.buscar("correoDeCuenta")).toMatchObject([{ businessId: "negocio-ana", tipo: "bienvenida" }])
+    expect(mockEnviarBienvenida).toHaveBeenCalledTimes(1)
+    expect(mockEnviarBienvenida).toHaveBeenCalledWith("negocio-ana")
   })
 
-  it("si la bienvenida ya se le había mandado al negocio, no sale otra", async () => {
+  it("si la bienvenida falla o lanza, confirmar no se entera: la cuenta queda confirmada", async () => {
     const { POST } = await import("./route")
-    await base.prisma.correoDeCuenta.create({ data: { businessId: "negocio-ana", tipo: "bienvenida" } })
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    mockEnviarBienvenida.mockRejectedValue(new Error("Resend caído"))
 
-    await POST(pedidoFalso({ token: TOKEN }))
-    await correrLoPendiente()
+    const respuesta = await POST(pedidoFalso({ token: TOKEN }))
+    await expect(correrLoPendiente()).resolves.toBeUndefined()
 
-    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
-    expect(base.buscar("correoDeCuenta")).toHaveLength(1)
+    expect(respuesta.status).toBe(200)
+    expect(usuario("ana").emailVerificadoEn).toEqual(AHORA)
+    vi.restoreAllMocks()
   })
 
   it("con la prueba ya terminada confirma igual, pero no manda una bienvenida a destiempo", async () => {
@@ -158,7 +159,7 @@ describe("POST /api/cuenta/verificar-correo", () => {
 
     expect(respuesta.status).toBe(200)
     expect(usuario("ana").emailVerificadoEn).toEqual(AHORA)
-    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
   })
 
   it("una cuenta sin negocio (quedó sin confirmar por otro camino) confirma sin mandar nada", async () => {
@@ -169,7 +170,7 @@ describe("POST /api/cuenta/verificar-correo", () => {
     await correrLoPendiente()
 
     expect(respuesta.status).toBe(200)
-    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
   })
 
   it("usado dos veces: la segunda responde 410 y no manda otra bienvenida", async () => {
@@ -182,7 +183,7 @@ describe("POST /api/cuenta/verificar-correo", () => {
     expect(primera.status).toBe(200)
     expect(segunda.status).toBe(410)
     expect(mockAfter).toHaveBeenCalledTimes(1)
-    expect(mockEnviarCorreoDePrueba).toHaveBeenCalledTimes(1)
+    expect(mockEnviarBienvenida).toHaveBeenCalledTimes(1)
     expect(usuario("ana").emailVerificadoEn).toEqual(AHORA)
   })
 

@@ -142,6 +142,37 @@ describe("lib/email — escapado de datos de origen humano", () => {
   })
 })
 
+describe("lib/email — confirmar el correo (enviarVerificacionDeCorreo)", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")
+    vi.resetModules()
+    enviarMock.mockClear()
+  })
+
+  it("va al correo de la cuenta, con el botón al enlace y el nombre escapado; sin enlace de baja", async () => {
+    const { enviarVerificacionDeCorreo } = await import("./email")
+
+    await enviarVerificacionDeCorreo({
+      emailUsuario: "ana@ejemplo.com",
+      nombreUsuario: '<img src=x onerror="robo()">',
+      enlaceConfirmar: "https://eli.app/verificar-correo/token-real",
+    })
+
+    const correo = enviarMock.mock.calls[0][0]
+    const html = correo.html as string
+    expect(correo.to).toBe("ana@ejemplo.com")
+    expect(correo.subject).toBe("Confirma tu correo — Eli")
+    expect(html).toContain('href="https://eli.app/verificar-correo/token-real"')
+    expect(html).toContain("Confirmar mi correo")
+    expect(html).toContain("prueba gratis")
+    expect(html).toContain("48 horas")
+    expect(html).not.toContain("<img src=x")
+    // Es un correo de la cuenta, no del ciclo de prueba: no ofrece darse de baja.
+    expect(html).not.toContain("baja-de-correos")
+    expect(correo.headers?.["List-Unsubscribe"]).toBeUndefined()
+  })
+})
+
 describe("lib/email — inyección de encabezados en el asunto", () => {
   beforeEach(() => {
     vi.stubEnv("RESEND_API_KEY", "clave-de-prueba")

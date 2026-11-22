@@ -13,9 +13,14 @@ import { diasEntre, fechaYMinutosEn, zonaDelNegocio } from "@/lib/zona-horaria"
  * envío falla, su fila de `CorreoDeCuenta` se borra y el cron lo reintenta al
  * día siguiente, mientras la ventana siga abierta.
  *
- * - "bienvenida": se manda al crear el negocio. El cron sólo la reintenta
- *   desde el día siguiente si aquel envío falló, y mientras falten más de 3
- *   días para el fin (después ya no tiene sentido darla).
+ * - "bienvenida": se manda cuando la dueña confirma su correo
+ *   (`lib/verificacion-de-correo-servidor.ts`), o al crear el negocio si la
+ *   cuenta ya lo tenía confirmado. El cron sólo la reintenta desde el día
+ *   siguiente si aquel envío falló, y mientras falten más de 3 días para el
+ *   fin (después ya no tiene sentido darla).
+ *
+ * A quién se le manda no se decide acá: el cron sólo trae negocios de dueñas
+ * con el correo confirmado.
  * - "consejo": desde el día 3 contado desde la creación, mientras falten más
  *   de 3 días para el fin (para no llegar junto con el aviso de fin).
  * - "quedan-3-dias": cuando faltan 3, 2 o 1 días para el último día de la

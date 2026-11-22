@@ -754,6 +754,46 @@ SELECT pg_get_constraintdef(oid) LIKE '%paquete%' FROM pg_constraint
 WHERE conname = 'atencion_pagos_method_check';
 ```
 
+### `20261122130000_verificar_correo`
+
+**Antes de desplegar.** Verificar el correo al registrarse (PRODUCTO.md,
+"Cuentas"). Agrega a `usuarios` cuatro columnas nullable, sin default:
+`emailVerificadoEn`, `verificacionTokenHash` (con su índice único),
+`verificacionVenceEn` y `verificacionEnviadaEn`. El código nuevo no anda sin
+ellas: Prisma pide todas las columnas de `usuarios` al iniciar sesión, así que
+sin la migración nadie entra. El viejo las ignora.
+
+**Las cuentas que ya existen quedan verificadas**
+(`UPDATE "usuarios" SET "emailVerificadoEn" = "createdAt"`): no se les pide
+confirmar nada ni se les cortan los correos de la prueba. Ese relleno
+**reescribe todas las filas de `usuarios`**: es una tabla chica y tarda
+milisegundos, pero es una escritura sobre todas las cuentas, así que **el
+respaldo (branch en Neon) va sí o sí**. Si el candado no llega en 5 segundos,
+falla entera y se reintenta.
+
+Quien se registre entre la migración y el despliegue (con el código viejo)
+queda sin confirmar y sin enlace: ve el aviso en el panel y lo resuelve con
+"Reenviar". No hay que hacer nada a mano.
+
+Para deshacerla (se pierde quién confirmó; con el código viejo desplegado):
+
+```sql
+ALTER TABLE "usuarios" DROP COLUMN "emailVerificadoEn",
+  DROP COLUMN "verificacionTokenHash", DROP COLUMN "verificacionVenceEn",
+  DROP COLUMN "verificacionEnviadaEn";
+```
+
+Para comprobarla (tiene que responder `4` y `0`: las cuatro columnas, y
+ninguna cuenta de antes sin verificar):
+
+```sql
+SELECT
+  (SELECT count(*) FROM information_schema.columns
+   WHERE table_name = 'usuarios'
+     AND column_name IN ('emailVerificadoEn', 'verificacionTokenHash', 'verificacionVenceEn', 'verificacionEnviadaEn')) AS columnas,
+  (SELECT count(*) FROM "usuarios" WHERE "emailVerificadoEn" IS NULL) AS sin_verificar;
+```
+
 ### Qué migraciones están aplicadas
 
 Sólo lectura. Responde, por lo que cada migración deja en la base, cuáles de

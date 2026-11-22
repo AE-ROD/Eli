@@ -26,11 +26,10 @@ const base = crearBaseFalsa()
 vi.mock("@/lib/prisma", () => ({ prisma: base.prisma }))
 
 const mockEnviarVerificacion = vi.fn()
-const mockEnviarCorreoDePrueba = vi.fn()
 vi.mock("@/lib/email", () => ({
   enviarVerificacionDeCorreo: (...args: unknown[]) => mockEnviarVerificacion(...args),
-  enviarCorreoDePrueba: (...args: unknown[]) => mockEnviarCorreoDePrueba(...args),
 }))
+vi.mock("@/lib/enviar-correo-de-prueba", () => ({ enviarBienvenida: vi.fn() }))
 
 const mockAfter = vi.fn()
 vi.mock("next/server", async (original) => ({
