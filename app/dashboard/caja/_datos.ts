@@ -5,6 +5,7 @@
  */
 
 import { aCentavos, deCentavos } from "@/lib/atenciones"
+import { efectivoEsperado } from "@/lib/caja"
 import { leerMonto } from "@/lib/dinero"
 import { conJson, pedir, pedirConCodigo, type Resultado, type ResultadoConCodigo } from "@/lib/peticiones"
 
@@ -17,6 +18,8 @@ export interface MontoDeMedio {
 export interface Desglose {
   otrosMedios: MontoDeMedio[]
   propinasOtrosMedios: MontoDeMedio[]
+  /** Devoluciones de paquetes por medios que no son efectivo, en positivo. */
+  devoluciones: MontoDeMedio[]
 }
 
 export interface CierreDeCaja {
@@ -27,6 +30,8 @@ export interface CierreDeCaja {
   fondoInicial: number
   efectivoCobrado: number
   propinasEfectivo: number
+  /** Lo devuelto de paquetes en efectivo dentro del cierre (0 si no hubo): ya restado del esperado. */
+  devolucionesEfectivo: number
   esperado: number
   contado: number
   diferencia: number
@@ -44,8 +49,10 @@ export interface EstadoDeCaja {
     hasta: string
     efectivoCobrado: number
     propinasEfectivo: number
+    /** Lo devuelto de paquetes en efectivo en el período: plata que salió del cajón. */
+    devolucionesEfectivo: number
     desglose: Desglose
-    /** Todo lo cobrado, en todos los medios y con propinas. Se devuelve al cerrar: si cambió, 409. */
+    /** Todo lo cobrado, en todos los medios y con propinas, menos las devoluciones. Se devuelve al cerrar: si cambió, 409. */
     totalCobrado: number
     /** El cobro más antiguo de un día anterior a hoy: la caja arrastra días sin cerrar. Null si todo es de hoy. */
     cobrosDesde: string | null
@@ -89,12 +96,13 @@ export async function cerrarCaja(datos: {
 
 /**
  * La cuenta que se ve mientras se escribe, en centavos para no arrastrar
- * decimales: esperado = fondo + efectivo cobrado + propinas en efectivo, y
- * diferencia = contado − esperado. Un monto que no se entiende o es
+ * decimales: esperado = fondo + efectivo cobrado + propinas en efectivo −
+ * devoluciones de paquetes en efectivo (nunca menos de 0), y diferencia =
+ * contado − esperado. Un monto que no se entiende o es
  * negativo da `null` (no se adivina). El servidor la vuelve a hacer.
  */
 export function cuentaEnPantalla(
-  abierta: { efectivoCobrado: number; propinasEfectivo: number },
+  abierta: { efectivoCobrado: number; propinasEfectivo: number; devolucionesEfectivo?: number },
   fondoTexto: string,
   contadoTexto: string
 ): { fondo: number | null; contado: number | null; esperado: number | null; diferencia: number | null } {
@@ -108,7 +116,14 @@ export function cuentaEnPantalla(
   const esperado =
     fondo === null
       ? null
-      : deCentavos(aCentavos(fondo) + aCentavos(abierta.efectivoCobrado) + aCentavos(abierta.propinasEfectivo))
+      : deCentavos(
+          efectivoEsperado(
+            aCentavos(fondo),
+            aCentavos(abierta.efectivoCobrado),
+            aCentavos(abierta.propinasEfectivo),
+            aCentavos(abierta.devolucionesEfectivo ?? 0)
+          )
+        )
   const diferencia = esperado === null || contado === null ? null : deCentavos(aCentavos(contado) - aCentavos(esperado))
   return { fondo, contado, esperado, diferencia }
 }

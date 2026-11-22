@@ -16,7 +16,7 @@ vi.mock("bcryptjs", () => ({
 
 const prismaMock = {
   passwordResetToken: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  user: { update: vi.fn() },
+  user: { update: vi.fn(), updateMany: vi.fn() },
   $transaction: vi.fn(),
 }
 
@@ -24,6 +24,20 @@ const correrTransaccion = async (pasos: unknown) =>
   typeof pasos === "function" ? (pasos as (tx: typeof prismaMock) => unknown)(prismaMock) : Promise.all(pasos as unknown[])
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
+
+const mockAfter = vi.fn()
+const mockBienvenidaAlConfirmar = vi.fn()
+
+// `after` de verdad exige estar dentro de un pedido de Next: acá se guarda la tarea.
+vi.mock("next/server", async (original) => ({
+  ...(await original<typeof import("next/server")>()),
+  after: (tarea: () => unknown) => mockAfter(tarea),
+}))
+
+vi.mock("@/lib/verificacion-de-correo-servidor", async (original) => ({
+  ...(await original<typeof import("@/lib/verificacion-de-correo-servidor")>()),
+  enviarBienvenidaAlConfirmar: (...args: unknown[]) => mockBienvenidaAlConfirmar(...args),
+}))
 
 const enlaceVigente = {
   id: "enlace-1",
@@ -40,6 +54,8 @@ describe("POST /api/auth/restablecer-contrasena", () => {
     mockHash.mockImplementation(async (valor: string) => `hash(${valor})`)
     prismaMock.passwordResetToken.findUnique.mockResolvedValue(enlaceVigente)
     prismaMock.passwordResetToken.updateMany.mockResolvedValue({ count: 1 })
+    // Por defecto la cuenta ya tenía el correo confirmado: no hay nada que marcar.
+    prismaMock.user.updateMany.mockResolvedValue({ count: 0 })
     prismaMock.$transaction.mockImplementation(correrTransaccion)
   })
 
@@ -70,6 +86,43 @@ describe("POST /api/auth/restablecer-contrasena", () => {
       where: { id: "enlace-1", usedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { usedAt: expect.any(Date) },
     })
+  })
+
+  it("restablecer confirma el correo de una cuenta sin confirmar, borra su enlace pendiente y dispara la bienvenida", async () => {
+    const { POST } = await import("./route")
+    prismaMock.user.updateMany.mockResolvedValue({ count: 1 })
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(200)
+    // Sólo si no estaba confirmada: a quien ya confirmó no se le cambia la fecha.
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "usuario-1", emailVerificadoEn: null },
+      data: { emailVerificadoEn: expect.any(Date), verificacionTokenHash: null, verificacionVenceEn: null },
+    })
+    expect(mockAfter).toHaveBeenCalledTimes(1)
+    await mockAfter.mock.calls[0][0]()
+    expect(mockBienvenidaAlConfirmar).toHaveBeenCalledWith("usuario-1")
+  })
+
+  it("con el correo ya confirmado no programa ninguna bienvenida", async () => {
+    const { POST } = await import("./route")
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(200)
+    expect(mockAfter).not.toHaveBeenCalled()
+  })
+
+  it("con un enlace que no sirve no confirma nada", async () => {
+    const { POST } = await import("./route")
+    prismaMock.passwordResetToken.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await POST(pedidoFalso({ token: "token-abc", contrasena: "nuevaClave1" }))
+
+    expect(res.status).toBe(410)
+    expect(prismaMock.user.updateMany).not.toHaveBeenCalled()
+    expect(mockAfter).not.toHaveBeenCalled()
   })
 
   it("busca el enlace por el hash del token, no por el token en claro", async () => {

@@ -139,6 +139,7 @@ type TipoCorreo =
   | "aviso-reagendada"
   | "recordatorio"
   | "recuperacion-contrasena"
+  | "verificacion-de-correo"
   | "invitacion-trabajador"
   | "aviso-a-soporte"
   | "acuse-de-soporte"
@@ -905,6 +906,29 @@ export function enviarRecuperacionContrasena(datos: DatosRecuperacionContrasena)
     intro: html`Hola <strong>${datos.nombreUsuario}</strong>, recibimos una solicitud para restablecer tu contraseña.`,
     boton: { texto: "Crear nueva contraseña", enlace: datos.enlaceRestablecer },
     cierre: html`Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo: tu contraseña actual sigue siendo válida.`,
+  })
+}
+
+export interface DatosVerificacionDeCorreo {
+  emailUsuario: string
+  nombreUsuario: string
+  enlaceConfirmar: string
+}
+
+/**
+ * "Confirma tu correo", al crear la cuenta con correo y contraseña y al pedir
+ * otro enlace desde el panel. Es un correo de la cuenta, no del ciclo de
+ * prueba: no lleva enlace de baja ni depende de `correosDesactivados`.
+ */
+export function enviarVerificacionDeCorreo(datos: DatosVerificacionDeCorreo) {
+  return enviar({
+    tipo: "verificacion-de-correo",
+    para: datos.emailUsuario,
+    asunto: asunto`Confirma tu correo — Eli`,
+    titulo: "Confirma tu correo",
+    intro: html`Hola <strong>${datos.nombreUsuario}</strong>, ¡qué bueno tenerte en Eli! Confirma que este correo es tuyo y te vamos a mandar aquí los avisos de tu prueba gratis.`,
+    boton: { texto: "Confirmar mi correo", enlace: datos.enlaceConfirmar },
+    cierre: html`Este enlace expira en 48 horas. Tu cuenta ya funciona aunque no lo confirmes. Si no creaste una cuenta en Eli, ignora este correo.`,
   })
 }
 

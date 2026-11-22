@@ -18,6 +18,11 @@ import { urlBase } from "@/lib/url-base"
  * 3. Si falló, se borra la fila: el cron lo reintenta al día siguiente
  *    mientras su ventana siga abierta (`lib/correos-de-prueba.ts`).
  *
+ * Sólo a dueñas con el correo confirmado (`User.emailVerificadoEn`,
+ * `lib/verificacion-de-correo-servidor.ts`): sin confirmar, la casilla puede
+ * ser de un tercero. Lo filtran el cron en su consulta y `recibeCorreos`, y
+ * `mandarCorreoDePrueba` lo vuelve a mirar antes de tocar nada.
+ *
  * Nada de esto lanza, y a los logs no va ningún dato personal.
  */
 
@@ -32,17 +37,20 @@ export const SELECCION_PARA_CORREO = {
   createdAt: true,
   pruebaTerminaEl: true,
   recibeCorreosDePrueba: true,
-  user: { select: { id: true, name: true, email: true, correosDesactivados: true } },
+  user: { select: { id: true, name: true, email: true, correosDesactivados: true, emailVerificadoEn: true } },
   correosDeCuenta: { select: { tipo: true } },
 } satisfies Prisma.BusinessSelect
 
 export type NegocioParaCorreo = Prisma.BusinessGetPayload<{ select: typeof SELECCION_PARA_CORREO }>
 
-export type ResultadoDeCorreo = "enviado" | "ya-enviado" | "fallido"
+export type ResultadoDeCorreo = "enviado" | "ya-enviado" | "fallido" | "sin-verificar"
 
-/** Si el negocio y su dueño aceptan los correos del ciclo de prueba. */
+/**
+ * Si al negocio y a su dueño les llegan los correos del ciclo de prueba: no se
+ * dieron de baja, y el dueño confirmó que el correo es suyo.
+ */
 export function recibeCorreos(negocio: NegocioParaCorreo): boolean {
-  return negocio.recibeCorreosDePrueba && !negocio.user.correosDesactivados
+  return negocio.recibeCorreosDePrueba && !negocio.user.correosDesactivados && !!negocio.user.emailVerificadoEn
 }
 
 export async function mandarCorreoDePrueba(
@@ -50,6 +58,10 @@ export async function mandarCorreoDePrueba(
   correo: CorreoQueToca,
 ): Promise<ResultadoDeCorreo> {
   const { tipo } = correo
+
+  // Antes del candado: a un correo sin confirmar no se le manda ni se le
+  // registra nada, así el correo sigue pendiente para cuando confirme.
+  if (!negocio.user.emailVerificadoEn) return "sin-verificar"
 
   try {
     await prisma.correoDeCuenta.create({ data: { businessId: negocio.id, tipo }, select: { id: true } })

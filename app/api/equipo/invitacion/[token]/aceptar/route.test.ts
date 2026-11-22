@@ -200,6 +200,9 @@ describe("POST /api/equipo/invitacion/[token]/aceptar", () => {
     // Lo que se guarda es el hash de la contraseña que eligió, no otra cosa.
     const hashGuardado = prismaMock.user.create.mock.calls[0][0].data.password
     expect(await bcrypt.compare("unaClaveSegura1", hashGuardado)).toBe(true)
+    // Nace con el correo confirmado: llegó por un enlace que se mandó a esa casilla.
+    expect(prismaMock.user.create.mock.calls[0][0].data.emailVerificadoEn).toBeInstanceOf(Date)
+    expect(prismaMock.user.create.mock.calls[0][0].data.verificacionTokenHash).toBeUndefined()
     expect(prismaMock.businessMember.create).toHaveBeenCalledWith({
       data: { businessId: invitacionBase.businessId, userId: "user-nuevo", role: invitacionBase.role },
       select: { id: true },

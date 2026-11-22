@@ -8,6 +8,7 @@ import {
   PRECIO_PERSONA_ADICIONAL,
   formatearPesos,
 } from "@/lib/precios"
+import { SESIONES_MAXIMAS, SESIONES_MINIMAS, VIGENCIAS_EN_MESES } from "@/lib/paquetes"
 import { DIAS_MAXIMOS_DE_ANTICIPACION } from "@/lib/reserva-publica"
 import type { AreaDeSoporte } from "@/lib/soporte"
 import { conMayuscula, vocabularioDe, type PalabrasDelRubro, type Sustantivo } from "@/lib/vocabulario"
@@ -43,8 +44,8 @@ import { conMayuscula, vocabularioDe, type PalabrasDelRubro, type Sustantivo } f
  * escribe de otra forma (`seLlamaHora`); la hora del reloj ("la hora de
  * inicio", "elige otra hora libre") no se toca.
  *
- * Una pregunta que explica algo que la clínica dental ya no tiene (hora valle,
- * fila virtual, propinas) se declara `sinClinica` y no se muestra ahí. Si
+ * Una pregunta que explica algo que la clínica dental no tiene (hora valle,
+ * fila virtual, propinas, paquetes de sesiones) se declara `sinClinica` y no se muestra ahí. Si
  * mezcla un tema que sí existe con uno que no, se escribe por rubro (con
  * `enLaClinica`) en vez de ocultarla.
  */
@@ -76,7 +77,7 @@ export interface PreguntaDelCatalogo {
   paraFallas?: true
   /**
    * Lo que explica no existe en la clínica dental (hora valle, fila virtual,
-   * propinas): ahí la pregunta no se muestra. En cualquier otro rubro, también
+   * propinas, paquetes de sesiones): ahí la pregunta no se muestra. En cualquier otro rubro, también
    * en uno desconocido, se muestra.
    */
   sinClinica?: true
@@ -151,6 +152,11 @@ function delQue(sustantivo: Sustantivo): string {
 function oUAntesDe(siguiente: string): string {
   return /^h?o/i.test(siguiente) ? "u" : "o"
 }
+
+/** "3, 6 o 12": los plazos que ofrece un paquete de sesiones, además de "No vence". */
+const MESES_DE_VIGENCIA = new Intl.ListFormat("es", { type: "disjunction" }).format(
+  VIGENCIAS_EN_MESES.filter((meses) => meses !== null).map(String),
+)
 
 // ─── El catálogo ─────────────────────────────────────────────────────────────
 
@@ -400,6 +406,80 @@ export const CATALOGO: readonly PreguntaDelCatalogo[] = [
     paraFallas: true,
   },
 
+  // Paquetes de sesiones (`lib/paquetes.ts`): no existen en la clínica dental, que tiene su plan de tratamiento.
+  {
+    id: "paquetes-que-es",
+    area: "tablero",
+    pregunta: "¿Qué es un paquete de sesiones?",
+    respuesta: ({ palabras: { cliente, servicio } }) => [
+      `Son varias sesiones de ${un(servicio)} que tu ${cliente.singular} paga de una vez, a mejor precio. Por ejemplo, "6 sesiones de Depilación láser por $150.000".`,
+      "Tú creas el paquete, lo vendes al cobrar y Eli lleva la cuenta de las sesiones que quedan.",
+    ],
+    palabrasClave: ["paquete", "pack", "sesiones", "bono", "promoción", "prepago"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-crear",
+    area: "tablero",
+    pregunta: "¿Cómo creo un paquete de sesiones?",
+    respuesta: ({ palabras: { servicio } }) => [
+      '1. Entra a Configuración y busca "Paquetes de sesiones".',
+      '2. Toca "Crear paquete".',
+      `3. Elige ${el(servicio)}, escribe cuántas sesiones trae (entre ${SESIONES_MINIMAS} y ${SESIONES_MAXIMAS}) y el precio del paquete completo.`,
+      `4. Elige hasta cuándo vale ("No vence", o ${MESES_DE_VIGENCIA} meses) y toca "Crear paquete".`,
+      "Mientras escribes, Eli te muestra en cuánto queda cada sesión. Los paquetes los crean el dueño y el encargado.",
+    ],
+    palabrasClave: ["crear paquete", "nuevo paquete", "armar", "configuración", "precio", "pack"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-vender",
+    area: "tablero",
+    pregunta: "¿Cómo vendo un paquete?",
+    respuesta: ({ palabras: { cliente, tablero } }) => [
+      `1. En ${el(comoSeccion(tablero))}, toca "Cobrar" en la atención ${del(cliente)}.`,
+      '2. Toca "Vender paquete" y elige el paquete.',
+      "3. Registra el pago como siempre. El paquete se suma al total y la plata entra ese día.",
+      `El paquete queda a nombre ${del(cliente)}, así que la atención tiene que ser de alguien de tu lista de ${conMayuscula(cliente.plural)}.`,
+      "Los paquetes se venden solo al cobrar: en tu página de reservas no se compran.",
+    ],
+    palabrasClave: ["vender paquete", "cobrar paquete", "no me deja vender", "pack", "página de reservas"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-usar-sesion",
+    area: "tablero",
+    pregunta: "¿Cómo descuento una sesión del paquete?",
+    respuesta: ({ palabras: { cliente, servicio } }) => [
+      `El cobro lo ofrece solo. Al cobrar ${un(servicio)} para el que ${el(cliente)} tiene un paquete, aparece marcado "Usar 1 sesión de su paquete", con las sesiones que le quedan.`,
+      `${conMayuscula(ese(servicio))} queda ${concordar("cubierto", servicio)} por el paquete y se paga solo lo demás. Si esta vez prefiere pagarlo aparte, desmarca la casilla.`,
+    ],
+    palabrasClave: ["usar sesión", "descontar", "canjear", "ocupar sesión", "cubierta por el paquete", "pack"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-mismo-dia",
+    area: "tablero",
+    pregunta: "Compró el paquete y se atiende hoy mismo, ¿qué hago?",
+    respuesta: ({ palabras: { servicio } }) => [
+      `Todo va en el mismo cobro. Al agregar el paquete con "Vender paquete", queda marcado "Usar la primera sesión hoy": ${el(servicio)} de hoy queda ${concordar("cubierto", servicio)} y se paga solo el paquete.`,
+      "Si hoy no va a usar ninguna sesión, desmarca la casilla.",
+    ],
+    palabrasClave: ["primera sesión", "mismo día", "hoy", "comprar y usar", "pack"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-anular-atencion",
+    area: "tablero",
+    pregunta: "Anulé una atención donde se usó una sesión, ¿se pierde?",
+    respuesta: ({ palabras: { cliente } }) => [
+      `No. Al anular la atención, la sesión vuelve al paquete y ${el(cliente)} la puede usar otro día.`,
+      "La atención donde vendiste el paquete es distinta: no se puede anular si ya se usó una sesión en otra atención o si el paquete se devolvió.",
+    ],
+    palabrasClave: ["anular", "sesión perdida", "recuperar sesión", "devolver sesión", "error", "pack"],
+    sinClinica: true,
+  },
+
   // ─── Clientes ──────────────────────────────────────────────────────────────
   {
     id: "clientes-agregar",
@@ -453,6 +533,42 @@ export const CATALOGO: readonly PreguntaDelCatalogo[] = [
     ],
     paraFallas: true,
   },
+  {
+    id: "paquetes-cuantas-quedan",
+    area: "clientes",
+    pregunta: ({ palabras: { cliente } }) => `¿Dónde veo cuántas sesiones le quedan a ${un(cliente)}?`,
+    respuesta: ({ palabras: { cliente } }) => [
+      `Abre su ficha en ${conMayuscula(cliente.plural)}. En "Paquetes" aparece cada uno con lo que le queda, por ejemplo "Le quedan 4 de 6", cuándo lo compró y cuándo vence.`,
+      "Lo ve todo el equipo. Los montos los ven solo el dueño y el encargado.",
+    ],
+    palabrasClave: ["saldo", "sesiones restantes", "cuántas le quedan", "ficha", "paquete", "pack"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-vencimiento",
+    area: "clientes",
+    pregunta: "¿Los paquetes vencen?",
+    respuesta: ({ palabras: { cliente } }) => [
+      `Solo si tú les pones un plazo. Al crear el paquete eliges "No vence" o que valga ${MESES_DE_VIGENCIA} meses, contados desde el día de la compra.`,
+      `Un paquete vencido ya no se puede usar al cobrar. El dueño todavía puede devolverlo desde la ficha ${del(cliente)}.`,
+    ],
+    palabrasClave: ["vencimiento", "vence", "vencido", "vigencia", "plazo", "caduca", "pack"],
+    sinClinica: true,
+  },
+  {
+    id: "paquetes-devolver",
+    area: "clientes",
+    pregunta: "¿Cómo devuelvo un paquete?",
+    respuesta: ({ palabras: { cliente } }) => [
+      `1. Abre la ficha ${del(cliente)} en ${conMayuscula(cliente.plural)}.`,
+      '2. En "Paquetes", toca "Devolver".',
+      "3. Elige cómo se devuelve la plata y confirma.",
+      "Si no usó ninguna sesión, se devuelve todo. Si usó alguna, se devuelven las que le quedan, por lo que vale cada una.",
+      "Solo el dueño puede devolver. Eli deja anotado cuánto, cuándo y cómo; la plata se la entregas tú. Después, el paquete no se puede usar más.",
+    ],
+    palabrasClave: ["devolución", "devolver plata", "reembolso", "arrepentimiento", "no me deja devolver", "pack"],
+    sinClinica: true,
+  },
 
   // ─── Reportes ──────────────────────────────────────────────────────────────
   {
@@ -503,6 +619,17 @@ export const CATALOGO: readonly PreguntaDelCatalogo[] = [
       `Solo lo suyo: ${el(servicio, "plural")} que atendió y cuánto sumaron. No ve los totales del negocio ni los medios de pago.`,
     ],
     palabrasClave: ({ palabras: { profesional } }) => ["permisos", "rol", profesional.singular, "privacidad"],
+  },
+  {
+    id: "paquetes-reportes-cero",
+    area: "reportes",
+    pregunta: "¿Por qué una sesión de paquete aparece en $0 en Reportes?",
+    respuesta: [
+      'Porque esa plata ya entró el día que vendiste el paquete. La sesión aparece en $0, con "(con paquete)", para no contarla dos veces.',
+      "Así, el total de cada día es lo que de verdad entró ese día.",
+    ],
+    palabrasClave: ["con paquete", "cero", "no suma", "ingresos", "sesión gratis", "pack"],
+    sinClinica: true,
   },
 
   // ─── Equipo ────────────────────────────────────────────────────────────────
@@ -574,6 +701,93 @@ export const CATALOGO: readonly PreguntaDelCatalogo[] = [
       } y tu plata, y tus atenciones llevan comisión como las de cualquiera del equipo.`,
     ],
     palabrasClave: ["dos negocios", "otro negocio", "cambiar de negocio", "varios locales", "cuenta", "rol"],
+  },
+  {
+    id: "paquetes-comision",
+    area: "equipo",
+    pregunta: ({ palabras: { profesional } }) => `¿Cuándo gana su comisión ${el(profesional)} por un paquete?`,
+    respuesta: [
+      "Al atender cada sesión, no al vender el paquete. Cada vez que se usa una sesión, quien la atendió gana su comisión sobre lo que vale esa sesión.",
+      "La venta del paquete no le suma comisión a nadie.",
+    ],
+    palabrasClave: ({ palabras: { profesional } }) => ["comisión", "paquete", "sesión", "venta", profesional.singular, "pack"],
+    sinClinica: true,
+  },
+
+  // Sacar a alguien del equipo (`lib/sacar-del-equipo.ts`).
+  {
+    id: "equipo-sacar-como",
+    area: "equipo",
+    pregunta: "¿Cómo saco a alguien del equipo?",
+    respuesta: [
+      "1. En Equipo, busca a la persona.",
+      '2. Toca "Sacar del equipo". En el celular está en el botón de opciones, al lado de su nombre.',
+      '3. Lee el aviso y confirma con "Sacar del equipo".',
+      "Desde ese momento deja de aparecer en la agenda y en tu página de reservas. Su horario y sus bloqueos se borran.",
+    ],
+    palabrasClave: ["eliminar", "borrar", "quitar", "despedir", "renunció", "se fue", "dar de baja", "desvincular"],
+  },
+  {
+    id: "equipo-sacar-quien",
+    area: "equipo",
+    pregunta: "¿Quién puede sacar a quién del equipo?",
+    respuesta: ({ palabras: { profesional } }) => [
+      `El dueño puede sacar a cualquiera. El encargado, solo a ${el(profesional, "plural")}. ${conMayuscula(un(profesional))} no puede sacar a nadie.`,
+      "Nadie puede sacarse a sí mismo, y al dueño no lo saca nadie.",
+    ],
+    palabrasClave: ({ palabras: { profesional } }) => ["permisos", "rol", "encargado", "dueño", profesional.singular, "quitar"],
+  },
+  {
+    id: "equipo-sacar-no-deja",
+    area: "equipo",
+    pregunta: "No me deja sacar a alguien del equipo",
+    respuesta: ({ palabras: { cita, tablero } }) => [
+      `Pasa cuando esa persona todavía tiene ${cita.plural} por delante o una atención abierta en ${el(comoSeccion(tablero))}. Eli te dice cuántas son y te lleva a verlas.`,
+      `${conMayuscula(el(cita, "plural"))}: muéve${lasOLos(cita)} a otra persona o cancéla${lasOLos(cita)} desde la Agenda.`,
+      `La atención abierta: cóbrala o anúlala en ${el(comoSeccion(tablero))}.`,
+      "Después vuelve a intentarlo.",
+    ],
+    palabrasClave: ["no me deja", "todavía no puedes sacar", "por delante", "atención abierta", "quitar", "eliminar"],
+    paraFallas: true,
+  },
+  {
+    id: "equipo-sacar-plata",
+    area: "equipo",
+    pregunta: "¿Qué pasa con la plata que le debo a quien saqué del equipo?",
+    respuesta: [
+      "No se pierde. Lo que le quedó pendiente sigue en Liquidaciones, con su nombre, hasta que se lo pagues.",
+      "Tener plata pendiente no impide sacar a la persona: Eli te lo avisa antes de confirmar.",
+    ],
+    palabrasClave: ["liquidación", "pendiente", "comisiones", "propinas", "adelantos", "pagar", "deuda"],
+  },
+  {
+    id: "equipo-sacar-historial",
+    area: "equipo",
+    pregunta: "¿Se borra el historial de quien saqué del equipo?",
+    respuesta: [
+      "No. Sus atenciones pasadas, sus comisiones y sus liquidaciones quedan guardadas, y Reportes las sigue mostrando con su nombre.",
+    ],
+    palabrasClave: ["historial", "atenciones pasadas", "reportes", "se pierde", "borrar", "datos"],
+  },
+  {
+    id: "equipo-sacar-acceso",
+    area: "equipo",
+    pregunta: "¿Cuánto tarda en perder el acceso quien saqué del equipo?",
+    respuesta: [
+      "Unos minutos. Después ya no puede entrar a tu negocio.",
+      "Su cuenta de Eli sigue siendo suya: si trabaja en otro negocio, ahí entra como siempre.",
+    ],
+    palabrasClave: ["acceso", "entrar", "sesión", "sigue viendo", "bloquear", "cuenta"],
+  },
+  {
+    id: "equipo-sacar-vuelve",
+    area: "equipo",
+    pregunta: "¿Qué hago si alguien que saqué vuelve al equipo?",
+    respuesta: [
+      'Invita de nuevo a esa persona desde Equipo, con "Invitar al equipo". Cuando acepta, vuelve con su historial de antes y con el rol que elijas en la invitación.',
+      "Su horario hay que cargarlo otra vez en Configuración.",
+    ],
+    palabrasClave: ["volver", "reincorporar", "invitar de nuevo", "regresa", "recontratar", "invitación"],
   },
 
   // ─── Cuenta y plan ─────────────────────────────────────────────────────────

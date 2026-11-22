@@ -156,6 +156,12 @@ const limitadorFotosPublicas = crearLimitador("fotos-publicas", 600, "1 m")
 // (mover grupos a una categoría, renombrar, unir) son una docena de pasos
 // seguidos la primera vez, así que 10 se quedaban cortos para el uso normal.
 const limitadorServiciosEnLote = crearLimitador("servicios-en-lote", 20, "1 h")
+// Reenviar el enlace de "Confirma tu correo": 3 por hora por cuenta. Cada
+// reenvío manda un correo a la casilla con que se registró la cuenta, que
+// todavía nadie comprobó que sea suya: el límite de escritura del panel (60
+// por minuto) dejaría llenarle la bandeja a un tercero. Tres alcanzan para
+// "no me llegó, mándalo de nuevo" un par de veces.
+const limitadorReenvioDeVerificacion = crearLimitador("reenvio-verificacion", 3, "1 h")
 
 export type TipoLimite =
   | "login"
@@ -181,6 +187,7 @@ export type TipoLimite =
   | "fotos"
   | "fotosPublicas"
   | "serviciosEnLote"
+  | "reenvioDeVerificacion"
 
 const limitadores: Record<TipoLimite, Ratelimit | null> = {
   login: limitadorLogin,
@@ -206,6 +213,7 @@ const limitadores: Record<TipoLimite, Ratelimit | null> = {
   fotos: limitadorFotos,
   fotosPublicas: limitadorFotosPublicas,
   serviciosEnLote: limitadorServiciosEnLote,
+  reenvioDeVerificacion: limitadorReenvioDeVerificacion,
 }
 
 /**
@@ -258,6 +266,9 @@ const fallaAbiertoSiUpstashFalla: Record<TipoLimite, boolean> = {
   // sesión de dueño o encargado, así que una caída del proveedor sólo demora una
   // carga o un reordenamiento del catálogo que se puede hacer después.
   serviciosEnLote: false,
+  // Cerrado: manda un correo a una casilla que todavía no se comprobó. Una
+  // caída del proveedor sólo demora un reenvío; la cuenta funciona igual.
+  reenvioDeVerificacion: false,
   // Abierto, como las lecturas del panel: exige sesión de dueño o encargado y
   // cortarla dejaría al negocio sin sus datos por una caída ajena.
   exportacion: true,

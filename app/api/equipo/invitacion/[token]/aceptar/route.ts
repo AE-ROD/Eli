@@ -171,6 +171,9 @@ export async function POST(
           // Normalizado (B4), también si la invitación es de antes de normalizar.
           email: normalizarEmail(invitacion.email),
           password: hashDeContrasena,
+          // Nace confirmada: llegó hasta acá con un enlace que se mandó a ese
+          // correo (`lib/verificacion-de-correo-servidor.ts`).
+          emailVerificadoEn: new Date(),
         },
       })
 

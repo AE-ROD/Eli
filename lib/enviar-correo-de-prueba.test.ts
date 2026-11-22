@@ -23,7 +23,13 @@ const negocio = {
   createdAt: new Date("2026-10-20T15:00:00Z"),
   pruebaTerminaEl: new Date("2026-10-27T15:00:00Z"),
   recibeCorreosDePrueba: true,
-  user: { id: "usuario-1", name: "Ana", email: "ana.privada@ejemplo.com", correosDesactivados: false },
+  user: {
+    id: "usuario-1",
+    name: "Ana",
+    email: "ana.privada@ejemplo.com",
+    correosDesactivados: false,
+    emailVerificadoEn: new Date("2026-10-20T15:05:00Z") as Date | null,
+  },
   correosDeCuenta: [],
 }
 
@@ -151,6 +157,24 @@ describe("mandarCorreoDePrueba: el candado de CorreoDeCuenta", () => {
   })
 })
 
+describe("mandarCorreoDePrueba: sólo a dueñas con el correo confirmado", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("sin confirmar no manda ni registra nada: el correo queda pendiente para cuando confirme", async () => {
+    const { mandarCorreoDePrueba, recibeCorreos, SELECCION_PARA_CORREO } = await import("./enviar-correo-de-prueba")
+    const sinConfirmar = { ...negocio, user: { ...negocio.user, emailVerificadoEn: null } }
+
+    expect(await mandarCorreoDePrueba(sinConfirmar, consejo)).toBe("sin-verificar")
+
+    expect(prismaMock.correoDeCuenta.create).not.toHaveBeenCalled()
+    expect(mockEnviarCorreoDePrueba).not.toHaveBeenCalled()
+    expect(recibeCorreos(sinConfirmar)).toBe(false)
+    expect(recibeCorreos(negocio)).toBe(true)
+    // El cron y la bienvenida leen el dato con la misma selección.
+    expect(SELECCION_PARA_CORREO.user.select).toMatchObject({ emailVerificadoEn: true })
+  })
+})
+
 describe("enviarBienvenida", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -173,6 +197,7 @@ describe("enviarBienvenida", () => {
     ["el negocio no existe", null],
     ["el negocio no recibe correos de prueba", { ...negocio, recibeCorreosDePrueba: false }],
     ["el dueño se dio de baja", { ...negocio, user: { ...negocio.user, correosDesactivados: true } }],
+    ["el dueño no confirmó su correo", { ...negocio, user: { ...negocio.user, emailVerificadoEn: null } }],
   ])("si %s, no hace nada", async (_caso, encontrado) => {
     const { enviarBienvenida } = await import("./enviar-correo-de-prueba")
     prismaMock.business.findUnique.mockResolvedValue(encontrado)

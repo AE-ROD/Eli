@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { crearBaseFalsa } from "@/pruebas/base-falsa"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, pago, pedido, propina, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea, pago, pedido, propina, sesiones } from "@/pruebas/datos"
 import { atencionBloqueada } from "@/lib/bloqueos-de-dinero"
 import { MENSAJE_CAJA_CAMBIO, MENSAJE_CAJA_CAMBIO_LO_COBRADO, MENSAJE_NOTA_OBLIGATORIA } from "@/lib/caja"
 
@@ -151,9 +151,11 @@ describe("/api/caja", () => {
         hasta: AHORA.toISOString(),
         efectivoCobrado: 8000,
         propinasEfectivo: 2000,
+        devolucionesEfectivo: 0,
         desglose: {
           otrosMedios: [{ medio: "tarjeta-debito", nombre: "Tarjeta de débito", monto: 5000 }],
           propinasOtrosMedios: [{ medio: "transferencia", nombre: "Transferencia", monto: 1000 }],
+          devoluciones: [],
         },
         // Todos los medios, con propinas: 8000 + 5000 + 2000 + 1000.
         totalCobrado: 16000,
@@ -501,5 +503,149 @@ describe("/api/caja", () => {
       expect(await res.json()).toMatchObject({ efectivoCobrado: 0, propinasEfectivo: 0 })
       expect(cierresDelNegocio()).toEqual([])
     })
+  })
+})
+
+/**
+ * Devoluciones de paquetes: plata que sale. Restan en el cierre que cubre la
+ * hora en que se devolvió, por el medio con que se devolvió.
+ */
+describe("/api/caja: devoluciones de paquetes", () => {
+  /** Un paquete devuelto, con la línea donde se vendió (en una atención de antes). */
+  function devuelto(n: string, devueltoAt: string, medio: string, monto: number, datos: Record<string, unknown> = {}) {
+    const ajeno = datos.businessId === OTRO_NEGOCIO
+    return {
+      linea: linea(`l-venta-${n}`, ajeno ? "v-ajena" : "v-ayer", {
+        serviceId: ajeno ? "s-ajeno" : "s-color",
+        serviceName: "Paquete de 6 sesiones: Color",
+        priceCents: centavos(150000),
+        ...(ajeno && { memberId: "m-ajeno" }),
+      }),
+      paquete: {
+        id: `pq-${n}`,
+        businessId: NEGOCIO,
+        customerId: "c-maria",
+        serviceId: "s-color",
+        serviceName: "Color",
+        sesiones: 6,
+        priceCents: centavos(150000),
+        valorPorSesionCents: centavos(25000),
+        lineaDeVentaId: `l-venta-${n}`,
+        vendidoAt: new Date("2026-09-01T15:00:00.000Z"),
+        devueltoAt: new Date(devueltoAt),
+        devueltoCents: centavos(monto),
+        devueltoMedio: medio,
+        devueltoPorId: "u-duena",
+        devueltoPorNombre: "Ana Dueña",
+        ...datos,
+      },
+    }
+  }
+
+  function sembrarDevoluciones(devueltos: ReturnType<typeof devuelto>[]) {
+    escenario()
+    const datos = base.volcado() as Record<string, Record<string, unknown>[]>
+    base.reiniciar({
+      ...datos,
+      visitService: [...(datos.visitService ?? []), ...devueltos.map((d) => d.linea)],
+      paqueteDeCliente: devueltos.map((d) => d.paquete),
+    })
+  }
+
+  const DE_HOY = [
+    () => devuelto("efectivo", "2026-10-20T14:00:00.000Z", "efectivo", 3000),
+    () => devuelto("transferencia", "2026-10-20T15:00:00.000Z", "transferencia", 1000),
+    // Antes del inicio del día (23:00 del 19 en Santiago): fuera del rango.
+    () => devuelto("ayer", "2026-10-20T02:00:00.000Z", "efectivo", 70000),
+    // De otro negocio (dentro del rango de los dos: el otro cerró a las 19:00Z): jamás.
+    () => devuelto("ajeno", "2026-10-20T19:30:00.000Z", "efectivo", 90000, { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", serviceId: "s-ajeno" }),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(AHORA)
+    sembrarDevoluciones(DE_HOY.map((crear) => crear()))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("la de efectivo resta del efectivo; la de transferencia va en su medio; ni la de fuera del rango ni la de otro negocio", async () => {
+    const { abierta } = await (await leer(sesiones.dueña)).json()
+    expect(abierta.efectivoCobrado).toBe(8000)
+    expect(abierta.devolucionesEfectivo).toBe(3000)
+    expect(abierta.desglose.devoluciones).toEqual([{ medio: "transferencia", nombre: "Transferencia", monto: 1000 }])
+    // 16.000 cobrados en todos los medios − 3.000 − 1.000.
+    expect(abierta.totalCobrado).toBe(12000)
+  })
+
+  it("el otro negocio ve sólo la suya", async () => {
+    const { abierta } = await (await leer(sesiones.dueñoAjeno)).json()
+    expect(abierta.devolucionesEfectivo).toBe(90000)
+    expect(abierta.desglose.devoluciones).toEqual([])
+  })
+
+  it("el cierre espera fondo + efectivo + propinas − lo devuelto en efectivo, y lo deja escrito", async () => {
+    const { abierta } = await (await leer(sesiones.dueña)).json()
+    const cuerpo = { desde: INICIO_DEL_DIA, hasta: abierta.hasta, totalCobrado: abierta.totalCobrado, fondoInicial: 10000, contado: 17000 }
+
+    // Con el esperado sin restar la devolución (20.000), no cierra.
+    expect((await cerrar(sesiones.dueña, { ...cuerpo, esperado: 20000 })).status).toBe(409)
+
+    const res = await cerrar(sesiones.dueña, { ...cuerpo, esperado: 17000 })
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({
+      fondoInicial: 10000,
+      efectivoCobrado: 8000,
+      propinasEfectivo: 2000,
+      devolucionesEfectivo: 3000,
+      esperado: 17000,
+      contado: 17000,
+      diferencia: 0,
+      desglose: { devoluciones: [{ medio: "transferencia", nombre: "Transferencia", monto: 1000 }] },
+    })
+    // En la tabla, las columnas cumplen sus CHECK: lo cobrado ya trae la resta.
+    expect(cierresDelNegocio()[0]).toMatchObject({
+      fondoInicialCents: centavos(10000),
+      efectivoCobradoCents: centavos(5000),
+      propinasEfectivoCents: centavos(2000),
+      efectivoEsperadoCents: centavos(17000),
+    })
+    // Y el cierre se vuelve a leer igual en la lista.
+    const { cierres } = await (await leer(sesiones.dueña)).json()
+    expect(cierres[0]).toMatchObject({ efectivoCobrado: 8000, devolucionesEfectivo: 3000, esperado: 17000 })
+  })
+
+  it("una devolución posterior a un cierre entra en el siguiente, no en el que ya se hizo", async () => {
+    const { abierta } = await (await leer(sesiones.dueña)).json()
+    const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: abierta.hasta, esperado: 7000, totalCobrado: abierta.totalCobrado, fondoInicial: 0, contado: 7000 })
+    expect(res.status).toBe(201)
+    const cerrado = cierresDelNegocio()[0]
+
+    const datos = base.volcado() as Record<string, Record<string, unknown>[]>
+    const nueva = devuelto("despues", "2026-10-20T21:00:00.000Z", "efectivo", 2500)
+    base.reiniciar({ ...datos, visitService: [...datos.visitService, nueva.linea], paqueteDeCliente: [...datos.paqueteDeCliente, nueva.paquete] })
+    vi.setSystemTime(new Date("2026-10-20T22:00:00.000Z"))
+
+    const despues = await (await leer(sesiones.dueña)).json()
+    expect(despues.abierta.desde).toBe(abierta.hasta)
+    expect(despues.abierta.devolucionesEfectivo).toBe(2500)
+    expect(despues.abierta.totalCobrado).toBe(-2500)
+    expect(despues.cierres[0]).toMatchObject({ devolucionesEfectivo: 3000, esperado: 7000 })
+    expect(cierresDelNegocio()[0]).toEqual(cerrado)
+  })
+
+  it("una devolución por transferencia que se cruza entre leer y cerrar: 409, aunque el efectivo no cambie", async () => {
+    const { abierta } = await (await leer(sesiones.dueña)).json()
+    const datos = base.volcado() as Record<string, Record<string, unknown>[]>
+    const cruzada = devuelto("cruzada", "2026-10-20T19:30:00.000Z", "transferencia", 500)
+    base.reiniciar({ ...datos, visitService: [...datos.visitService, cruzada.linea], paqueteDeCliente: [...datos.paqueteDeCliente, cruzada.paquete] })
+
+    const res = await cerrar(sesiones.dueña, { desde: INICIO_DEL_DIA, hasta: abierta.hasta, esperado: 7000, totalCobrado: abierta.totalCobrado, fondoInicial: 0, contado: 7000 })
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe(MENSAJE_CAJA_CAMBIO_LO_COBRADO)
+    expect(cierresDelNegocio()).toEqual([])
   })
 })

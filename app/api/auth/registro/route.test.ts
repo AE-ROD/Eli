@@ -6,6 +6,7 @@ import { RUBROS } from "@/lib/rubros"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
 import { materialesDeProtesisDeEjemplo } from "@/lib/protesis"
 import { cuerpoDePrueba } from "@/pruebas/pedidos"
+import { hashDeToken } from "@/lib/tokens"
 
 const mockVerificarLimite = vi.fn()
 
@@ -23,6 +24,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }))
 
 const mockAfter = vi.fn()
 const mockEnviarBienvenida = vi.fn()
+const mockEnviarVerificacion = vi.fn()
 
 // `after` de verdad exige estar dentro de un pedido de Next: acá se guarda la
 // tarea para ver qué se programó, sin correrla sola.
@@ -33,6 +35,11 @@ vi.mock("next/server", async (original) => ({
 
 vi.mock("@/lib/enviar-correo-de-prueba", () => ({
   enviarBienvenida: (...args: unknown[]) => mockEnviarBienvenida(...args),
+}))
+
+// El correo "Confirma tu correo": se mira con qué enlace sale, sin mandar nada.
+vi.mock("@/lib/email", () => ({
+  enviarVerificacionDeCorreo: (...args: unknown[]) => mockEnviarVerificacion(...args),
 }))
 
 const pedidoFalso = (cuerpo: unknown): NextRequest =>
@@ -175,7 +182,13 @@ describe("POST /api/auth/registro: plan", () => {
   })
 })
 
-describe("POST /api/auth/registro: bienvenida", () => {
+/**
+ * El registro con correo y contraseña no comprueba que la casilla sea de quien
+ * se registra (deuda B4): la cuenta nace sin confirmar, con un enlace de
+ * "Confirma tu correo", y la bienvenida del ciclo de prueba espera a que
+ * confirme (`lib/verificacion-de-correo-servidor.ts`).
+ */
+describe("POST /api/auth/registro: confirmar el correo", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockVerificarLimite.mockResolvedValue({ permitido: true, restantes: 4 })
@@ -189,16 +202,73 @@ describe("POST /api/auth/registro: bienvenida", () => {
     })
   })
 
-  it("responde sin esperar el correo y programa la bienvenida del negocio nuevo para después", async () => {
+  it("responde sin esperar el correo y programa el de confirmar para después; la bienvenida NO sale", async () => {
     const { POST } = await import("./route")
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
+    mockEnviarVerificacion.mockResolvedValue({ data: { id: "correo-1" }, error: null })
 
     const respuesta = await POST(pedidoFalso(registroValido))
 
     expect(respuesta.status).toBe(200)
     expect(mockAfter).toHaveBeenCalledTimes(1)
-    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
+    expect(mockEnviarVerificacion).not.toHaveBeenCalled()
     await mockAfter.mock.calls[0][0]()
-    expect(mockEnviarBienvenida).toHaveBeenCalledWith("negocio-1")
+    expect(mockEnviarVerificacion).toHaveBeenCalledTimes(1)
+    expect(mockEnviarVerificacion.mock.calls[0][0]).toMatchObject({ emailUsuario: "ana@example.com", nombreUsuario: "Ana" })
+    // La bienvenida espera a que confirme: no le puede llegar a un tercero.
+    expect(mockEnviarBienvenida).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
+
+  it("la cuenta nace sin confirmar: a la base va sólo el hash del token, con 48 horas de vigencia", async () => {
+    const { POST } = await import("./route")
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
+    mockEnviarVerificacion.mockResolvedValue({ data: { id: "correo-1" }, error: null })
+    const antes = Date.now()
+
+    await POST(pedidoFalso(registroValido))
+    await mockAfter.mock.calls[0][0]()
+
+    const { enlaceConfirmar } = mockEnviarVerificacion.mock.calls[0][0] as { enlaceConfirmar: string }
+    expect(enlaceConfirmar).toMatch(/^https:\/\/eli\.app\/verificar-correo\/[\w-]{43}$/)
+    const token = enlaceConfirmar.split("/").pop()!
+
+    const datos = mockPrisma.user.create.mock.calls[0][0].data
+    expect(datos.emailVerificadoEn).toBeUndefined()
+    expect(datos.verificacionTokenHash).toBe(hashDeToken(token))
+    expect(datos.verificacionVenceEn.getTime() - datos.verificacionEnviadaEn.getTime()).toBe(48 * 60 * 60 * 1000)
+    expect(datos.verificacionEnviadaEn.getTime()).toBeGreaterThanOrEqual(antes)
+    // El token en claro no se guarda en ningún campo.
+    expect(JSON.stringify(datos)).not.toContain(token)
+    vi.unstubAllEnvs()
+  })
+
+  it("el token no sale en la respuesta, ni en claro ni su hash", async () => {
+    const { POST } = await import("./route")
+    vi.stubEnv("NEXTAUTH_URL", "https://eli.app")
+    mockEnviarVerificacion.mockResolvedValue({ data: { id: "correo-1" }, error: null })
+
+    const respuesta = await POST(pedidoFalso(registroValido))
+    const cuerpo = await respuesta.json()
+    await mockAfter.mock.calls[0][0]()
+
+    const token = (mockEnviarVerificacion.mock.calls[0][0] as { enlaceConfirmar: string }).enlaceConfirmar.split("/").pop()!
+    expect(Object.keys(cuerpo).sort()).toEqual(["businessId", "email", "id", "name"])
+    expect(JSON.stringify(cuerpo)).not.toContain(token)
+    expect(JSON.stringify(cuerpo)).not.toContain(hashDeToken(token))
+    vi.unstubAllEnvs()
+  })
+
+  it("si el correo de confirmar falla, la cuenta queda creada igual y nada lanza", async () => {
+    const { POST } = await import("./route")
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    mockEnviarVerificacion.mockRejectedValue(new Error("Resend caído"))
+
+    const respuesta = await POST(pedidoFalso(registroValido))
+
+    expect(respuesta.status).toBe(200)
+    await expect(mockAfter.mock.calls[0][0]()).resolves.toBe(false)
+    vi.restoreAllMocks()
   })
 
   it.each(RUBROS.map((rubro) => rubro.id))(

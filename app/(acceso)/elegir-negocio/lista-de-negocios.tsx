@@ -9,6 +9,7 @@ import type { OpcionDeContexto } from "@/lib/contextos"
 import { cn } from "@/lib/utils"
 import { AvisoDeError } from "../_componentes/aviso-de-error"
 import { MarcoDeAcceso } from "../_componentes/marco-de-acceso"
+import { AvisoDeSalida } from "../completar-perfil/aviso-de-salida"
 
 interface PropsDeListaDeNegocios {
   opciones: readonly OpcionDeContexto[]
@@ -16,6 +17,8 @@ interface PropsDeListaDeNegocios {
   actual: string | null
   /** Quien no es dueño de ningún negocio puede crear el suyo. */
   puedeCrearSuNegocio: boolean
+  /** Los negocios de cuyo equipo sacaron a esta cuenta hace poco (`lib/salidas-del-equipo.ts`): se avisa arriba. */
+  salidas: readonly string[]
 }
 
 const NO_SE_PUDO = "No se pudo entrar a ese negocio. Recarga la página e intenta de nuevo."
@@ -27,7 +30,7 @@ const NO_SE_PUDO = "No se pudo entrar a ese negocio. Recarga la página e intent
  * acepta (la membresía ya no existe, o se pasó el límite de pedidos), la
  * sesión queda como estaba y se dice.
  */
-export function ListaDeNegocios({ opciones, actual, puedeCrearSuNegocio }: PropsDeListaDeNegocios) {
+export function ListaDeNegocios({ opciones, actual, puedeCrearSuNegocio, salidas }: PropsDeListaDeNegocios) {
   // `update` no hace nada mientras la sesión todavía se está leyendo: hasta
   // entonces las filas esperan.
   const { update, status } = useSession()
@@ -64,6 +67,7 @@ export function ListaDeNegocios({ opciones, actual, puedeCrearSuNegocio }: Props
 
   return (
     <MarcoDeAcceso
+      arriba={salidas.length > 0 && <AvisoDeSalida negocios={salidas} />}
       antetitulo="Tu cuenta"
       titulo="¿Con qué negocio vas a trabajar?"
       bajada="Tu cuenta está en más de un negocio, o con más de un rol. Elige uno; después puedes cambiarlo desde el panel."

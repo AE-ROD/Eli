@@ -1,5 +1,6 @@
 import { sesionDelServidor } from "@/lib/sesion-del-servidor"
 import { prisma } from "@/lib/prisma"
+import { AvisoDeVerificarCorreo } from "@/components/panel/aviso-de-verificar-correo"
 import { BarraInferior } from "@/components/panel/barra-inferior"
 import { BarraLateral } from "@/components/panel/barra-lateral"
 import { ContenidoDelPanel } from "@/components/panel/contenido-del-panel"
@@ -107,7 +108,11 @@ export default async function LayoutDelPanel({
                   puedeCambiarDeNegocio={puedeCambiarDeNegocio}
                   contexto={session?.user?.contexto ?? null}
                 />
-                <ContenidoDelPanel>{children}</ContenidoDelPanel>
+                <ContenidoDelPanel>
+                  {/* Sólo se ve con el correo sin confirmar; no bloquea nada. */}
+                  <AvisoDeVerificarCorreo />
+                  {children}
+                </ContenidoDelPanel>
                 {/* En el celular: lo que más se usa, con los mismos permisos que la barra lateral. */}
                 <BarraInferior puedeVerEquipo={puedeVerEquipo} accesoALaPlata={accesoALaPlata} rubro={rubro} />
                 {businessName && businessSlug && (

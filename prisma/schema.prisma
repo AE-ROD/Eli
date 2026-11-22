@@ -1938,6 +1938,7 @@ model PaqueteDeSesiones {
  * vendió (`lineaDeVentaId`, la línea de esa venta): si esa atención se anula,
  * el paquete deja de valer. Las sesiones usadas son sus `usos` en atenciones
  * no anuladas; el saldo nunca se guarda, se cuenta.
+ *
  * `valorPorSesionCents` = `priceCents / sesiones` hacia abajo: es el precio
  * con que queda la línea de cada sesión usada (la base de la comisión de
  * quien atiende) y lo que se devuelve por cada sesión sin usar.
@@ -1980,9 +1981,7 @@ model PaqueteDeCliente {
   @@map("paquetes_de_clientes")
 }
 
-/**
- * Una sesión usada: la línea de una atención que se pagó con el paquete. Una línea usa a lo más una.
- */
+/** Una sesión usada: la línea de una atención que se pagó con el paquete. Una línea usa a lo más una. */
 model UsoDePaquete {
   id         String           @id @default(cuid())
   businessId String

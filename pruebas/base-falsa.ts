@@ -50,6 +50,11 @@ const POR_DEFECTO: Record<NombreDeModelo, () => Registro> = {
     sesionesValidasDesde: null,
     // La foto de la cuenta (etapa 9, extra f): sin foto hasta que la persona la sube. Sin CHECK en la base.
     fotoUrl: null,
+    // Como en la base: una cuenta nace sin confirmar su correo y sin enlace pendiente.
+    emailVerificadoEn: null,
+    verificacionTokenHash: null,
+    verificacionVenceEn: null,
+    verificacionEnviadaEn: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
@@ -362,7 +367,8 @@ const UNICOS: Partial<Record<NombreDeModelo, Unico[]>> = {
   // `usuarios_email_key`: el email se guarda ya normalizado (`normalizarEmail`,
   // migración `20261020120200_emails_normalizados`), así que el índice es
   // sobre la columna tal cual, sin `lower(...)`.
-  user: [{ campos: ["email"] }],
+  // `verificacionTokenHash` es único entre los que lo tienen: los NULL no chocan, como en Postgres.
+  user: [{ campos: ["email"] }, { campos: ["verificacionTokenHash"] }],
   // `negocios_slug_key`, `negocios_userId_key` (un negocio por cuenta) y
   // `negocios_codigoInvitacion_key`.
   business: [{ campos: ["slug"] }, { campos: ["userId"] }, { campos: ["codigoInvitacion"] }],

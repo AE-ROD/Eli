@@ -7,7 +7,10 @@ import { prisma } from "@/lib/prisma"
 import { aCentavos, deCentavos, esPrecioValido, MONTO_MAXIMO } from "@/lib/atenciones"
 import {
   cabeEnLaCaja,
+  columnasDelCierre,
   cuentaDeCaja,
+  efectivoDelCierre,
+  EFECTIVO,
   diaDelNegocio,
   inicioDelProximoCierre,
   leerCaja,
@@ -15,6 +18,7 @@ import {
   MENSAJE_CAJA_CAMBIO_LO_COBRADO,
   MENSAJE_NOTA_OBLIGATORIA,
   primerCobroDeOtroDia,
+  totalDevueltoCents,
   type DesgloseDeCaja,
   type ResumenDeCaja,
 } from "@/lib/caja"
@@ -57,12 +61,14 @@ const cierreSchema = z.object(
      * El total cobrado que se vio (`abierta.totalCobrado` del GET): todos los
      * medios, con propinas. El esperado sólo mira el efectivo; sin éste, un
      * cobro con tarjeta o una anulación entre leer y cerrar entraba al
-     * desglose del cierre sin que nadie lo viera. Si cambió, 409.
+     * desglose del cierre sin que nadie lo viera. Si cambió, 409. Ya viene
+     * con las devoluciones de paquetes restadas (una devolución entre leer y
+     * cerrar también es 409), así que puede ser negativo: un período en que
+     * se devolvió más de lo que se cobró.
      */
     totalCobrado: z
       .number({ required_error: MENSAJE_CAJA_CAMBIO_LO_COBRADO, invalid_type_error: MENSAJE_CAJA_CAMBIO_LO_COBRADO })
-      .finite(MENSAJE_CAJA_CAMBIO_LO_COBRADO)
-      .nonnegative(MENSAJE_CAJA_CAMBIO_LO_COBRADO),
+      .finite(MENSAJE_CAJA_CAMBIO_LO_COBRADO),
     fondoInicial: monto("el fondo inicial"),
     contado: monto("lo contado"),
     nota: z.string().trim().max(LARGO_MAXIMO_DE_NOTA, `La nota puede tener hasta ${LARGO_MAXIMO_DE_NOTA} caracteres`).optional(),
@@ -72,8 +78,9 @@ const cierreSchema = z.object(
 
 /**
  * Todo lo cobrado en el período, en centavos: pagos y propinas de todos los
- * medios. Es lo que el cierre guarda (efectivo y desglose); la pantalla lo
- * recibe en el GET y lo devuelve al cerrar para confirmar que no cambió.
+ * medios, menos las devoluciones de paquetes de todos los medios. Es lo que
+ * el cierre guarda (efectivo y desglose); la pantalla lo recibe en el GET y
+ * lo devuelve al cerrar para confirmar que no cambió.
  */
 function totalCobradoCents(resumen: ResumenDeCaja): number {
   const suma = (porMedio: Record<string, number> | undefined) =>
@@ -82,15 +89,26 @@ function totalCobradoCents(resumen: ResumenDeCaja): number {
     resumen.efectivoCobradoCents +
     resumen.propinasEfectivoCents +
     suma(resumen.desglose.otrosMedios) +
-    suma(resumen.desglose.propinasOtrosMedios)
+    suma(resumen.desglose.propinasOtrosMedios) -
+    totalDevueltoCents(resumen.desglose)
   )
 }
 
-/** El desglose en unidades y con nombres, para mostrar. */
-function desgloseParaMostrar(desglose: DesgloseDeCaja) {
+/**
+ * El desglose en unidades y con nombres, para mostrar. `devoluciones` son las
+ * de paquetes por medios que no son efectivo (la de efectivo va aparte, con
+ * la cuenta del cajón), en positivo: la pantalla les pone el menos.
+ */
+function desgloseParaMostrar(desglose: DesgloseDeCaja | null) {
   const lista = (porMedio: Record<string, number> | undefined) =>
-    Object.entries(porMedio ?? {}).map(([medio, centavos]) => ({ medio, nombre: nombreDeMedio(medio), monto: deCentavos(centavos) }))
-  return { otrosMedios: lista(desglose.otrosMedios), propinasOtrosMedios: lista(desglose.propinasOtrosMedios) }
+    Object.entries(porMedio ?? {})
+      .filter(([, centavos]) => Number.isInteger(centavos))
+      .map(([medio, centavos]) => ({ medio, nombre: nombreDeMedio(medio), monto: deCentavos(centavos) }))
+  return {
+    otrosMedios: lista(desglose?.otrosMedios),
+    propinasOtrosMedios: lista(desglose?.propinasOtrosMedios),
+    devoluciones: lista(desglose?.devoluciones).filter(({ medio }) => medio !== EFECTIVO),
+  }
 }
 
 const SELECCION_DE_CIERRE = {
@@ -112,18 +130,22 @@ const SELECCION_DE_CIERRE = {
 type CierreLeido = Prisma.CierreDeCajaGetPayload<{ select: typeof SELECCION_DE_CIERRE }>
 
 function formatearCierre(cierre: CierreLeido) {
+  // Con devoluciones en efectivo, las columnas guardan la cuenta ya restada
+  // (`columnasDelCierre`): se muestran las cifras reales y la devolución aparte.
+  const efectivo = efectivoDelCierre(cierre)
   return {
     id: cierre.id,
     desde: cierre.desde,
     hasta: cierre.hasta,
     fecha: cierre.fecha.toISOString().slice(0, 10),
-    fondoInicial: deCentavos(cierre.fondoInicialCents),
-    efectivoCobrado: deCentavos(cierre.efectivoCobradoCents),
-    propinasEfectivo: deCentavos(cierre.propinasEfectivoCents),
+    fondoInicial: deCentavos(efectivo.fondoInicialCents),
+    efectivoCobrado: deCentavos(efectivo.efectivoCobradoCents),
+    propinasEfectivo: deCentavos(efectivo.propinasEfectivoCents),
+    devolucionesEfectivo: deCentavos(efectivo.devolucionesEfectivoCents),
     esperado: deCentavos(cierre.efectivoEsperadoCents),
     contado: deCentavos(cierre.efectivoContadoCents),
     diferencia: deCentavos(cierre.diferenciaCents),
-    desglose: desgloseParaMostrar(cierre.desglose as unknown as DesgloseDeCaja),
+    desglose: desgloseParaMostrar(cierre.desglose as unknown as DesgloseDeCaja | null),
     nota: cierre.nota,
     cerradoPor: cierre.cerradoPorNombre,
   }
@@ -136,8 +158,8 @@ async function zonaDe(businessId: string) {
 
 /**
  * GET /api/caja?pagina= — la caja abierta (desde el último cierre hasta
- * ahora: lo cobrado en efectivo, las propinas en efectivo, los otros medios
- * y, si arrastra cobros de días anteriores sin cerrar, desde cuándo) y los
+ * ahora: lo cobrado en efectivo, las propinas en efectivo, las devoluciones
+ * de paquetes, los otros medios y, si arrastra cobros de días anteriores sin cerrar, desde cuándo) y los
  * cierres anteriores, del más nuevo al más viejo. Dueña y
  * encargado (`puedeVerCierresDeCaja`); el profesional, 401.
  */
@@ -190,8 +212,10 @@ export async function GET(request: NextRequest) {
       hasta: ahora,
       efectivoCobrado: deCentavos(resumen.efectivoCobradoCents),
       propinasEfectivo: deCentavos(resumen.propinasEfectivoCents),
+      /** Lo devuelto de paquetes en efectivo en el período: resta del esperado. */
+      devolucionesEfectivo: deCentavos(resumen.devolucionesEfectivoCents),
       desglose: desgloseParaMostrar(resumen.desglose),
-      /** Todo lo cobrado, en todos los medios y con propinas: el cierre lo pide de vuelta (409 si cambió). */
+      /** Todo lo cobrado, en todos los medios y con propinas, menos las devoluciones de paquetes: el cierre lo pide de vuelta (409 si cambió). */
       totalCobrado: deCentavos(totalCobradoCents(resumen)),
       /** El cobro más antiguo de un día anterior a hoy, si la caja arrastra días sin cerrar (#120); si no, null. */
       cobrosDesde: cobroDeOtroDia,
@@ -218,7 +242,8 @@ export async function GET(request: NextRequest) {
  * `desde` es el inicio del período que se vio al contar: si otro cerró
  * entretanto, ya no coincide y es 409 (lo contado era de otro período).
  * `esperado` y `totalCobrado` son los que se vieron: si lo que hay en
- * `(desde, hasta]` da otro efectivo u otro total (cualquier medio), 409.
+ * `(desde, hasta]` da otro efectivo u otro total (cualquier medio, también
+ * una devolución de paquete que se cruzó), 409.
  * Con un candado por negocio, dos cierres simultáneos no se solapan: el
  * segundo espera, ve el cierre nuevo y responde 409. Un cierre no se edita ni
  * se borra: esta ruta no tiene PUT ni DELETE.
@@ -287,6 +312,7 @@ export async function POST(request: NextRequest) {
       }
       if (cuenta.diferenciaCents !== 0 && !nota) return { status: 400 as const, error: MENSAJE_NOTA_OBLIGATORIA }
 
+      const columnas = columnasDelCierre(cuenta)
       const cierre = await tx.cierreDeCaja.create({
         data: {
           businessId: actor.businessId,
@@ -294,13 +320,16 @@ export async function POST(request: NextRequest) {
           hasta,
           fecha: diaDelNegocio(hasta, zona),
           zona,
-          fondoInicialCents: cuenta.fondoInicialCents,
-          efectivoCobradoCents: cuenta.efectivoCobradoCents,
-          propinasEfectivoCents: cuenta.propinasEfectivoCents,
-          efectivoEsperadoCents: cuenta.efectivoEsperadoCents,
-          efectivoContadoCents: cuenta.efectivoContadoCents,
-          diferenciaCents: cuenta.diferenciaCents,
-          desglose: cuenta.desglose as unknown as Prisma.InputJsonValue,
+          // Las devoluciones de paquetes en efectivo ya vienen restadas en
+          // estas columnas (las CHECK no dejan guardarlas aparte); el detalle
+          // va en `desglose`.
+          fondoInicialCents: columnas.fondoInicialCents,
+          efectivoCobradoCents: columnas.efectivoCobradoCents,
+          propinasEfectivoCents: columnas.propinasEfectivoCents,
+          efectivoEsperadoCents: columnas.efectivoEsperadoCents,
+          efectivoContadoCents: columnas.efectivoContadoCents,
+          diferenciaCents: columnas.diferenciaCents,
+          desglose: columnas.desglose as unknown as Prisma.InputJsonValue,
           nota,
           cerradoPorId: usuarioId,
           cerradoPorNombre: (await nombreEnElNegocio(tx, actor, usuarioId)) ?? "Alguien del equipo",

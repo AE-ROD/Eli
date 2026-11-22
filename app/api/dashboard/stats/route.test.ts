@@ -22,6 +22,10 @@ const prismaMock = {
   visitPayment: {
     aggregate: vi.fn(),
   },
+  // Las devoluciones de paquetes restan de los ingresos: acá, ninguna.
+  paqueteDeCliente: {
+    aggregate: vi.fn(async () => ({ _sum: { devueltoCents: null } })),
+  },
   customer: {
     count: vi.fn(),
   },

@@ -84,8 +84,15 @@ function Renglon({
   )
 }
 
+/** `-$100.000`: plata que salió, con el menos adelante como la diferencia. */
+function salida(monto: number): string {
+  return formatearMonto(-monto)
+}
+
 function OtrosMedios({ desglose }: { desglose: Desglose }) {
-  if (desglose.otrosMedios.length === 0 && desglose.propinasOtrosMedios.length === 0) return null
+  // `?? []`: un cierre leído con una versión anterior de la pantalla abierta no trae la clave.
+  const devoluciones = desglose.devoluciones ?? []
+  if (desglose.otrosMedios.length === 0 && desglose.propinasOtrosMedios.length === 0 && devoluciones.length === 0) return null
   return (
     <div className="mt-3 rounded-[16px] bg-superficie p-3 text-sm squircle">
       <p className="font-medium">Otros medios (no están en el cajón)</p>
@@ -95,6 +102,13 @@ function OtrosMedios({ desglose }: { desglose: Desglose }) {
         ))}
         {desglose.propinasOtrosMedios.map((medio) => (
           <Renglon key={`t-${medio.medio}`} termino={`Propinas por ${medio.nombre.toLowerCase()}`} valor={formatearMonto(medio.monto)} />
+        ))}
+        {devoluciones.map((medio) => (
+          <Renglon
+            key={`d-${medio.medio}`}
+            termino={`Devoluciones de paquetes por ${medio.nombre.toLowerCase()}`}
+            valor={salida(medio.monto)}
+          />
         ))}
       </dl>
     </div>
@@ -300,6 +314,9 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
         {veLaLineaDePropinas(rubro, abierta.propinasEfectivo) && (
           <Renglon termino="Propinas en efectivo" valor={formatearMonto(abierta.propinasEfectivo)} grande />
         )}
+        {abierta.devolucionesEfectivo > 0 && (
+          <Renglon termino="Devoluciones de paquetes en efectivo" valor={salida(abierta.devolucionesEfectivo)} grande />
+        )}
       </dl>
       <OtrosMedios desglose={abierta.desglose} />
 
@@ -346,7 +363,8 @@ function CajaAbierta({ estado, actualizando, onActualizar, onCerrada, onCambio }
               />
             </dl>
             <p className="mt-2 text-xs text-texto-2">
-              Debería haber = la plata con que abriste + lo cobrado en efectivo. Si falta plata, la diferencia sale en
+              Debería haber = la plata con que abriste + lo cobrado en efectivo
+              {abierta.devolucionesEfectivo > 0 && " − lo que devolviste de paquetes en efectivo"}. Si falta plata, la diferencia sale en
               rojo con un menos (por ejemplo, -$2.000); si sobra, con un más.
             </p>
           </div>
@@ -453,6 +471,9 @@ function CampoDeMonto(props: {
   )
 }
 
+/** Cuántas columnas ocupa la cuenta de un cierre desde `sm`, según las cifras que muestra. */
+const COLUMNAS_DEL_CIERRE: Record<number, string> = { 4: "sm:grid-cols-4", 5: "sm:grid-cols-5", 6: "sm:grid-cols-6" }
+
 function CierresAnteriores({
   estado,
   cargando,
@@ -493,7 +514,9 @@ function CierresAnteriores({
                 <dl
                   className={cn(
                     "mt-2 grid grid-cols-1 gap-x-4 max-sm:divide-y max-sm:divide-borde",
-                    veLaLineaDePropinas(rubro, cierre.propinasEfectivo) ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                    COLUMNAS_DEL_CIERRE[
+                      4 + (veLaLineaDePropinas(rubro, cierre.propinasEfectivo) ? 1 : 0) + (cierre.devolucionesEfectivo > 0 ? 1 : 0)
+                    ]
                   )}
                 >
                   <Renglon termino="Con que abrió" valor={formatearMonto(cierre.fondoInicial)} />
@@ -501,9 +524,18 @@ function CierresAnteriores({
                   {veLaLineaDePropinas(rubro, cierre.propinasEfectivo) && (
                     <Renglon termino="Propinas en efectivo" valor={formatearMonto(cierre.propinasEfectivo)} />
                   )}
+                  {cierre.devolucionesEfectivo > 0 && (
+                    <Renglon termino="Devoluciones de paquetes" valor={salida(cierre.devolucionesEfectivo)} />
+                  )}
                   <Renglon termino="Debería haber" valor={formatearMonto(cierre.esperado)} />
                   <Renglon termino="Había" valor={formatearMonto(cierre.contado)} />
                 </dl>
+                {(cierre.desglose.devoluciones ?? []).length > 0 && (
+                  <p className="mt-1 text-texto-2">
+                    Devoluciones de paquetes por otros medios:{" "}
+                    {(cierre.desglose.devoluciones ?? []).map((medio) => `${medio.nombre} ${salida(medio.monto)}`).join(", ")}
+                  </p>
+                )}
                 {cierre.nota && <p className="mt-1 break-words text-texto-2">Nota: {cierre.nota}</p>}
                 <p className="mt-1 text-texto-2">Cerró {cierre.cerradoPor}</p>
               </li>

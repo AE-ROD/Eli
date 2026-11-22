@@ -83,14 +83,15 @@ describe("GET /api/cron/correos-de-prueba", () => {
     expect(respuesta.status).toBe(200)
   })
 
-  it("sólo pide negocios que reciben correos, de dueños sin baja y con la prueba vigente o recién vencida", async () => {
+  it("sólo pide negocios que reciben correos, de dueños sin baja y con el correo confirmado, y con la prueba vigente o recién vencida", async () => {
     const { GET } = await import("./route")
 
     await GET(autorizado())
 
     const { where, take } = prismaMock.business.findMany.mock.calls[0][0]
     expect(where.recibeCorreosDePrueba).toBe(true)
-    expect(where.user).toEqual({ correosDesactivados: false })
+    // Sin confirmar, la casilla puede ser de un tercero: esos negocios ni se leen.
+    expect(where.user).toEqual({ correosDesactivados: false, emailVerificadoEn: { not: null } })
     expect(where.pruebaTerminaEl.gt.getTime()).toBe(new Date("2026-10-23T13:00:00Z").getTime() - 36 * 60 * 60 * 1000)
     expect(take).toBe(100)
   })

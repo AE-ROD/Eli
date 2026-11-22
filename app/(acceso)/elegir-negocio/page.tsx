@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, contextosDeLaCuenta } from "@/lib/auth"
 import { opcionDeContexto } from "@/lib/contextos"
+import { negociosDeLosQueSalio } from "@/lib/salidas-del-equipo"
 import { ListaDeNegocios } from "./lista-de-negocios"
 
 export const metadata: Metadata = {
@@ -27,11 +28,15 @@ export default async function PaginaElegirNegocio() {
   const contextos = await contextosDeLaCuenta(userId)
   if (contextos.length === 0) redirect("/completar-perfil")
 
+  // Si la sacaron de un equipo hace poco, se le cuenta acá: llegó sin saber por qué ya no entra directo.
+  const salidas = await negociosDeLosQueSalio(userId, new Date())
+
   return (
     <ListaDeNegocios
       opciones={contextos.map(opcionDeContexto)}
       actual={session?.user?.contexto ?? null}
       puedeCrearSuNegocio={!contextos.some((contexto) => contexto.rol === "owner")}
+      salidas={salidas}
     />
   )
 }

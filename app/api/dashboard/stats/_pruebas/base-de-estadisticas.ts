@@ -47,6 +47,7 @@ export function crearBaseDeEstadisticas() {
     prisma: {
       ...base.prisma,
       visitPayment: { ...base.prisma.visitPayment, aggregate: agregado("visitPayment") },
+      paqueteDeCliente: { ...base.prisma.paqueteDeCliente, aggregate: agregado("paqueteDeCliente") },
       workSchedule: { findMany: vi.fn(async () => []) },
     },
   }

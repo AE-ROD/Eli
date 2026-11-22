@@ -479,6 +479,85 @@ export function resumirAtenciones(
   }
 }
 
+// ─── Devoluciones de paquetes ────────────────────────────────────────────────
+
+/** Lo no usado de un paquete que la dueña devolvió: plata que salió, en centavos positivos. */
+export interface DevolucionParaReporte {
+  devueltoAt: Date
+  devueltoCents: number
+  devueltoMedio: string
+  /** El servicio que cubría el paquete. */
+  serviceId: string
+}
+
+/**
+ * Qué devoluciones de paquetes del período restan con los filtros elegidos.
+ * La devolución resta el día en que se hizo y por el medio con que se
+ * devolvió, así que sigue al período, al turno y al medio igual que un cobro:
+ *
+ * - `turno`: sólo las hechas en ese turno.
+ * - `medio`: sólo las devueltas por ese medio.
+ * - `servicio`: sólo las de paquetes de ese servicio (el paquete es de un
+ *   servicio, así que el cruce es exacto).
+ * - `profesional`: ninguna. Una devolución no es de un profesional (el
+ *   paquete se vende sin comisión y lo devuelve la dueña): restarla de "lo
+ *   que generó Carla" sería inventar a quién se le quita. No se resta ni se
+ *   muestra; se ve al quitar ese filtro.
+ */
+export function devolucionesQueRestan(
+  devoluciones: readonly DevolucionParaReporte[],
+  filtros: FiltrosDeReporte
+): DevolucionParaReporte[] {
+  if (filtros.profesional) return []
+  return devoluciones.filter(
+    (devolucion) =>
+      (!filtros.turno || turnoDe(devolucion.devueltoAt, filtros.zona) === filtros.turno) &&
+      (!filtros.medio || devolucion.devueltoMedio === filtros.medio) &&
+      (!filtros.servicio || devolucion.serviceId === filtros.servicio)
+  )
+}
+
+export interface ResumenConDevoluciones extends ResumenDeReporte {
+  /** Sólo si hubo alguna que reste: cuánto se devolvió de paquetes y cuántas devoluciones fueron. */
+  devoluciones?: { monto: number; cantidad: number }
+}
+
+/**
+ * Resta del resumen las devoluciones de paquetes (ya filtradas con
+ * `devolucionesQueRestan`): de los ingresos, y del desglose por medio en el
+ * medio con que se devolvió (si ese medio no tuvo cobros, aparece en
+ * negativo). Lo demás no cambia: la cantidad y el ticket promedio son de las
+ * atenciones cobradas, y los desgloses por profesional y por servicio son de
+ * líneas atendidas, no de plata devuelta. Sin devoluciones, devuelve el
+ * resumen tal cual, sin la clave.
+ */
+export function restarDevoluciones(
+  resumen: ResumenDeReporte,
+  devoluciones: readonly DevolucionParaReporte[]
+): ResumenConDevoluciones {
+  if (devoluciones.length === 0) return resumen
+  const devueltoCents = sumar(devoluciones.map((devolucion) => devolucion.devueltoCents))
+
+  let porMedio = resumen.porMedio
+  if (porMedio) {
+    const centavosPorMedio = new Map(porMedio.map(({ medio, monto }) => [medio, Math.round(monto * 100)]))
+    for (const { devueltoMedio, devueltoCents: centavos } of devoluciones) {
+      centavosPorMedio.set(devueltoMedio, (centavosPorMedio.get(devueltoMedio) ?? 0) - centavos)
+    }
+    porMedio = [...centavosPorMedio.entries()]
+      .map(([medio, centavos]) => ({ medio, nombre: nombreDeMedio(medio), centavos }))
+      .sort((a, b) => b.centavos - a.centavos || a.nombre.localeCompare(b.nombre, "es"))
+      .map(({ medio, nombre, centavos }) => ({ medio, nombre, monto: deCentavos(centavos) }))
+  }
+
+  return {
+    ...resumen,
+    ingresos: deCentavos(Math.round(resumen.ingresos * 100) - devueltoCents),
+    porMedio,
+    devoluciones: { monto: deCentavos(devueltoCents), cantidad: devoluciones.length },
+  }
+}
+
 // ─── Cómo se titula ──────────────────────────────────────────────────────────
 
 /** "en efectivo", "con tarjeta de débito": el medio dicho dentro de una frase. */

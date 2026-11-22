@@ -26,3 +26,15 @@ describe("cuentaEnPantalla", () => {
     expect(cuentaEnPantalla(abierta, "0", "9.000").diferencia).toBe(-1000.3)
   })
 })
+
+describe("cuentaEnPantalla con devoluciones de paquetes", () => {
+  it("lo devuelto en efectivo resta del esperado", () => {
+    const abierta = { efectivoCobrado: 300000, propinasEfectivo: 0, devolucionesEfectivo: 100000 }
+    expect(cuentaEnPantalla(abierta, "20.000", "220.000")).toMatchObject({ esperado: 220000, diferencia: 0 })
+  })
+
+  it("el esperado no baja de 0", () => {
+    const abierta = { efectivoCobrado: 0, propinasEfectivo: 0, devolucionesEfectivo: 100000 }
+    expect(cuentaEnPantalla(abierta, "30.000", "0")).toMatchObject({ esperado: 0, diferencia: 0 })
+  })
+})

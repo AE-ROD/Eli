@@ -3,12 +3,14 @@ import {
   IDS_DE_TURNOS,
   TURNOS,
   cumpleFiltros,
+  devolucionesQueRestan,
   diaEn,
   esZonaHorariaValida,
   horaEn,
   inicioDelDiaEn,
   iniciosDeMesEn,
   lineaCumpleFiltros,
+  restarDevoluciones,
   resumirAtenciones,
   rotuloDeIngresos,
   turnoDe,
@@ -565,5 +567,55 @@ describe("rotuloDeIngresos", () => {
     expect(rotuloDeIngresos(false, { profesional: "", servicio: "Color", medio: "transferencia" })).toBe(
       "Ingresos · Color · atenciones con algún pago con transferencia"
     )
+  })
+})
+
+describe("devoluciones de paquetes", () => {
+  const zona = "America/Santiago"
+  const devoluciones = [
+    // 11:00 en Santiago: mañana.
+    { devueltoAt: instante("2026-10-06T14:00:00.000Z"), devueltoCents: 1_000_000, devueltoMedio: "efectivo", serviceId: "s-color" },
+    // 16:00: tarde.
+    { devueltoAt: instante("2026-10-06T19:00:00.000Z"), devueltoCents: 400_050, devueltoMedio: "transferencia", serviceId: "s-corte" },
+  ]
+
+  it("qué devoluciones restan: siguen al turno, al medio y al servicio; con profesional, ninguna", () => {
+    expect(devolucionesQueRestan(devoluciones, { zona })).toEqual(devoluciones)
+    expect(devolucionesQueRestan(devoluciones, { zona, turno: "tarde" })).toEqual([devoluciones[1]])
+    expect(devolucionesQueRestan(devoluciones, { zona, medio: "efectivo" })).toEqual([devoluciones[0]])
+    expect(devolucionesQueRestan(devoluciones, { zona, servicio: "s-corte" })).toEqual([devoluciones[1]])
+    expect(devolucionesQueRestan(devoluciones, { zona, servicio: "s-corte", medio: "efectivo" })).toEqual([])
+    expect(devolucionesQueRestan(devoluciones, { zona, profesional: "m-carla" })).toEqual([])
+    expect(devolucionesQueRestan(devoluciones, { zona, profesional: "m-carla", servicio: "s-corte" })).toEqual([])
+  })
+
+  const resumen = {
+    ingresos: 30000,
+    cantidad: 2,
+    ticketPromedio: 15000,
+    porMedio: [
+      { medio: "efectivo", nombre: "Efectivo", monto: 20000 },
+      { medio: "tarjeta-debito", nombre: "Tarjeta de débito", monto: 10000 },
+    ],
+    porProfesional: [],
+    porServicio: [],
+  }
+
+  it("restan de los ingresos y de su medio, al centavo; un medio sin cobros queda en negativo", () => {
+    expect(restarDevoluciones(resumen, devoluciones)).toEqual({
+      ...resumen,
+      ingresos: 15999.5,
+      porMedio: [
+        { medio: "efectivo", nombre: "Efectivo", monto: 10000 },
+        { medio: "tarjeta-debito", nombre: "Tarjeta de débito", monto: 10000 },
+        { medio: "transferencia", nombre: "Transferencia", monto: -4000.5 },
+      ],
+      devoluciones: { monto: 14000.5, cantidad: 2 },
+    })
+  })
+
+  it("un desglose por medio que no aplica sigue en null; sin devoluciones, el resumen no cambia", () => {
+    expect(restarDevoluciones({ ...resumen, porMedio: null }, devoluciones).porMedio).toBeNull()
+    expect(restarDevoluciones(resumen, [])).toBe(resumen)
   })
 })

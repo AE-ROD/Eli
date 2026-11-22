@@ -542,3 +542,165 @@ describe("GET /api/reportes: validación", () => {
     expect(status).toBe(401)
   })
 })
+
+/** Un paquete devuelto, con la línea donde se vendió (en una atención de antes del período). */
+function devuelto(n: string, devueltoAt: string, medio: string, monto: number, datos: Record<string, unknown> = {}) {
+  const ajeno = datos.businessId === OTRO_NEGOCIO
+  return {
+    linea: linea(`l-venta-${n}`, ajeno ? "v-ajena" : "v-de-ayer", {
+      serviceId: ajeno ? "s-ajeno" : "s-color",
+      serviceName: "Paquete de 6 sesiones",
+      priceCents: centavos(150000),
+      ...(ajeno && { memberId: "m-ajeno" }),
+    }),
+    paquete: {
+      id: `pq-${n}`,
+      businessId: NEGOCIO,
+      customerId: "c-maria",
+      serviceId: "s-color",
+      serviceName: "Color",
+      sesiones: 6,
+      priceCents: centavos(150000),
+      valorPorSesionCents: centavos(25000),
+      lineaDeVentaId: `l-venta-${n}`,
+      vendidoAt: new Date("2026-08-01T15:00:00.000Z"),
+      devueltoAt: new Date(devueltoAt),
+      devueltoCents: centavos(monto),
+      devueltoMedio: medio,
+      devueltoPorId: "u-duena",
+      devueltoPorNombre: "Ana Dueña",
+      ...datos,
+    },
+  }
+}
+
+describe("GET /api/reportes: devoluciones de paquetes", () => {
+  function conDevoluciones() {
+    const devueltos = [
+      // 11:00 en Santiago (mañana), en efectivo, paquete de Color.
+      devuelto("efectivo", "2026-10-06T14:00:00.000Z", "efectivo", 10000),
+      // 16:00 (tarde), por transferencia, paquete de Corte.
+      devuelto("transferencia", "2026-10-06T19:00:00.000Z", "transferencia", 4000, { serviceId: "s-corte", serviceName: "Corte" }),
+      // Por un medio sin cobros en el día: aparece en negativo.
+      devuelto("debito", "2026-10-06T19:30:00.000Z", "tarjeta-debito", 1000),
+      // Del día anterior: fuera del período.
+      devuelto("ayer", "2026-10-05T15:00:00.000Z", "efectivo", 70000),
+      // De otro negocio: jamás.
+      devuelto("ajeno", "2026-10-06T14:00:00.000Z", "efectivo", 90000, { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", serviceId: "s-ajeno" }),
+    ]
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visitService: [...datos.visitService, ...devueltos.map((d) => d.linea)],
+      paqueteDeCliente: devueltos.map((d) => d.paquete),
+    })
+  }
+
+  beforeEach(conDevoluciones)
+
+  it("sin devoluciones en el período, el resumen no trae la clave", async () => {
+    base.reiniciar(escenario())
+    const { data } = await pedir(sesiones.dueña)
+    expect(data.resumen).not.toHaveProperty("devoluciones")
+    expect(data.resumen.ingresos).toBe(103000)
+  })
+
+  it("restan del total cobrado y de su medio; la cantidad y el ticket son de las atenciones", async () => {
+    const { data } = await pedir(sesiones.dueña)
+
+    // 103.000 cobrados − 10.000 − 4.000 − 1.000.
+    expect(data.resumen.ingresos).toBe(88000)
+    expect(data.resumen.devoluciones).toEqual({ monto: 15000, cantidad: 3 })
+    expect(data.resumen.cantidad).toBe(5)
+    expect(data.resumen.ticketPromedio).toBe(20600)
+    const porMedio = Object.fromEntries(data.resumen.porMedio.map((m: { medio: string; monto: number }) => [m.medio, m.monto]))
+    expect(porMedio).toEqual({
+      efectivo: 30000,
+      transferencia: 21000,
+      "billetera-digital": 25000,
+      "tarjeta-credito": 13000,
+      "tarjeta-debito": -1000,
+    })
+    // Las filas siguen siendo atenciones: una devolución no es una fila.
+    expect(data.total).toBe(5)
+  })
+
+  it("el encargado también las ve", async () => {
+    const { data } = await pedir(sesiones.encargado)
+    expect(data.resumen.devoluciones).toEqual({ monto: 15000, cantidad: 3 })
+  })
+
+  it("con filtro de medio: sólo las devueltas por ese medio", async () => {
+    const { data } = await pedir(sesiones.dueña, "medio=efectivo")
+    // 40.000 en efectivo − 10.000.
+    expect(data.resumen.ingresos).toBe(30000)
+    expect(data.resumen.porMedio).toEqual([{ medio: "efectivo", nombre: "Efectivo", monto: 30000 }])
+    expect(data.resumen.devoluciones).toEqual({ monto: 10000, cantidad: 1 })
+  })
+
+  it("con filtro de turno: sólo las hechas en ese turno", async () => {
+    const { data } = await pedir(sesiones.dueña, "turno=manana")
+    expect(data.resumen.ingresos).toBe(33000 - 10000)
+    expect(data.resumen.devoluciones).toEqual({ monto: 10000, cantidad: 1 })
+  })
+
+  it("con filtro de servicio: sólo las de paquetes de ese servicio", async () => {
+    const { data } = await pedir(sesiones.dueña, "servicio=s-corte")
+    const sinDevoluciones = (base.reiniciar(escenario()), (await pedir(sesiones.dueña, "servicio=s-corte")).data.resumen.ingresos)
+    expect(data.resumen.ingresos).toBe(sinDevoluciones - 4000)
+    expect(data.resumen.devoluciones).toEqual({ monto: 4000, cantidad: 1 })
+    expect(data.resumen.porMedio).toBeNull()
+  })
+
+  it("con filtro de profesional no se restan ni se muestran: una devolución no es de un profesional", async () => {
+    const { data } = await pedir(sesiones.dueña, "profesional=m-carla")
+    base.reiniciar(escenario())
+    const sin = await pedir(sesiones.dueña, "profesional=m-carla")
+    expect(data.resumen).toEqual(sin.data.resumen)
+    expect(data.resumen).not.toHaveProperty("devoluciones")
+  })
+
+  it("la profesional no ve devoluciones ni se le restan, y no se consultan", async () => {
+    const { data } = await pedir(sesiones.carla)
+    expect(data.resumen).not.toHaveProperty("devoluciones")
+    expect(base.prisma.paqueteDeCliente.findMany).not.toHaveBeenCalled()
+    base.reiniciar(escenario())
+    expect(data.resumen).toEqual((await pedir(sesiones.carla)).data.resumen)
+  })
+
+  it("el otro negocio ve sólo la suya", async () => {
+    const { data } = await pedir(sesiones.dueñoAjeno)
+    expect(data.resumen.devoluciones).toEqual({ monto: 90000, cantidad: 1 })
+    expect(data.resumen.ingresos).toBe(9000 - 90000)
+  })
+})
+
+describe("GET /api/reportes?anuladas=1: lo pagado con paquete no es plata anulada", () => {
+  it("el monto anulado no cuenta lo que estaba pagado con una sesión de paquete", async () => {
+    const datos = escenario()
+    base.reiniciar({
+      ...datos,
+      visit: [
+        ...datos.visit,
+        // Corte de 8.000 pagado con una sesión de paquete + 5.000 en efectivo por otra cosa.
+        anulada("v-anulada-con-paquete", "2026-10-06T19:00:00.000Z", {
+          paidAt: new Date("2026-10-06T16:30:00.000Z"),
+          totalCents: centavos(13000),
+          voidedById: "u-duena",
+          voidedByName: "Ana Dueña",
+        }),
+      ],
+      visitService: [...datos.visitService, linea("l-anulada-con-paquete", "v-anulada-con-paquete")],
+      visitPayment: [
+        ...datos.visitPayment,
+        pago("p-anulada-paquete", "v-anulada-con-paquete", "paquete", 8000),
+        pago("p-anulada-efectivo", "v-anulada-con-paquete", "efectivo", 5000),
+      ],
+    })
+
+    const { data } = await pedir(sesiones.dueña, "anuladas=1")
+
+    // 8.000 de la que ya estaba + 5.000 en efectivo de ésta; los 8.000 con paquete nunca entraron ese día.
+    expect(data.resumen).toEqual({ cantidad: 4, montoAnulado: 13000 })
+  })
+})

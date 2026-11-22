@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { NEGOCIO, OTRO_NEGOCIO, atencion, datosBase, pago, sesiones } from "@/pruebas/datos"
+import { NEGOCIO, OTRO_NEGOCIO, atencion, centavos, datosBase, linea, pago, sesiones } from "@/pruebas/datos"
 import { crearBaseDeEstadisticas } from "./_pruebas/base-de-estadisticas"
 
 /**
@@ -182,5 +182,82 @@ describe("GET /api/dashboard/stats: la zona del navegador no cuenta", () => {
     expect(res.status).toBe(200)
     expect(data.zona).toBe("America/Santiago")
     expect(data.ingresosMes).toBe(33000.3)
+  })
+})
+
+/** Un paquete devuelto, con la línea donde se vendió (en una atención de antes del período). */
+function devuelto(n: string, devueltoAt: string, medio: string, monto: number, datos: Record<string, unknown> = {}) {
+  const ajeno = datos.businessId === OTRO_NEGOCIO
+  return {
+    linea: linea(`l-venta-${n}`, ajeno ? "v-ajena" : "v-septiembre", {
+      serviceId: ajeno ? "s-ajeno" : "s-color",
+      serviceName: "Paquete de 6 sesiones",
+      priceCents: centavos(150000),
+      ...(ajeno && { memberId: "m-ajeno" }),
+    }),
+    paquete: {
+      id: `pq-${n}`,
+      businessId: NEGOCIO,
+      customerId: "c-maria",
+      serviceId: "s-color",
+      serviceName: "Color",
+      sesiones: 6,
+      priceCents: centavos(150000),
+      valorPorSesionCents: centavos(25000),
+      lineaDeVentaId: `l-venta-${n}`,
+      vendidoAt: new Date("2026-08-01T15:00:00.000Z"),
+      devueltoAt: new Date(devueltoAt),
+      devueltoCents: centavos(monto),
+      devueltoMedio: medio,
+      devueltoPorId: "u-duena",
+      devueltoPorNombre: "Ana Dueña",
+      ...datos,
+    },
+  }
+}
+
+describe("GET /api/dashboard/stats: las devoluciones de paquetes restan", () => {
+  function conDevoluciones(devueltos: ReturnType<typeof devuelto>[]) {
+    base.reiniciar({
+      ...escenario(),
+      visitService: devueltos.map((d) => d.linea),
+      paqueteDeCliente: devueltos.map((d) => d.paquete),
+    })
+  }
+
+  it("lo devuelto en el mes resta de lo cobrado en el mes; lo de otro negocio, jamás", async () => {
+    conDevoluciones([
+      devuelto("octubre", "2026-10-07T15:00:00.000Z", "efectivo", 3000),
+      devuelto("octubre-2", "2026-10-12T15:00:00.000Z", "transferencia", 1000.3),
+      devuelto("ajeno", "2026-10-07T15:00:00.000Z", "efectivo", 50000, { businessId: OTRO_NEGOCIO, customerId: "c-ajeno", serviceId: "s-ajeno" }),
+    ])
+
+    const { data } = await pedir(sesiones.dueña)
+    // 33.000,30 cobrados − 3.000 − 1.000,30.
+    expect(data.ingresosMes).toBe(29000)
+    // Las atenciones cobradas siguen siendo las mismas.
+    expect(data.atencionesCobradasMes).toBe(2)
+
+    expect((await pedir(sesiones.dueñoAjeno)).data.ingresosMes).toBe(99000 - 50000)
+  })
+
+  it("lo devuelto el mes pasado resta del mes pasado (el borde es el de la zona del negocio), no de éste", async () => {
+    conDevoluciones([
+      // 30 de septiembre a las 22:30 en Santiago.
+      devuelto("borde", BORDE, "efectivo", 9000),
+    ])
+
+    const { data } = await pedir(sesiones.dueña)
+    expect(data.ingresosMes).toBe(33000.3)
+    // Septiembre: 18.000 − 9.000 = 9.000. (33.000,30 − 9.000) / 9.000 = 267 %.
+    expect(data.tendencias.ingresos).toBe(267)
+  })
+
+  it("el profesional no recibe nada de esto, y no se consulta", async () => {
+    conDevoluciones([devuelto("octubre", "2026-10-07T15:00:00.000Z", "efectivo", 3000)])
+
+    const { data } = await pedir(sesiones.carla)
+    expect(data).not.toHaveProperty("ingresosMes")
+    expect(base.prisma.paqueteDeCliente.aggregate).not.toHaveBeenCalled()
   })
 })

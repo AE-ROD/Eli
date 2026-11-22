@@ -279,9 +279,11 @@ export const authOptions: NextAuthOptions = {
         if (existente?.password) return `/iniciar-sesion?error=${ERROR_CUENTA_CON_CONTRASENA}`
 
         if (!existente) {
-          // Sin contraseña: este usuario sólo puede entrar por Google.
+          // Sin contraseña: este usuario sólo puede entrar por Google. Nace
+          // con el correo confirmado: Google ya lo entregó verificado (el
+          // `email_verified` de arriba), así que no se le pide confirmarlo.
           await prisma.user.create({
-            data: { name: user.name ?? "Usuario", email, password: "" },
+            data: { name: user.name ?? "Usuario", email, password: "", emailVerificadoEn: new Date() },
           })
         }
         return true

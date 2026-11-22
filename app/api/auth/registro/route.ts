@@ -7,7 +7,7 @@ import { slugDelNombre } from "@/lib/slug"
 import { registroSchema } from "@/lib/validaciones"
 import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import { finDeLaPrueba, generarCodigoInvitacion } from "@/lib/prueba"
-import { enviarBienvenida } from "@/lib/enviar-correo-de-prueba"
+import { enviarEnlaceDeVerificacion, nuevaVerificacion } from "@/lib/verificacion-de-correo-servidor"
 import { negocioQueInvita } from "@/lib/referidos"
 import { registrarError } from "@/lib/registro-de-errores"
 import { serviciosDeEjemplo } from "@/lib/servicios-de-ejemplo"
@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
     const slug = await slugUnico(datos.nombreNegocio)
     // La prueba se cuenta desde este mismo instante, que es también el `createdAt`.
     const ahora = new Date()
+    // El enlace de "Confirma tu correo": nadie comprobó todavía que la casilla
+    // sea de quien se registra. A la base va sólo el hash, en la misma
+    // escritura que la cuenta; el token en claro, sólo al enlace del correo.
+    const verificacion = nuevaVerificacion(ahora)
 
     const crear = (invitadoPor: string | null) =>
       prisma.user.create({
@@ -75,6 +79,7 @@ export async function POST(request: NextRequest) {
           name: datos.nombre,
           email: datos.email,
           password: passwordHash,
+          ...verificacion.datos,
           business: {
             create: {
               name: datos.nombreNegocio,
@@ -124,9 +129,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Después de responder: el registro no espera al correo, y si el correo
-    // falla la cuenta igual queda creada (el cron reintenta la bienvenida).
-    const businessId = usuario.business?.id
-    if (businessId) after(() => enviarBienvenida(businessId))
+    // falla la cuenta igual queda creada (se pide otro enlace desde el aviso
+    // del panel). La bienvenida del ciclo de prueba ya no sale acá: sale
+    // cuando confirma el correo (`lib/verificacion-de-correo-servidor.ts`),
+    // para que no le llegue a un tercero si el correo no es suyo.
+    const destinatario = { email: usuario.email, name: usuario.name }
+    after(() => enviarEnlaceDeVerificacion(destinatario, verificacion.token))
 
     return NextResponse.json({
       id: usuario.id,

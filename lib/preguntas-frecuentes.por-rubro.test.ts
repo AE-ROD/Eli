@@ -74,8 +74,8 @@ function comoPalabras(texto: string): string {
 describe("sin rubro: exactamente los textos de siempre", () => {
   const neutras = preguntasDelRubro(null)
 
-  it("son las mismas 45 preguntas, en el mismo orden", () => {
-    expect(PREGUNTAS_DE_SIEMPRE).toHaveLength(45)
+  it("son las mismas 63 preguntas, en el mismo orden", () => {
+    expect(PREGUNTAS_DE_SIEMPRE).toHaveLength(63)
     expect(idsDe(neutras)).toEqual(idsDe(PREGUNTAS_DE_SIEMPRE))
   })
 
@@ -166,8 +166,11 @@ describe("las palabras del rubro", () => {
   })
 
   it("el vocabulario cambia las palabras y nada más: las mismas preguntas, con los mismos ids y el mismo orden", () => {
+    // La clínica dental no ve las que declaran `sinClinica` (los paquetes de sesiones); el resto, igual.
+    const sinClinica = new Set(CATALOGO.filter((pregunta) => pregunta.sinClinica).map((pregunta) => pregunta.id))
     for (const rubro of RUBROS) {
-      expect(idsDe(preguntasDelRubro(rubro.id)), rubro.nombre).toEqual(idsDe(PREGUNTAS_FRECUENTES))
+      const esperadas = idsDe(PREGUNTAS_FRECUENTES).filter((id) => rubro.id !== "odontologia" || !sinClinica.has(id))
+      expect(idsDe(preguntasDelRubro(rubro.id)), rubro.nombre).toEqual(esperadas)
     }
   })
 })
@@ -276,7 +279,7 @@ describe("la concordancia", () => {
 
 describe('"hora" y el reloj', () => {
   it("donde la reserva se llama hora y la frase se leería como minutos, se escribe de otra forma", () => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas"]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica"]) {
       expect(textoDe("agenda-cambiar-hora", rubro), rubro).toContain("¿Puedo reprogramar una hora?")
       expect(textoDe("agenda-cambiar-hora", rubro), rubro).toContain('Abre la reserva en la agenda y toca "Cambiar fecha y hora"')
       expect(textoDe("agenda-profesional-ve", rubro), rubro).toContain("¿Qué agenda ve cada")
@@ -297,7 +300,7 @@ describe('"hora" y el reloj', () => {
   })
 
   it('ninguna pregunta de belleza dice "hora" donde se lee como reloj', () => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas"]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica"]) {
       for (const pregunta of preguntasDelRubro(rubro)) {
         expect(textoVisible(pregunta), pregunta.id).not.toMatch(/hora de una hora|horas ve cada|últimas horas|tus horas|la hora aparece/i)
       }
@@ -336,7 +339,7 @@ describe("lo que no corresponde a la clínica dental", () => {
   })
 
   it("y se muestra en todos los demás, también sin rubro o con uno desconocido", () => {
-    for (const rubro of ["salon", "barberia", "spa-de-unas", null, undefined, "", "salud", "fitness", "otro"]) {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica", null, undefined, "", "salud", "fitness", "otro"]) {
       expect(idsDe(preguntasDelRubro(rubro, DE_PRUEBA)), String(rubro)).toEqual(["agendar", "hora-valle", "cobrar"])
     }
   })
@@ -372,6 +375,116 @@ describe("lo que no corresponde a la clínica dental", () => {
         if (area.valor === "otro") expect(sugeridas, dondeEstan).toEqual([])
         else expect(sugeridas.length, dondeEstan).toBeGreaterThanOrEqual(1)
       }
+    }
+  })
+})
+
+describe("los paquetes de sesiones", () => {
+  const esDePaquetes = (pregunta: PreguntaFrecuente) => pregunta.id.startsWith("paquetes-")
+  const DE_PAQUETES = [
+    "paquetes-que-es",
+    "paquetes-crear",
+    "paquetes-vender",
+    "paquetes-usar-sesion",
+    "paquetes-mismo-dia",
+    "paquetes-anular-atencion",
+    "paquetes-cuantas-quedan",
+    "paquetes-vencimiento",
+    "paquetes-devolver",
+    "paquetes-reportes-cero",
+    "paquetes-comision",
+  ]
+
+  it("no aparecen en la clínica dental, ni por su id ni por lo que dicen", () => {
+    const clinica = preguntasDelRubro("odontologia")
+    expect(clinica.filter(esDePaquetes)).toEqual([])
+    for (const pregunta of clinica) {
+      expect(comoPalabras(textoVisible(pregunta)), pregunta.id).not.toMatch(/ paquetes? /)
+    }
+    expect(buscarPreguntas("paquete", { preguntas: clinica })).toEqual([])
+  })
+
+  it("aparecen todas en el salón, la barbería, el salón de uñas, el centro de estética y sin rubro", () => {
+    for (const rubro of ["salon", "barberia", "spa-de-unas", "estetica", null]) {
+      expect(idsDe(preguntasDelRubro(rubro).filter(esDePaquetes)).sort(), String(rubro)).toEqual([...DE_PAQUETES].sort())
+    }
+  })
+
+  it("el centro de estética tiene las mismas preguntas que el salón, con sus palabras", () => {
+    expect(idsDe(preguntasDelRubro("estetica"))).toEqual(idsDe(preguntasDelRubro("salon")))
+    expect(textoDe("paquetes-comision", "estetica")).toContain("¿Cuándo gana su comisión la cosmetóloga por un paquete?")
+    expect(textoDe("paquetes-comision", "barberia")).toContain("¿Cuándo gana su comisión el barbero por un paquete?")
+  })
+
+  it("usan los nombres de la pantalla y no prometen comprar en la página de reservas", () => {
+    expect(textoDe("paquetes-crear", "estetica")).toContain('busca "Paquetes de sesiones"')
+    expect(textoDe("paquetes-crear", "estetica")).toContain('toca "Crear paquete"')
+    expect(textoDe("paquetes-crear", "estetica")).toContain('("No vence", o 3, 6 o 12 meses)')
+    expect(textoDe("paquetes-vender", "estetica")).toContain('Toca "Vender paquete"')
+    expect(textoDe("paquetes-vender", "estetica")).toContain("en tu página de reservas no se compran")
+    expect(textoDe("paquetes-usar-sesion", "estetica")).toContain('"Usar 1 sesión de su paquete"')
+    expect(textoDe("paquetes-mismo-dia", "estetica")).toContain('"Usar la primera sesión hoy"')
+    expect(textoDe("paquetes-devolver", "estetica")).toContain("Solo el dueño puede devolver.")
+    expect(textoDe("paquetes-comision", "estetica")).toContain("Al atender cada sesión, no al vender el paquete.")
+  })
+
+  it("la búsqueda las encuentra", () => {
+    const estetica = preguntasDelRubro("estetica")
+    expect(idsDe(buscarPreguntas("vender paquete", { preguntas: estetica }))[0]).toBe("paquetes-vender")
+    expect(idsDe(buscarPreguntas("devolucion", { preguntas: estetica }))).toContain("paquetes-devolver")
+    expect(idsDe(buscarPreguntas("pack", { preguntas: estetica })).sort()).toEqual([...DE_PAQUETES].sort())
+  })
+})
+
+describe("sacar a alguien del equipo", () => {
+  const DE_SACAR = [
+    "equipo-sacar-como",
+    "equipo-sacar-quien",
+    "equipo-sacar-no-deja",
+    "equipo-sacar-plata",
+    "equipo-sacar-historial",
+    "equipo-sacar-acceso",
+    "equipo-sacar-vuelve",
+  ]
+
+  it("está en todos los rubros, también en la clínica dental", () => {
+    for (const rubro of RUBROS) {
+      const ids = idsDe(preguntasDelRubro(rubro.id))
+      for (const id of DE_SACAR) expect(ids, `${rubro.nombre} / ${id}`).toContain(id)
+    }
+  })
+
+  it("habla con las palabras del rubro", () => {
+    expect(textoDe("equipo-sacar-quien", "salon")).toContain("El encargado, solo a las estilistas. Una estilista no puede sacar a nadie.")
+    expect(textoDe("equipo-sacar-quien", "odontologia")).toContain("El encargado, solo a los odontólogos. Un odontólogo no puede sacar a nadie.")
+    expect(textoDe("equipo-sacar-no-deja", "estetica")).toContain("todavía tiene horas por delante o una atención abierta en el Tablero")
+    expect(textoDe("equipo-sacar-no-deja", "odontologia")).toContain("todavía tiene citas por delante o una atención abierta en la Sala de espera")
+    expect(textoDe("equipo-sacar-como", null)).toContain('Toca "Sacar del equipo"')
+  })
+
+  it("quien busca borrar o eliminar a alguien la encuentra", () => {
+    expect(idsDe(buscarPreguntas("eliminar", { area: "equipo" }))).toContain("equipo-sacar-como")
+    expect(idsDe(preguntasParaFallas("equipo", 3))).toContain("equipo-sacar-no-deja")
+  })
+})
+
+describe("cómo están escritas las preguntas nuevas", () => {
+  const esNueva = (pregunta: PreguntaFrecuente) => pregunta.id.startsWith("paquetes-") || pregunta.id.startsWith("equipo-sacar-")
+
+  it("ninguna usa jerga: transacción, endpoint, archivar ni FK", () => {
+    for (const rubro of RUBROS) {
+      const nuevas = preguntasDelRubro(rubro.id).filter(esNueva)
+      expect(nuevas.length, rubro.nombre).toBeGreaterThan(0)
+      for (const pregunta of nuevas) {
+        const dondeEstan = `${rubro.nombre} / ${pregunta.id}`
+        expect(textoVisible(pregunta), dondeEstan).not.toMatch(/transacci[oó]n|endpoint|archiv|\bFK\b/i)
+      }
+    }
+  })
+
+  it("ninguna promete WhatsApp ni pagos en línea", () => {
+    for (const pregunta of preguntasDelRubro("estetica").filter(esNueva)) {
+      expect(textoVisible(pregunta), pregunta.id).not.toMatch(/whatsapp|pagar en línea|en línea/i)
     }
   })
 })
@@ -637,6 +750,72 @@ const PREGUNTAS_DE_SIEMPRE: readonly PreguntaFrecuente[] = [
     palabrasClave: ["permisos", "rol", "cobrar", "profesional", "no me deja"],
     paraFallas: true,
   },
+  {
+    id: "paquetes-que-es",
+    area: "tablero",
+    pregunta: "¿Qué es un paquete de sesiones?",
+    respuesta: [
+      "Son varias sesiones de un servicio que tu cliente paga de una vez, a mejor precio. Por ejemplo, \"6 sesiones de Depilación láser por $150.000\".",
+      "Tú creas el paquete, lo vendes al cobrar y Eli lleva la cuenta de las sesiones que quedan.",
+    ],
+    palabrasClave: ["paquete", "pack", "sesiones", "bono", "promoción", "prepago"],
+  },
+  {
+    id: "paquetes-crear",
+    area: "tablero",
+    pregunta: "¿Cómo creo un paquete de sesiones?",
+    respuesta: [
+      "1. Entra a Configuración y busca \"Paquetes de sesiones\".",
+      "2. Toca \"Crear paquete\".",
+      "3. Elige el servicio, escribe cuántas sesiones trae (entre 2 y 50) y el precio del paquete completo.",
+      "4. Elige hasta cuándo vale (\"No vence\", o 3, 6 o 12 meses) y toca \"Crear paquete\".",
+      "Mientras escribes, Eli te muestra en cuánto queda cada sesión. Los paquetes los crean el dueño y el encargado.",
+    ],
+    palabrasClave: ["crear paquete", "nuevo paquete", "armar", "configuración", "precio", "pack"],
+  },
+  {
+    id: "paquetes-vender",
+    area: "tablero",
+    pregunta: "¿Cómo vendo un paquete?",
+    respuesta: [
+      "1. En el Tablero, toca \"Cobrar\" en la atención del cliente.",
+      "2. Toca \"Vender paquete\" y elige el paquete.",
+      "3. Registra el pago como siempre. El paquete se suma al total y la plata entra ese día.",
+      "El paquete queda a nombre del cliente, así que la atención tiene que ser de alguien de tu lista de Clientes.",
+      "Los paquetes se venden solo al cobrar: en tu página de reservas no se compran.",
+    ],
+    palabrasClave: ["vender paquete", "cobrar paquete", "no me deja vender", "pack", "página de reservas"],
+  },
+  {
+    id: "paquetes-usar-sesion",
+    area: "tablero",
+    pregunta: "¿Cómo descuento una sesión del paquete?",
+    respuesta: [
+      "El cobro lo ofrece solo. Al cobrar un servicio para el que el cliente tiene un paquete, aparece marcado \"Usar 1 sesión de su paquete\", con las sesiones que le quedan.",
+      "Ese servicio queda cubierto por el paquete y se paga solo lo demás. Si esta vez prefiere pagarlo aparte, desmarca la casilla.",
+    ],
+    palabrasClave: ["usar sesión", "descontar", "canjear", "ocupar sesión", "cubierta por el paquete", "pack"],
+  },
+  {
+    id: "paquetes-mismo-dia",
+    area: "tablero",
+    pregunta: "Compró el paquete y se atiende hoy mismo, ¿qué hago?",
+    respuesta: [
+      "Todo va en el mismo cobro. Al agregar el paquete con \"Vender paquete\", queda marcado \"Usar la primera sesión hoy\": el servicio de hoy queda cubierto y se paga solo el paquete.",
+      "Si hoy no va a usar ninguna sesión, desmarca la casilla.",
+    ],
+    palabrasClave: ["primera sesión", "mismo día", "hoy", "comprar y usar", "pack"],
+  },
+  {
+    id: "paquetes-anular-atencion",
+    area: "tablero",
+    pregunta: "Anulé una atención donde se usó una sesión, ¿se pierde?",
+    respuesta: [
+      "No. Al anular la atención, la sesión vuelve al paquete y el cliente la puede usar otro día.",
+      "La atención donde vendiste el paquete es distinta: no se puede anular si ya se usó una sesión en otra atención o si el paquete se devolvió.",
+    ],
+    palabrasClave: ["anular", "sesión perdida", "recuperar sesión", "devolver sesión", "error", "pack"],
+  },
 
   // ─── Clientes ──────────────────────────────────────────────────────────────
   {
@@ -677,6 +856,39 @@ const PREGUNTAS_DE_SIEMPRE: readonly PreguntaFrecuente[] = [
     ],
     palabrasClave: ["editar cliente", "no me deja", "permisos", "borrar cliente", "profesional"],
     paraFallas: true,
+  },
+  {
+    id: "paquetes-cuantas-quedan",
+    area: "clientes",
+    pregunta: "¿Dónde veo cuántas sesiones le quedan a un cliente?",
+    respuesta: [
+      "Abre su ficha en Clientes. En \"Paquetes\" aparece cada uno con lo que le queda, por ejemplo \"Le quedan 4 de 6\", cuándo lo compró y cuándo vence.",
+      "Lo ve todo el equipo. Los montos los ven solo el dueño y el encargado.",
+    ],
+    palabrasClave: ["saldo", "sesiones restantes", "cuántas le quedan", "ficha", "paquete", "pack"],
+  },
+  {
+    id: "paquetes-vencimiento",
+    area: "clientes",
+    pregunta: "¿Los paquetes vencen?",
+    respuesta: [
+      "Solo si tú les pones un plazo. Al crear el paquete eliges \"No vence\" o que valga 3, 6 o 12 meses, contados desde el día de la compra.",
+      "Un paquete vencido ya no se puede usar al cobrar. El dueño todavía puede devolverlo desde la ficha del cliente.",
+    ],
+    palabrasClave: ["vencimiento", "vence", "vencido", "vigencia", "plazo", "caduca", "pack"],
+  },
+  {
+    id: "paquetes-devolver",
+    area: "clientes",
+    pregunta: "¿Cómo devuelvo un paquete?",
+    respuesta: [
+      "1. Abre la ficha del cliente en Clientes.",
+      "2. En \"Paquetes\", toca \"Devolver\".",
+      "3. Elige cómo se devuelve la plata y confirma.",
+      "Si no usó ninguna sesión, se devuelve todo. Si usó alguna, se devuelven las que le quedan, por lo que vale cada una.",
+      "Solo el dueño puede devolver. Eli deja anotado cuánto, cuándo y cómo; la plata se la entregas tú. Después, el paquete no se puede usar más.",
+    ],
+    palabrasClave: ["devolución", "devolver plata", "reembolso", "arrepentimiento", "no me deja devolver", "pack"],
   },
 
   // ─── Reportes ──────────────────────────────────────────────────────────────
@@ -728,6 +940,16 @@ const PREGUNTAS_DE_SIEMPRE: readonly PreguntaFrecuente[] = [
       "Solo lo suyo: los servicios que atendió y cuánto sumaron. No ve los totales del negocio ni los medios de pago.",
     ],
     palabrasClave: ["permisos", "rol", "profesional", "privacidad"],
+  },
+  {
+    id: "paquetes-reportes-cero",
+    area: "reportes",
+    pregunta: "¿Por qué una sesión de paquete aparece en $0 en Reportes?",
+    respuesta: [
+      "Porque esa plata ya entró el día que vendiste el paquete. La sesión aparece en $0, con \"(con paquete)\", para no contarla dos veces.",
+      "Así, el total de cada día es lo que de verdad entró ese día.",
+    ],
+    palabrasClave: ["con paquete", "cero", "no suma", "ingresos", "sesión gratis", "pack"],
   },
 
   // ─── Equipo ────────────────────────────────────────────────────────────────
@@ -791,6 +1013,90 @@ const PREGUNTAS_DE_SIEMPRE: readonly PreguntaFrecuente[] = [
       "Cada vez ves solo lo de ese negocio y ese rol: como profesional ves tus citas y tu plata, y tus atenciones llevan comisión como las de cualquiera del equipo.",
     ],
     palabrasClave: ["dos negocios", "otro negocio", "cambiar de negocio", "varios locales", "cuenta", "rol"],
+  },
+  {
+    id: "paquetes-comision",
+    area: "equipo",
+    pregunta: "¿Cuándo gana su comisión el profesional por un paquete?",
+    respuesta: [
+      "Al atender cada sesión, no al vender el paquete. Cada vez que se usa una sesión, quien la atendió gana su comisión sobre lo que vale esa sesión.",
+      "La venta del paquete no le suma comisión a nadie.",
+    ],
+    palabrasClave: ["comisión", "paquete", "sesión", "venta", "profesional", "pack"],
+  },
+  {
+    id: "equipo-sacar-como",
+    area: "equipo",
+    pregunta: "¿Cómo saco a alguien del equipo?",
+    respuesta: [
+      "1. En Equipo, busca a la persona.",
+      "2. Toca \"Sacar del equipo\". En el celular está en el botón de opciones, al lado de su nombre.",
+      "3. Lee el aviso y confirma con \"Sacar del equipo\".",
+      "Desde ese momento deja de aparecer en la agenda y en tu página de reservas. Su horario y sus bloqueos se borran.",
+    ],
+    palabrasClave: ["eliminar", "borrar", "quitar", "despedir", "renunció", "se fue", "dar de baja", "desvincular"],
+  },
+  {
+    id: "equipo-sacar-quien",
+    area: "equipo",
+    pregunta: "¿Quién puede sacar a quién del equipo?",
+    respuesta: [
+      "El dueño puede sacar a cualquiera. El encargado, solo a los profesionales. Un profesional no puede sacar a nadie.",
+      "Nadie puede sacarse a sí mismo, y al dueño no lo saca nadie.",
+    ],
+    palabrasClave: ["permisos", "rol", "encargado", "dueño", "profesional", "quitar"],
+  },
+  {
+    id: "equipo-sacar-no-deja",
+    area: "equipo",
+    pregunta: "No me deja sacar a alguien del equipo",
+    respuesta: [
+      "Pasa cuando esa persona todavía tiene citas por delante o una atención abierta en el Tablero. Eli te dice cuántas son y te lleva a verlas.",
+      "Las citas: muévelas a otra persona o cancélalas desde la Agenda.",
+      "La atención abierta: cóbrala o anúlala en el Tablero.",
+      "Después vuelve a intentarlo.",
+    ],
+    palabrasClave: ["no me deja", "todavía no puedes sacar", "por delante", "atención abierta", "quitar", "eliminar"],
+    paraFallas: true,
+  },
+  {
+    id: "equipo-sacar-plata",
+    area: "equipo",
+    pregunta: "¿Qué pasa con la plata que le debo a quien saqué del equipo?",
+    respuesta: [
+      "No se pierde. Lo que le quedó pendiente sigue en Liquidaciones, con su nombre, hasta que se lo pagues.",
+      "Tener plata pendiente no impide sacar a la persona: Eli te lo avisa antes de confirmar.",
+    ],
+    palabrasClave: ["liquidación", "pendiente", "comisiones", "propinas", "adelantos", "pagar", "deuda"],
+  },
+  {
+    id: "equipo-sacar-historial",
+    area: "equipo",
+    pregunta: "¿Se borra el historial de quien saqué del equipo?",
+    respuesta: [
+      "No. Sus atenciones pasadas, sus comisiones y sus liquidaciones quedan guardadas, y Reportes las sigue mostrando con su nombre.",
+    ],
+    palabrasClave: ["historial", "atenciones pasadas", "reportes", "se pierde", "borrar", "datos"],
+  },
+  {
+    id: "equipo-sacar-acceso",
+    area: "equipo",
+    pregunta: "¿Cuánto tarda en perder el acceso quien saqué del equipo?",
+    respuesta: [
+      "Unos minutos. Después ya no puede entrar a tu negocio.",
+      "Su cuenta de Eli sigue siendo suya: si trabaja en otro negocio, ahí entra como siempre.",
+    ],
+    palabrasClave: ["acceso", "entrar", "sesión", "sigue viendo", "bloquear", "cuenta"],
+  },
+  {
+    id: "equipo-sacar-vuelve",
+    area: "equipo",
+    pregunta: "¿Qué hago si alguien que saqué vuelve al equipo?",
+    respuesta: [
+      "Invita de nuevo a esa persona desde Equipo, con \"Invitar al equipo\". Cuando acepta, vuelve con su historial de antes y con el rol que elijas en la invitación.",
+      "Su horario hay que cargarlo otra vez en Configuración.",
+    ],
+    palabrasClave: ["volver", "reincorporar", "invitar de nuevo", "regresa", "recontratar", "invitación"],
   },
 
   // ─── Cuenta y plan ─────────────────────────────────────────────────────────

@@ -68,6 +68,12 @@ export interface ResumenDeReporte {
   porServicio: { clave: string; id: string | null; nombre: string; cantidad: number; monto: number }[] | null
   /** Sólo para dueño y encargado: al profesional la clave no le llega. */
   porMedio?: { medio: string; nombre: string; monto: number }[] | null
+  /**
+   * Lo devuelto de paquetes de sesiones en el período, ya restado de
+   * `ingresos` y de su medio en `porMedio`. Sólo viaja si hubo alguna y a
+   * quien ve los ingresos del negocio; con filtro de profesional no viaja.
+   */
+  devoluciones?: { monto: number; cantidad: number }
 }
 
 export interface Reporte {

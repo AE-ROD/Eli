@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
@@ -7,6 +7,7 @@ import { obtenerIp, verificarLimite } from "@/lib/rate-limit"
 import type { Prisma } from "@prisma/client"
 import { hashDeToken } from "@/lib/tokens"
 import { registrarError } from "@/lib/registro-de-errores"
+import { correoVerificado, enviarBienvenidaAlConfirmar } from "@/lib/verificacion-de-correo-servidor"
 import { CuerpoDemasiadoGrande, leerJsonConTope, respuestaDeCuerpoDemasiadoGrande } from "@/lib/cuerpo-del-pedido"
 
 const ENLACE_INVALIDO = () => NextResponse.json({ error: "Enlace inválido o expirado" }, { status: 410 })
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
         where: { id: resetToken.id, usedAt: null, expiresAt: { gt: ahora } },
         data: { usedAt: ahora },
       })
-      if (marcado.count !== 1) return false
+      if (marcado.count !== 1) return null
 
       // Los demás enlaces pendientes del usuario ya no sirven: si alguien más
       // tenía uno, no puede volver a cambiar la contraseña.
@@ -58,10 +59,23 @@ export async function POST(request: NextRequest) {
         where: { id: resetToken.userId },
         data: { password: passwordHash, sesionesValidasDesde: ahora },
       })
-      return true
+
+      // Llegó hasta acá con un enlace que se mandó a ese correo: la casilla es
+      // suya, así que la cuenta queda confirmada si no lo estaba (y su enlace
+      // de "Confirma tu correo" pendiente deja de servir). Con `updateMany` y
+      // `emailVerificadoEn: null`: a quien ya confirmó no se le cambia la fecha.
+      const confirmada = await tx.user.updateMany({
+        where: { id: resetToken.userId, emailVerificadoEn: null },
+        data: correoVerificado(ahora),
+      })
+      return { recienConfirmada: confirmada.count === 1 }
     })
 
     if (!usado) return ENLACE_INVALIDO()
+
+    // Recién confirmada: le toca la bienvenida del ciclo de prueba que no
+    // salió al registrarse. Después de responder, y nunca lanza.
+    if (usado.recienConfirmada) after(() => enviarBienvenidaAlConfirmar(resetToken.userId))
 
     return NextResponse.json({ mensaje: "Contraseña actualizada" })
   } catch (error) {

@@ -49,6 +49,9 @@ function cobradasEn(paidAt: { gte: Date; lt?: Date }) {
  * cobro no suma: no hay registro de cuánto se cobró ni cómo; una atención
  * anulada tampoco, aunque conserve sus pagos.
  *
+ * Las devoluciones de paquetes de sesiones hechas en el período restan, como
+ * en Reportes y en el cierre de caja.
+ *
  * La base suma centavos enteros (Postgres devuelve la suma como `bigint`, así
  * que el mes no tiene el tope de la columna) y se devuelve en unidades.
  */
@@ -58,7 +61,14 @@ async function sumaDePagos(actor: Actor, paidAt: { gte: Date; lt?: Date }): Prom
     where: whereDePagos(actor, { visit: { is: cobradasEn(paidAt) }, method: { not: MEDIO_PAQUETE } }),
     _sum: { amountCents: true },
   })
-  return deCentavos(_sum.amountCents ?? 0)
+  // Lo devuelto de paquetes en el mismo período resta: es plata que salió,
+  // el día en que se devolvió. Siempre del negocio de la sesión (sólo llega
+  // acá quien ve los ingresos del negocio).
+  const devuelto = await prisma.paqueteDeCliente.aggregate({
+    where: { businessId: actor.businessId, devueltoAt: paidAt },
+    _sum: { devueltoCents: true },
+  })
+  return deCentavos((_sum.amountCents ?? 0) - (devuelto._sum.devueltoCents ?? 0))
 }
 
 export async function GET() {

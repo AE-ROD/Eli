@@ -169,6 +169,20 @@ export function ResumenDeReporte({ reporte, rotuloDeIngresos }: PropsDeResumenDe
         />
       </div>
 
+      {/* Sólo si hubo: lo devuelto de paquetes ya está restado arriba y en su medio de pago. */}
+      {resumen.devoluciones && (
+        <p className={cn(TARJETA_DEL_PANEL, "flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3 text-sm escritorio:px-6")}>
+          <span className="min-w-0 text-pretty">
+            <span className="font-medium">Devoluciones de paquetes</span>{" "}
+            <span className="text-texto-2">
+              ({cuantos(resumen.devoluciones.cantidad, "devolución", "devoluciones")}, ya{" "}
+              {resumen.devoluciones.cantidad === 1 ? "restada" : "restadas"} de lo cobrado)
+            </span>
+          </span>
+          <span className="font-semibold tabular-nums">{formatearMonto(-resumen.devoluciones.monto)}</span>
+        </p>
+      )}
+
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3 escritorio:gap-4">
         {/* Al profesional, el desglose por profesional sería una sola fila: la suya, que ya está arriba. */}
         {!propio && (

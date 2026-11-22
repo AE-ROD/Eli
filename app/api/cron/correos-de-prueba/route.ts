@@ -9,7 +9,8 @@ import { ejecutarMensajesAClientes } from "@/lib/mensajes-a-clientes"
 /**
  * Cron diario (`vercel.json`, 13:00 UTC: las 10:00 en Chile con horario de
  * verano, las 9:00 sin él) que manda los correos del ciclo de prueba al dueño
- * de cada negocio: consejo, quedan pocos días y termina hoy, y reintenta la
+ * de cada negocio, sólo si confirmó su correo (`User.emailVerificadoEn`; sin
+ * confirmar, la casilla puede ser de un tercero): consejo, quedan pocos días y termina hoy, y reintenta la
  * bienvenida que falló al crear el negocio. Qué le toca a cada uno lo decide
  * `lib/correos-de-prueba.ts`; el envío y el candado contra duplicados,
  * `lib/enviar-correo-de-prueba.ts`.
@@ -61,7 +62,8 @@ export async function GET(request: NextRequest) {
       const negocios = await prisma.business.findMany({
         where: {
           recibeCorreosDePrueba: true,
-          user: { correosDesactivados: false },
+          // Sólo dueñas con el correo confirmado (`lib/verificacion-de-correo-servidor.ts`).
+          user: { correosDesactivados: false, emailVerificadoEn: { not: null } },
           pruebaTerminaEl: { gt: new Date(inicio - UN_DIA_Y_MEDIO_MS) },
         },
         select: SELECCION_PARA_CORREO,

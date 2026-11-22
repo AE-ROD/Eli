@@ -3,8 +3,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X } from "lucide-react"
-import { Boton } from "@/components/comunes/boton"
+import { MessageCircle, X } from "lucide-react"
+import { Boton, clasesDeBoton } from "@/components/comunes/boton"
 import { BotonPrimario } from "@/components/comunes/boton-primario"
 import { CURVA, DURACION } from "@/components/movimiento/tiempos"
 import { AvatarUsuario } from "@/components/panel/avatar-usuario"
@@ -46,6 +46,7 @@ import {
   type SillonDeLaCita,
 } from "../_datos"
 import { frasesDeLaAgenda } from "../_frases"
+import { enlaceDeRecordatorio } from "../_recordatorio"
 import { sedeParaMostrar } from "../_sedes"
 import { AsignarSillon } from "./asignar-sillon"
 import { estiloDeEstado } from "./estados-de-cita"
@@ -333,6 +334,20 @@ export function PanelDeCita({
   // Reactivar rechazado porque la plata ya se rindió: dónde se corrige.
   const registraAjustes = puedeRegistrarAjuste(actorDeSesion(sesion))
   const veLiquidaciones = puedeVerLiquidacionesDelEquipo(actorDeSesion(sesion))
+  // "Recordar por WhatsApp": abre el WhatsApp de quien mira con el mensaje ya
+  // escrito (lo manda la persona, sin costo). Sólo pendiente o confirmada, sin
+  // empezar y con un teléfono válido; una por confirmar todavía no es una hora
+  // tomada, así que no se recuerda. Lo ve quien ve la cita.
+  const recordatorio = porConfirmar
+    ? null
+    : enlaceDeRecordatorio({
+        cita,
+        nombreNegocio: sesion?.user?.businessName ?? "",
+        zona,
+        ahora: new Date(ahora),
+        sede,
+        palabras,
+      })
 
   // Lo que se puede hacer con la cita. En el computador va al final del panel;
   // en el celular, fijo al pie de la hoja, a la altura del pulgar.
@@ -515,6 +530,28 @@ export function PanelDeCita({
             sillones={sillones}
             onAsignado={(sillonId, sillon) => onSillonAsignado?.(cita.id, sillonId, sillon)}
           />
+        </div>
+      )}
+
+      {recordatorio && (
+        <div className="px-1">
+          <a
+            href={recordatorio}
+            target="_blank"
+            rel="noopener noreferrer"
+            // En el celular, 44 px de alto de verdad: es lo que se toca con el pulgar.
+            className={clasesDeBoton({
+              variante: "secundario",
+              tamano: "sm",
+              className: "w-full max-escritorio:h-11 max-escritorio:after:inset-y-0",
+            })}
+          >
+            <MessageCircle className="size-4 shrink-0" aria-hidden="true" strokeWidth={1.75} />
+            <span>
+              Recordar por WhatsApp
+              <span className="sr-only"> a {nombreDeCliente(cita, palabras.cliente.singular)} (se abre WhatsApp con el mensaje escrito)</span>
+            </span>
+          </a>
         </div>
       )}
 

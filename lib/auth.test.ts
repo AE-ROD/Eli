@@ -489,13 +489,14 @@ describe("entrar con Google (M1)", () => {
     expect(prismaMock.user.create).not.toHaveBeenCalled()
   })
 
-  it("un email verificado sin cuenta crea la cuenta sin contraseña", async () => {
+  it("un email verificado sin cuenta crea la cuenta sin contraseña y con el correo ya confirmado", async () => {
     prismaMock.user.findUnique.mockResolvedValueOnce(null)
     prismaMock.user.create.mockResolvedValueOnce({ id: "nuevo" })
 
     expect(await entrarConGoogle({ email_verified: true })).toBe(true)
+    // Google ya entregó el correo verificado: no se le pide confirmarlo, ni se le crea un enlace.
     expect(prismaMock.user.create).toHaveBeenCalledWith({
-      data: { name: "Carla", email: "carla@x.com", password: "" },
+      data: { name: "Carla", email: "carla@x.com", password: "", emailVerificadoEn: expect.any(Date) },
     })
   })
 })

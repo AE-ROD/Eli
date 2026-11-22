@@ -15,11 +15,14 @@ import {
 import {
   IDS_DE_TURNOS,
   cumpleFiltros,
+  devolucionesQueRestan,
   esZonaHorariaValida,
   lineaCumpleFiltros,
+  restarDevoluciones,
   resumirAtenciones,
   turnoDe,
   type AtencionParaReporte,
+  type DevolucionParaReporte,
   type FiltrosDeLinea,
 } from "@/lib/reportes"
 import { formatearLinea, formatearPago, leerRango, seleccionParaReporte, totalVisible } from "@/lib/tablero"
@@ -84,6 +87,25 @@ function buscarCobradas(actor: Actor, desde: Date, hasta: Date) {
 }
 
 /**
+ * Las devoluciones de paquetes hechas en el período (por `devueltoAt`, con el
+ * mismo borde `[desde, hasta)` que los cobros), siempre del negocio de la
+ * sesión. Sólo para quien ve los ingresos del negocio: el profesional no sabe
+ * de devoluciones, así que para él ni se consulta.
+ */
+async function buscarDevoluciones(actor: Actor, desde: Date, hasta: Date): Promise<DevolucionParaReporte[]> {
+  if (!puedeVerIngresosDelNegocio(actor)) return []
+  const devueltos = await prisma.paqueteDeCliente.findMany({
+    where: { businessId: actor.businessId, devueltoAt: { gte: desde, lt: hasta } },
+    select: { devueltoAt: true, devueltoCents: true, devueltoMedio: true, serviceId: true },
+    orderBy: { devueltoAt: "desc" },
+    take: TOPE_DE_ATENCIONES,
+  })
+  return devueltos.flatMap(({ devueltoAt, devueltoCents, devueltoMedio, serviceId }) =>
+    devueltoAt && devueltoCents && devueltoMedio ? [{ devueltoAt, devueltoCents, devueltoMedio, serviceId }] : []
+  )
+}
+
+/**
  * La atención como entra al resumen. Para el profesional, la base ya devolvió
  * sólo sus líneas y ningún pago (`seleccionParaReporte`), y su total es lo que
  * sumaron sus líneas: lo suyo, nunca el total del negocio.
@@ -143,9 +165,16 @@ async function reporteDeAnuladas(actor: Actor, desde: Date, hasta: Date, pagina:
   const anuladas = leidas.slice(0, TOPE_DE_ATENCIONES)
 
   // Lo cobrado se congeló en `totalCents` al cobrar: es lo que dejó de sumar.
+  // Menos lo pagado con una sesión de paquete, como en `paraReporte`: esa
+  // plata nunca entró ese día, así que al anular tampoco deja de sumar.
   const cobradas = anuladas.filter((atencion) => atencion.paidAt !== null)
   const montoAnuladoCentavos = cobradas.reduce(
-    (suma, atencion) => suma + (atencion.totalCents ?? totalEnCentavos(atencion.services)),
+    (suma, atencion) =>
+      suma +
+      (atencion.totalCents ?? totalEnCentavos(atencion.services)) -
+      atencion.payments
+        .filter((pago) => pago.method === MEDIO_PAQUETE)
+        .reduce((prepago, pago) => prepago + pago.amountCents, 0),
     0
   )
 
@@ -211,7 +240,10 @@ export async function GET(request: NextRequest) {
   // cada cliente. El filtro se ignora para él.
   if (!verNegocio) filtros.medio = undefined
 
-  const cobradas = await buscarCobradas(actor, rango.desde, rango.hasta)
+  const [cobradas, devoluciones] = await Promise.all([
+    buscarCobradas(actor, rango.desde, rango.hasta),
+    buscarDevoluciones(actor, rango.desde, rango.hasta),
+  ])
   const truncado = cobradas.length > TOPE_DE_ATENCIONES
 
   const incluidas = cobradas
@@ -222,9 +254,16 @@ export async function GET(request: NextRequest) {
     .filter(({ reporte }) => verNegocio || reporte.lineas.length > 0)
     .filter(({ reporte }) => cumpleFiltros(reporte, filtros))
 
-  const { porMedio, ...resumenSinMedios } = resumirAtenciones(
-    incluidas.map(({ reporte }) => reporte),
-    filtros
+  // Las devoluciones de paquetes restan de lo cobrado en el período y de su
+  // medio, y viajan aparte (`resumen.devoluciones`) para que la pantalla diga
+  // por qué bajó. Qué devoluciones entran con cada filtro lo decide
+  // `devolucionesQueRestan` (con filtro de profesional, ninguna).
+  const { porMedio, ...resumenSinMedios } = restarDevoluciones(
+    resumirAtenciones(
+      incluidas.map(({ reporte }) => reporte),
+      filtros
+    ),
+    devolucionesQueRestan(devoluciones, filtros)
   )
 
   const { filas, ...paginado } = paginar(incluidas, pagina)

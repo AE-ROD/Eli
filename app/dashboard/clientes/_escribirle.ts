@@ -23,7 +23,7 @@ interface ParaElMensaje {
 }
 
 /** El primer nombre, para un saludo que no suene a planilla. */
-function primerNombre(nombre: string): string {
+export function primerNombre(nombre: string): string {
   return nombre.trim().split(/\s+/)[0] ?? ""
 }
 
